@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traliran AI Hub</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        .chat-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .chat-scroll::-webkit-scrollbar-track { background: transparent; }
+        .chat-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+        /* Стилизация Markdown */
+        .md-content h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; color: #34d399; }
+        .md-content h2 { font-size: 1.25rem; font-weight: 600; margin-top: 0.75rem; margin-bottom: 0.5rem; color: #6ee7b7; }
+        .md-content h3 { font-size: 1.1rem; font-weight: 600; margin-top: 0.5rem; }
+        .md-content p { margin-bottom: 0.75rem; line-height: 1.5; }
+        .md-content ul { list-style-type: disc; margin-left: 1.25rem; margin-bottom: 0.75rem; }
+        .md-content ol { list-style-type: decimal; margin-left: 1.25rem; margin-bottom: 0.75rem; }
+        .md-content li { margin-bottom: 0.25rem; }
+        .md-content code { background-color: #374151; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.9em; color: #f472b6; }
+        .md-content pre { background-color: #1f2937; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; border: 1px solid #374151; position: relative; }
+        .md-content pre code { background-color: transparent; padding: 0; color: #e5e7eb; font-size: 0.875rem; }
+        .md-content blockquote { border-left: 4px solid #10b981; padding-left: 0.75rem; color: #9ca3af; font-style: italic; margin: 0.75rem 0; }
+        .md-content strong { color: #fff; font-weight: 600; }
+        .md-content table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; text-align: left; }
+        .md-content th, .md-content td { border: 1px solid #374151; padding: 0.5rem; }
+        .md-content th { background-color: #2dd4bf20; }
+
+        /* Стилизация блоков размышления */
+        .thinking-block summary { list-style: none; display: flex; align-items: center; justify-content: space-between; }
+        .thinking-block summary::-webkit-details-marker { display: none; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-20 shadow-md">
+        <div class="max-w-[1600px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center justify-between w-full md:w-auto gap-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">💎</span>
+                    <h1 class="text-xl font-black text-emerald-400 tracking-wide bg-clip-text">Traliran AI Hub</h1>
+                </div>
+                <div class="flex gap-2">
+                    <button id="toggleChats" class="bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded transition cursor-pointer" title="Chat History">
+                        💬 <span class="hidden sm:inline">Chats</span>
+                    </button>
+                    <button id="toggleSidebar" class="bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded transition cursor-pointer" title="API Settings">
+                        ⚙️ <span class="hidden sm:inline">Settings</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                <button id="openStoreBtn" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                    <span>🏪</span> Assistant Store
+                </button>
+
+                <button id="openHelpBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition cursor-pointer text-sm font-medium" title="Instructions">
+                    ❓ Help
+                </button>
+                
+                <button id="toggleSandboxBtn" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                    <span>💻</span> Sandbox
+                </button>
+
+                <button id="clearChat" class="bg-rose-600/80 hover:bg-rose-700 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition cursor-pointer shrink-0">
+                    Clear Chat
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-[1600px] w-full mx-auto flex relative overflow-hidden">
+        
+        <section id="chatsPanel" class="absolute inset-y-0 left-0 w-72 bg-gray-900 border-r border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto chat-scroll transition-transform duration-300 -translate-x-full md:translate-x-0 md:static md:w-64 lg:w-72 z-30">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                <h2 class="font-bold text-gray-300 text-sm uppercase tracking-wider">Chat History</h2>
+                <button id="newChatBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-1 px-2.5 rounded transition cursor-pointer">
+                    + New
+                </button>
+            </div>
+            <div id="chatsList" class="flex-1 flex flex-col gap-2 overflow-y-auto chat-scroll">
+            </div>
+        </section>
+
+        <div id="chatsOverlay" class="hidden absolute inset-0 bg-black/60 z-25 md:hidden"></div>
+
+        <section id="sidebar" class="absolute inset-y-0 right-0 w-80 bg-gray-900 border-l lg:border-l-0 lg:border-r border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto chat-scroll transition-transform duration-300 translate-x-full lg:translate-x-0 lg:static lg:w-80 z-30">
+            <div class="border-b border-gray-800 pb-2 flex justify-between items-center">
+                <div>
+                    <h2 class="font-semibold text-emerald-400 text-base">API Configuration</h2>
+                    <p class="text-xs text-gray-400 mt-1">Switch providers on the fly</p>
+                </div>
+                <button id="closeSidebar" class="text-gray-400 hover:text-white font-bold p-1">✕</button>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <div>
+                    <label id="step-provider" class="block text-xs font-semibold text-gray-400 mb-1">AI Provider</label>
+                    <select id="apiProvider" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition">
+                        <option value="groq">Groq Cloud</option>
+                        <option value="google">Google Gemini (OpenAI API)</option>
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="ollama">Ollama (Local)</option>
+                        <option value="llamacpp">Llama.cpp (Local)</option>
+                    </select>
+                </div>
+
+                <div id="apiKeyContainer">
+                    <label id="step-key" class="block text-xs font-semibold text-gray-400 mb-1">API Key (token)</label>
+                    <input type="password" id="apiKeyValue" placeholder="Enter your API key..." 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition font-mono">
+                </div>
+
+                <div id="endpointContainer" class="hidden">
+                    <label class="block text-xs font-semibold text-gray-400 mb-1">Base Endpoint URL</label>
+                    <input type="text" id="apiEndpoint" placeholder="http://localhost:11434/v1" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition font-mono">
+                </div>
+
+                <button id="refreshModelsBtn" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold py-2 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1">
+                    🔄 Refresh Model List
+                </button>
+
+                <div>
+                    <label id="step-model" class="block text-xs font-semibold text-gray-400 mb-1">AI Model (Active)</label>
+                    <select id="botModel" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition">
+                        <option value="">(Enter API key to load models)</option>
+                    </select>
+                </div>
+
+                <div class="border-t border-gray-800 pt-3 mt-1 space-y-3">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Assistant Profile</h3>
+                    
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Assistant Name</label>
+                        <input type="text" id="botName" placeholder="e.g., Assistant" 
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500">
+                    </div>
+
+                    <div>
+                        <label id="step-prompt" class="block text-xs font-medium text-gray-400 mb-1">System Prompt (Instructions)</label>
+                        <textarea id="botPrompt" rows="3" placeholder="Set communication style, system constraints, role..." 
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 resize-none"></textarea>
+                    </div>
+                </div>
+
+                <div class="border-t border-gray-800 pt-3 space-y-3">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Parameters</h3>
+                    
+                    <div>
+                        <div class="flex justify-between text-xs text-gray-400 mb-1">
+                            <span>Temperature:</span>
+                            <span id="tempValue" class="font-mono text-emerald-400">0.7</span>
+                        </div>
+                        <input type="range" id="botTemperature" min="0" max="2" step="0.1" value="0.7" 
+                            class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs text-gray-400 mb-1">
+                            <span>Max Tokens:</span>
+                            <span id="tokensValue" class="font-mono text-emerald-400">2048</span>
+                        </div>
+                        <input type="range" id="botMaxTokens" min="256" max="16384" step="256" value="2048" 
+                            class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-800 pt-3 flex flex-col gap-2">
+                <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">JSON Import / Export</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="exportJson" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-medium py-2 px-3 rounded-lg transition cursor-pointer">
+                        Export
+                    </button>
+                    <label class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-medium py-2 px-3 rounded-lg transition text-center cursor-pointer block">
+                        Import
+                        <input type="file" id="importJson" accept=".json" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+            <div id="statusIndicator" class="mt-auto p-3 bg-gray-950/80 border border-gray-800 rounded-lg text-xs text-gray-400">
+                <span class="font-medium text-gray-300 block mb-1">Active Profile:</span>
+                <span id="activeStatusText">Default AI</span>
+            </div>
+        </section>
+
+        <div id="sidebarOverlay" class="hidden absolute inset-0 bg-black/60 z-25 lg:hidden"></div>
+
+        <section class="flex-1 flex flex-col md:flex-row h-full bg-gray-950 overflow-hidden w-full relative">
+            
+            <div id="chatColumn" class="flex-1 flex flex-col h-full overflow-hidden">
+                <div id="chatWindow" class="flex-1 p-4 overflow-y-auto space-y-4 chat-scroll">
+                    <div id="welcomeMessage" class="bg-gray-900 border border-gray-800 p-6 rounded-xl max-w-2xl mx-auto text-center mt-8 space-y-4">
+                        <span class="text-4xl">🚀</span>
+                        <h3 class="font-bold text-xl text-emerald-400">Welcome to Traliran AI Hub!</h3>
+                        <p class="text-sm text-gray-300 leading-relaxed">
+                            This is an advanced sandbox environment for managing workflows with neural networks. It seamlessly connects to **Groq, Google Gemini, OpenRouter, OpenAI** services, as well as local backend nodes running **Ollama/Llama.cpp**.
+                        </p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left text-xs text-gray-400 pt-2">
+                            <div class="bg-gray-950 p-3 rounded-lg border border-gray-800">
+                                <span class="font-semibold text-emerald-300 block mb-1">1. Key Setup</span>
+                                Enter your API key on the right and select a provider. The model list will update automatically!
+                            </div>
+                            <div class="bg-gray-950 p-3 rounded-lg border border-gray-800">
+                                <span class="font-semibold text-emerald-300 block mb-1">2. History & Sessions</span>
+                                All chats are saved locally. You can switch between them using the left panel history log.
+                            </div>
+                            <div class="bg-gray-950 p-3 rounded-lg border border-gray-800">
+                                <span class="font-semibold text-emerald-300 block mb-1">3. Code & Sandbox</span>
+                                When the AI generates structural code blocks, you can run and view them live inside the "Sandbox" tab component.
+                            </div>
+                            <div class="bg-gray-950 p-3 rounded-lg border border-gray-800">
+                                <span class="font-semibold text-emerald-300 block mb-1">4. Assistant Store</span>
+                                Click the top right button to open the store where you can test integrated free features or access custom presets!
+                            </div>
+                        </div>
+                        <button id="startIntroBtn" class="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-5 rounded-lg text-sm transition cursor-pointer">
+                            Launch Interface Guide 🎓
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-gray-900/40 border-t border-gray-900 flex flex-col gap-2">
+                    <div id="fileIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs">
+                        <div class="flex items-center gap-2 text-emerald-400 truncate">
+                            <span>📎</span>
+                            <span id="fileNameDisplay" class="truncate font-mono">file.txt</span>
+                        </div>
+                        <button id="removeFileBtn" class="text-rose-400 hover:text-rose-300 cursor-pointer px-1 font-bold">✕</button>
+                    </div>
+
+                    <div class="max-w-4xl w-full mx-auto flex gap-2 items-end">
+                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text file">
+                            <span>📎</span>
+                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c">
+                        </label>
+
+                        <textarea id="userInput" rows="1" placeholder="Ask a question..." 
+                            class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none max-h-32 chat-scroll min-h-[42px]"></textarea>
+                        
+                        <button id="sendBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                            <span class="sm:inline hidden">Send</span>
+                            <span class="inline sm:hidden">➤</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="sandboxColumn" class="hidden w-full md:w-[45%] bg-gray-900 border-t md:border-t-0 md:border-l border-gray-800 flex flex-col h-full overflow-hidden absolute md:static inset-0 z-40">
+                <div class="p-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm">💻</span>
+                        <h3 class="font-bold text-sm text-emerald-400">Sandbox Interpreter</h3>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="runCodeBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-2.5 py-1 rounded transition cursor-pointer">
+                            Run ▶
+                        </button>
+                        <button id="closeSandboxBtn" class="text-gray-400 hover:text-white font-bold p-1 text-sm">✕</button>
+                    </div>
+                </div>
+                
+                <div class="flex border-b border-gray-800 text-xs bg-gray-900">
+                    <button id="tabEditor" class="flex-1 py-2 text-center border-b-2 border-emerald-500 font-semibold text-gray-200">Editor</button>
+                    <button id="tabPreview" class="flex-1 py-2 text-center border-b-2 border-transparent font-semibold text-gray-400">Preview</button>
+                </div>
+
+                <div class="flex-1 flex flex-col relative overflow-hidden">
+                    <div id="sandboxEditorContainer" class="flex-1 flex flex-col h-full">
+                        <textarea id="sandboxCode" class="flex-1 w-full bg-gray-950 text-gray-100 p-3 font-mono text-xs focus:outline-none resize-none overflow-y-auto chat-scroll" placeholder="Paste HTML/JS/CSS code here..."></textarea>
+                    </div>
+                    <div id="sandboxPreviewContainer" class="hidden flex-1 bg-white h-full">
+                        <iframe id="sandboxIframe" class="w-full h-full border-none bg-white"></iframe>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <div id="storeModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative flex flex-col max-h-[90vh]">
+            <button id="closeStoreModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+            
+            <div>
+                <h2 class="text-2xl font-black text-amber-400 tracking-wide">🏪 Assistant Store</h2>
+                <p class="text-xs text-gray-400 mt-1">Get built-in standard extensions or expand library with custom presets.</p>
+            </div>
+
+            <div class="flex-1 overflow-y-auto chat-scroll space-y-6 pr-2">
+                <div>
+                    <h3 class="text-sm font-bold uppercase text-gray-400 tracking-wider mb-3 border-b border-gray-800 pb-1">FREE:</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group">
+                            <div>
+                                <h4 class="font-bold text-emerald-400 text-sm">🔤 Polyglot Translator</h4>
+                                <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">Translates incoming texts into target language systems maintaining proper cultural idioms.</p>
+                            </div>
+                            <div class="flex justify-end mt-2">
+                                <button onclick="installFreeAssistant('Translator', 'You are an advanced expert translator. Your sole purpose is to translate any text provided into high-quality, fluent English (or the language specified by user), keeping idioms and contextual tone perfectly intact. Avoid chatbot greetings.')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition cursor-pointer">try</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group">
+                            <div>
+                                <h4 class="font-bold text-emerald-400 text-sm">✍️ Code & Text Editor</h4>
+                                <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">Corrects syntax structural flaws, styles code, or fixes grammar blocks instantly.</p>
+                            </div>
+                            <div class="flex justify-end mt-2">
+                                <button onclick="installFreeAssistant('Editor Core', 'You are a professional editor. Analyze the user text or source code payload, fix bugs, optimize layout structures, polish grammatical issues, and return the cleaned output without conversational filler.')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition cursor-pointer">try</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group">
+                            <div>
+                                <h4 class="font-bold text-emerald-400 text-sm">💡 Ideation Generator</h4>
+                                <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">Brainstorms creative concepts, scripts, plot designs, and mechanics loops.</p>
+                            </div>
+                            <div class="flex justify-end mt-2">
+                                <button onclick="installFreeAssistant('Idea Spark', 'You are a creative brainstorming engine. Generate out-of-the-box ideas, architectural blueprints, script writing angles, and unique strategic concepts based on user prompts. Deliver responses using highly structured bullet points.')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition cursor-pointer">try</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-sm font-bold uppercase text-gray-400 tracking-wider mb-3 border-b border-gray-800 pb-1">PAID:</h3>
+                    <div id="paidBotsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="helpModal" class="hidden fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl max-w-xl w-full p-6 space-y-4 shadow-2xl relative">
+            <button id="closeHelpModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <h3 class="text-lg font-bold text-emerald-400 flex items-center gap-2">
+                <span>🎓</span> Help & Provider Setup
+            </h3>
+            
+            <div class="space-y-3 text-sm text-gray-300 max-h-[70vh] overflow-y-auto chat-scroll pr-2">
+                <div>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Groq Cloud</h4>
+                    <p class="text-xs text-gray-400">Requires an API key from console.groq.com. Delivers the fastest inference speed on the market.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Google Gemini</h4>
+                    <p class="text-xs text-gray-400">Operates via official OpenAI-compliant base route. Requires an API token from Google AI Studio.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 OpenRouter</h4>
+                    <p class="text-xs text-gray-400">Unified entry portal accessing hundreds of variants (Claude, GPT, DeepSeek). Requires token routing from openrouter.ai.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 OpenAI</h4>
+                    <p class="text-xs text-gray-400">Standard direct infrastructure connections to mainline GPT models. Setup authorization key at platform.openai.com.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Local Ollama</h4>
+                    <p class="text-xs text-gray-400">Verify your daemon is active locally (`ollama run ...`). Standard fallback routing endpoint: `http://localhost:11434/v1`.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Local Llama.cpp</h4>
+                    <p class="text-xs text-gray-400">Ideal when utilizing internal standard web server packaging setups. Standard fallback mapping endpoint: `http://localhost:8080/v1`.</p>
+                </div>
+
+                <div class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs mt-4">
+                    <span class="font-bold text-yellow-400 block mb-1">⚠️ Please note:</span>
+                    When initiating queries to local servers (Ollama / Llama.cpp), your browser runtime may block transactions due to structural browser CORS security constraints. Ensure to deploy Ollama with standard origin flag variables enabled: `OLLAMA_ORIGINS="*"`.
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button id="closeHelpModalBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-6 rounded-lg text-sm transition cursor-pointer">
+                    Got it
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        //  ⚙️ КОНФИГУРАЦИЯ ПЛАТНЫХ АССИСТЕНТОВ
+        //  Вставляй сюда названия, описания и ссылки
+        // ==========================================
+        const PAID_ASSISTANTS_CONFIG = [
+            {
+                name: "Markdown assistant - $5",
+                description: "A productivity tool that automates knowledge management methods like Zettelkasten or P.A.R.A. by converting unformatted text and links into structured Markdown files for Obsidian or Notion. ",
+                link: "https://whop.com/joined/traliran-ai-huub/products/markdown-assistant/"
+            },
+            {
+                name: "Text Game Master (Co-writer for Authors) - $5",
+                description: "An AI-powered lore keeper and consistency editor for writers and screenwriters that ensures narrative logic and internal world rules are strictly followed.",
+                link: "https://whop.com/joined/traliran-ai-huub/products/text-game-master-co-writer-for-authors/"
+            },
+            {
+                name: "Short-Form Video Scriptwriter - $5",
+                description: "An AI marketing strategist designed to generate high-retention, non-generic scripts for short-form video platforms like TikTok, Reels, and Shorts, specifically targeted at the English-speaking market.",
+                link: "https://whop.com/joined/traliran-ai-huub/products/short-form-video-scriptwriter/"
+            },
+            {
+                name: "Mind-Map & Pin-Card Designer - $5",
+                description: "An analytical AI assistant specialized in information architecture, helping users transform raw data and complex ideas into logical, highly structured hierarchical diagrams.",
+                link: "https://whop.com/joined/traliran-ai-huub/products/mind-map-pin-card-designer/"
+            }
+        ];
+
+        // --- ГЛОБАЛЬНЫЕ НАСТРОЙКИ И СОСТОЯНИЕ ---
+        let sessions = []; 
+        let currentSessionId = null; 
+        
+        let attachedFileContent = null;
+        let attachedFileName = "";
+
+        // Ссылки на элементы UI настроек API
+        const apiProvider = document.getElementById('apiProvider');
+        const apiKeyValue = document.getElementById('apiKeyValue');
+        const apiEndpoint = document.getElementById('apiEndpoint');
+        const apiKeyContainer = document.getElementById('apiKeyContainer');
+        const endpointContainer = document.getElementById('endpointContainer');
+        const botModelSelect = document.getElementById('botModel');
+        const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+
+        const botNameInput = document.getElementById('botName');
+        const botPromptInput = document.getElementById('botPrompt');
+        const tempInput = document.getElementById('botTemperature');
+        const tempValue = document.getElementById('tempValue');
+        const tokensInput = document.getElementById('botMaxTokens');
+        const tokensValue = document.getElementById('tokensValue');
+
+        // Модалки помощи
+        const helpModal = document.getElementById('helpModal');
+        const openHelpBtn = document.getElementById('openHelpBtn');
+        const closeHelpModal = document.getElementById('closeHelpModal');
+        const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
+        const startIntroBtn = document.getElementById('startIntroBtn');
+
+        // Модалка стора ассистентов
+        const storeModal = document.getElementById('storeModal');
+        const openStoreBtn = document.getElementById('openStoreBtn');
+        const closeStoreModal = document.getElementById('closeStoreModal');
+        const paidBotsContainer = document.getElementById('paidBotsContainer');
+
+        // Сэндбокс интерпретатор
+        const toggleSandboxBtn = document.getElementById('toggleSandboxBtn');
+        const sandboxColumn = document.getElementById('sandboxColumn');
+        const closeSandboxBtn = document.getElementById('closeSandboxBtn');
+        const tabEditor = document.getElementById('tabEditor');
+        const tabPreview = document.getElementById('tabPreview');
+        const sandboxEditorContainer = document.getElementById('sandboxEditorContainer');
+        const sandboxPreviewContainer = document.getElementById('sandboxPreviewContainer');
+        const sandboxCode = document.getElementById('sandboxCode');
+        const sandboxIframe = document.getElementById('sandboxIframe');
+        const runCodeBtn = document.getElementById('runCodeBtn');
+
+        // Элементы окна чата
+        const chatWindow = document.getElementById('chatWindow');
+        const welcomeMessage = document.getElementById('welcomeMessage');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const clearChatBtn = document.getElementById('clearChat');
+
+        // Навигация сессий чатов
+        const chatsList = document.getElementById('chatsList');
+        const newChatBtn = document.getElementById('newChatBtn');
+
+        // Обработка прикрепленных файлов
+        const attachmentInput = document.getElementById('attachmentInput');
+        const fileIndicator = document.getElementById('fileIndicator');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const removeFileBtn = document.getElementById('removeFileBtn');
+
+        // Мобильная панель навигации
+        const sidebar = document.getElementById('sidebar');
+        const toggleSidebarBtn = document.getElementById('toggleSidebar');
+        const closeSidebarBtn = document.getElementById('closeSidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+        const chatsPanel = document.getElementById('chatsPanel');
+        const toggleChatsBtn = document.getElementById('toggleChats');
+        const chatsOverlay = document.getElementById('chatsOverlay');
+
+        // Импорт/Экспорт конфигурации
+        const exportJsonBtn = document.getElementById('exportJson');
+        const importJsonInput = document.getElementById('importJson');
+        const activeStatusText = document.getElementById('activeStatusText');
+
+        // Настройка рендеринга Markdown (используем новый синтаксис marked.use)
+        marked.use({ breaks: true, gfm: true });
+
+        // --- МАРШРУТЫ РАУТИНГА API ПО УМОЛЧАНИЮ ---
+        const PROVIDERS = {
+            groq: { url: "https://api.groq.com/openai/v1", hasKey: true },
+            google: { url: "https://generativelanguage.googleapis.com/v1beta/openai", hasKey: true },
+            openrouter: { url: "https://openrouter.ai/api/v1", hasKey: true },
+            openai: { url: "https://api.openai.com/v1", hasKey: true },
+            ollama: { url: "http://localhost:11434/v1", hasKey: false },
+            llamacpp: { url: "http://localhost:8080/v1", hasKey: false }
+        };
+
+        // Безопасное экранирование строк
+        function safeEncode(str) {
+            if (!str) return "";
+            return encodeURIComponent(str).replace(/'/g, "%27");
+        }
+
+        // --- ИНТЕГРАЦИЯ СТОР-ДВИЖКА ---
+        function renderPaidStoreBots() {
+            paidBotsContainer.innerHTML = '';
+            PAID_ASSISTANTS_CONFIG.forEach(bot => {
+                const botCard = document.createElement('div');
+                botCard.className = "bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group";
+                botCard.innerHTML = `
+                    <div>
+                        <h4 class="font-bold text-amber-400 text-sm">${bot.name}</h4>
+                        <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">${bot.description}</p>
+                    </div>
+                    <div class="flex justify-end mt-2">
+                        <a href="${bot.link}" target="_blank" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition text-center min-w-[70px]">Buy</a>
+                    </div>
+                `;
+                paidBotsContainer.appendChild(botCard);
+            });
+        }
+
+        window.installFreeAssistant = function(name, promptText) {
+            botNameInput.value = name;
+            botPromptInput.value = promptText;
+            saveApiSettings();
+            storeModal.classList.add('hidden');
+            
+            // Создание новой сессии под выбранного ассистента
+            createNewSession();
+            alert(`Assistant Profile "${name}" is now online!`);
+        };
+
+        openStoreBtn.addEventListener('click', () => { 
+            renderPaidStoreBots();
+            storeModal.classList.remove('hidden'); 
+        });
+        closeStoreModal.addEventListener('click', () => { storeModal.classList.add('hidden'); });
+        storeModal.addEventListener('click', (e) => { if(e.target === storeModal) storeModal.classList.add('hidden'); });
+
+        // --- РАБОТА С ЛОКАЛЬНЫМ ХРАНИЛИЩЕМ (LOCALSTORAGE) ---
+        function loadApiSettings() {
+            const provider = localStorage.getItem('gem_provider') || 'groq';
+            apiProvider.value = provider;
+            
+            handleProviderChange(provider);
+
+            const savedKey = localStorage.getItem(`gem_key_${provider}`) || '';
+            apiKeyValue.value = savedKey;
+
+            const savedEndpoint = localStorage.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url;
+            apiEndpoint.value = savedEndpoint;
+
+            const savedName = localStorage.getItem('gem_bot_name') || 'System AI';
+            botNameInput.value = savedName;
+
+            const savedPrompt = localStorage.getItem('gem_system_prompt') || '';
+            botPromptInput.value = savedPrompt;
+
+            const savedTemp = localStorage.getItem('gem_temp') || '0.7';
+            tempInput.value = savedTemp;
+            tempValue.textContent = savedTemp;
+
+            const savedTokens = localStorage.getItem('gem_tokens') || '2048';
+            tokensInput.value = savedTokens;
+            tokensValue.textContent = savedTokens;
+
+            fetchActiveModels();
+        }
+
+        function saveApiSettings() {
+            const provider = apiProvider.value;
+            localStorage.setItem('gem_provider', provider);
+            localStorage.setItem(`gem_key_${provider}`, apiKeyValue.value.trim());
+            localStorage.setItem(`gem_endpoint_${provider}`, apiEndpoint.value.trim());
+            localStorage.setItem('gem_bot_name', botNameInput.value.trim());
+            localStorage.setItem('gem_system_prompt', botPromptInput.value.trim());
+            localStorage.setItem('gem_temp', tempInput.value);
+            localStorage.setItem('gem_tokens', tokensInput.value);
+            updateStatusCard();
+        }
+
+        function handleProviderChange(provider) {
+            const details = PROVIDERS[provider];
+            if (details.hasKey) {
+                apiKeyContainer.classList.remove('hidden');
+                endpointContainer.classList.add('hidden');
+            } else {
+                apiKeyContainer.classList.add('hidden');
+                endpointContainer.classList.remove('hidden');
+            }
+
+            const savedEndpoint = localStorage.getItem(`gem_endpoint_${provider}`);
+            apiEndpoint.value = savedEndpoint || details.url;
+            apiKeyValue.value = localStorage.getItem(`gem_key_${provider}`) || '';
+        }
+
+        // --- УПРАВЛЕНИЕ СЕССИЯМИ ЧАТОВ ---
+        function loadSessions() {
+            const saved = localStorage.getItem('gem_sessions');
+            if (saved) {
+                try {
+                    sessions = JSON.parse(saved);
+                } catch (e) {
+                    sessions = [];
+                }
+            }
+
+            if (sessions.length === 0) {
+                createNewSession();
+            } else {
+                currentSessionId = sessions[0].id;
+                renderSessionsList();
+                loadActiveSessionChat();
+            }
+        }
+
+        function saveSessionsToStorage() {
+            localStorage.setItem('gem_sessions', JSON.stringify(sessions));
+        }
+
+        function createNewSession() {
+            const id = 'session_' + Date.now();
+            const newSession = {
+                id: id,
+                name: `Chat #${sessions.length + 1}`,
+                messages: [],
+                systemPrompt: botPromptInput.value.trim(),
+                botName: botNameInput.value.trim() || 'Default AI'
+            };
+            sessions.unshift(newSession);
+            currentSessionId = id;
+            saveSessionsToStorage();
+            renderSessionsList();
+            loadActiveSessionChat();
+            closeSidebarUniversal();
+        }
+
+        function selectSession(id) {
+            currentSessionId = id;
+            loadActiveSessionChat();
+            renderSessionsList();
+            
+            chatsPanel.classList.add('-translate-x-full');
+            chatsOverlay.classList.add('hidden');
+        }
+
+        function deleteSession(id, event) {
+            event.stopPropagation();
+            sessions = sessions.filter(s => s.id !== id);
+            if (sessions.length === 0) {
+                createNewSession();
+            } else {
+                if (currentSessionId === id) {
+                    currentSessionId = sessions[0].id;
+                }
+                saveSessionsToStorage();
+                renderSessionsList();
+                loadActiveSessionChat();
+            }
+        }
+
+        function renameSession(id, newName) {
+            const session = sessions.find(s => s.id === id);
+            if (session) {
+                session.name = newName;
+                saveSessionsToStorage();
+                renderSessionsList();
+            }
+        }
+
+        function renderSessionsList() {
+            chatsList.innerHTML = '';
+            sessions.forEach(session => {
+                const isActive = session.id === currentSessionId;
+                
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `group flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
+                itemDiv.onclick = () => selectSession(session.id);
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'text-xs font-medium truncate flex-1 pr-2';
+                nameSpan.textContent = session.name;
+
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white px-1 text-[11px] transition';
+                renameBtn.textContent = '✏️';
+                renameBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const promptName = prompt("Enter new chat name:", session.name);
+                    if (promptName && promptName.trim() !== "") {
+                        renameSession(session.id, promptName.trim());
+                    }
+                };
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-300 px-1 text-[11px] transition';
+                deleteBtn.textContent = '🗑️';
+                deleteBtn.onclick = (e) => deleteSession(session.id, e);
+
+                itemDiv.appendChild(nameSpan);
+                itemDiv.appendChild(renameBtn);
+                itemDiv.appendChild(deleteBtn);
+                chatsList.appendChild(itemDiv);
+            });
+        }
+
+        function loadActiveSessionChat() {
+            const session = sessions.find(s => s.id === currentSessionId);
+            chatWindow.innerHTML = '';
+            
+            if (!session || session.messages.length === 0) {
+                welcomeMessage.classList.remove('hidden');
+                return;
+            }
+
+            welcomeMessage.classList.add('hidden');
+            session.messages.forEach((msg, idx) => {
+                renderMessageToDOM(msg.role, msg.content, session.botName, idx);
+            });
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        // --- ДИНАМИЧЕСКИЙ ЗАГРУЗЧИК МОДЕЛЕЙ ИЗ API ---
+        async function fetchActiveModels() {
+            const provider = apiProvider.value;
+            const hasKey = PROVIDERS[provider].hasKey;
+            const key = apiKeyValue.value.trim();
+            const endpoint = apiEndpoint.value.trim();
+
+            if (hasKey && !key) {
+                botModelSelect.innerHTML = '<option value="">(Provide API key for models)</option>';
+                return;
+            }
+
+            botModelSelect.innerHTML = '<option value="">Loading models...</option>';
+
+            try {
+                const headers = { "Content-Type": "application/json" };
+                if (hasKey) {
+                    headers["Authorization"] = `Bearer ${key}`;
+                }
+
+                const response = await fetch(`${endpoint}/models`, {
+                    method: "GET",
+                    headers: headers
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Status Error: ${response.status}`);
+                }
+
+                const json = await response.json();
+                let models = [];
+
+                if (json.data && Array.isArray(json.data)) {
+                    models = json.data;
+                } else if (Array.isArray(json)) {
+                    models = json;
+                }
+
+                models = models.filter(m => {
+                    const id = (m.id || m.name || '').toLowerCase();
+                    return !id.includes('whisper') && !id.includes('tts') && !id.includes('embed') && !id.includes('guard');
+                });
+
+                if (models.length === 0) {
+                    botModelSelect.innerHTML = '<option value="">No models found</option>';
+                    return;
+                }
+
+                const savedSelected = localStorage.getItem(`gem_selected_model_${provider}`);
+
+                botModelSelect.innerHTML = '';
+                models.forEach(m => {
+                    const modelId = m.id || m.name;
+                    const option = new Option(modelId, modelId);
+                    botModelSelect.add(option);
+                });
+
+                if (savedSelected && [...botModelSelect.options].some(o => o.value === savedSelected)) {
+                    botModelSelect.value = savedSelected;
+                } else {
+                    botModelSelect.selectedIndex = 0;
+                }
+                
+                localStorage.setItem(`gem_selected_model_${provider}`, botModelSelect.value);
+                updateStatusCard();
+
+            } catch (err) {
+                console.error("Error fetching available models:", err);
+                botModelSelect.innerHTML = '<option value="">Error fetching model list</option>';
+            }
+        }
+
+        // --- ИНТЕГРАЦИЯ СЭНДБОКСА (SANDBOX) ---
+        function copyTextToClipboard(text, successMessage = "Copied to clipboard!") {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; 
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                alert(successMessage);
+            } catch (err) {
+                console.error('Copy execution tracking exception logged:', err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function runSandboxCode() {
+            const code = sandboxCode.value;
+            const iframeDoc = sandboxIframe.contentDocument || sandboxIframe.contentWindow.document;
+            iframeDoc.open();
+            iframeDoc.write(code);
+            iframeDoc.close();
+        }
+
+        tabEditor.addEventListener('click', () => {
+            tabEditor.classList.add('border-emerald-500', 'text-gray-200');
+            tabEditor.classList.remove('border-transparent', 'text-gray-400');
+            tabPreview.classList.add('border-transparent', 'text-gray-400');
+            tabPreview.classList.remove('border-emerald-500', 'text-gray-200');
+            
+            sandboxEditorContainer.classList.remove('hidden');
+            sandboxPreviewContainer.classList.add('hidden');
+        });
+
+        tabPreview.addEventListener('click', () => {
+            tabPreview.classList.add('border-emerald-500', 'text-gray-200');
+            tabPreview.classList.remove('border-transparent', 'text-gray-400');
+            tabEditor.classList.add('border-transparent', 'text-gray-400');
+            tabEditor.classList.remove('border-emerald-500', 'text-gray-200');
+            
+            sandboxPreviewContainer.classList.remove('hidden');
+            sandboxEditorContainer.classList.add('hidden');
+            
+            runSandboxCode();
+        });
+
+        runCodeBtn.addEventListener('click', () => {
+            tabPreview.click();
+        });
+
+        toggleSandboxBtn.addEventListener('click', () => {
+            sandboxColumn.classList.toggle('hidden');
+        });
+
+        closeSandboxBtn.addEventListener('click', () => {
+            sandboxColumn.classList.add('hidden');
+        });
+
+        window.sendToSandbox = function(encodedCode) {
+            const code = decodeURIComponent(encodedCode);
+            sandboxCode.value = code;
+            sandboxColumn.classList.remove('hidden');
+            tabPreview.click();
+        };
+
+        // --- ИНТЕРАКТИВНЫЙ ОБУЧАЮЩИЙ ТУР ---
+        let currentIntroStep = 0;
+        const introSteps = [
+            { element: 'step-provider', text: '1. Select your AI provider here: cloud-based Groq, Gemini, OpenAI, OpenRouter, or a local instance running on your PC via Ollama.' },
+            { element: 'step-key', text: "2. Paste the API token for the selected provider here. Remember, local Ollama setups do not require a key entry!" },
+            { element: 'step-model', text: '3. The model list is populated dynamically straight from the API. Click "Refresh Model List" to force a reload.' },
+            { element: 'step-prompt', text: '4. Set a system prompt (instruction) to fine-tune the persona and character of your bot companion.' }
+        ];
+
+        function startIntro() {
+            currentIntroStep = 0;
+            openSidebarUniversal();
+            showIntroStep();
+        }
+
+        function showIntroStep() {
+            if (currentIntroStep >= introSteps.length) {
+                alert("Congratulations! You've completed the tour. You're now ready to customize your own assistant!");
+                closeSidebarUniversal();
+                return;
+            }
+
+            const step = introSteps[currentIntroStep];
+            const el = document.getElementById(step.element);
+            
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
+                setTimeout(() => {
+                    const confirmStep = confirm(`${step.text}\n\n[Click OK to proceed]`);
+                    el.classList.remove('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
+                    if (confirmStep || !confirmStep) {
+                        currentIntroStep++;
+                        showIntroStep();
+                    }
+                }, 400);
+            } else {
+                currentIntroStep++;
+                showIntroStep();
+            }
+        }
+
+        startIntroBtn.addEventListener('click', startIntro);
+
+        // --- ОТРИСОВКА СООБЩЕНИЙ В ДЕРЕВЕ ЧАТА (DOM) ---
+        function renderMessageToDOM(role, text, botName, index) {
+            welcomeMessage.classList.add('hidden');
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full group/msg`;
+
+            const senderName = role === 'user' ? 'You' : botName;
+            const bgClass = role === 'user' ? 'bg-emerald-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-100';
+            
+            let formattedContent = "";
+
+            if (role === 'user') {
+                formattedContent = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, '<br>');
+            } else {
+                let thinkingHtml = "";
+                let cleanText = text;
+                
+                const thinkRegex = /<think>([\s\S]*?)<\/think>/i;
+                const match = text.match(thinkRegex);
+                
+                if (match) {
+                    const thinkingContent = match[1].trim();
+                    cleanText = text.replace(thinkRegex, "").trim();
+                    
+                    if (thinkingContent) {
+                        thinkingHtml = `
+                            <details class="thinking-block w-full mb-3 bg-gray-950/60 border border-gray-800 rounded-lg p-2.5 transition">
+                                <summary class="text-xs text-amber-400/80 font-medium select-none cursor-pointer hover:text-amber-300 flex items-center justify-between">
+                                    <span class="flex items-center gap-1.5">💡 Model Thinking...</span>
+                                    <span class="text-[10px] text-gray-500 uppercase tracking-wider">Expand</span>
+                                </summary>
+                                <div class="mt-2 text-xs text-gray-400 border-t border-gray-900 pt-2 whitespace-pre-wrap leading-relaxed italic font-sans">
+                                    ${thinkingContent}
+                                </div>
+                            </details>
+                        `;
+                    }
+                }
+
+                const customRenderer = new marked.Renderer();
+                
+                customRenderer.code = function(codeArg, language) {
+                    let codeText = (codeArg && typeof codeArg === 'object') ? codeArg.text : codeArg;
+                    let codeLang = (codeArg && typeof codeArg === 'object') ? codeArg.lang : language;
+                    
+                    codeText = codeText || '';
+                    codeLang = codeLang || '';
+
+                    const encodedCode = safeEncode(codeText);
+                    const isRunnable = ['html', 'js', 'css', 'javascript', 'svg'].includes(codeLang.toLowerCase());
+                    
+                    return `
+                        <div class="relative group/code my-4">
+                            <div class="absolute right-2 top-2 z-10 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity">
+                                <button onclick="copyTextToClipboard(decodeURIComponent('${encodedCode}'), 'Code copied successfully!')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded border border-gray-700 cursor-pointer transition">
+                                    📋 Copy
+                                </button>
+                                ${isRunnable ? `
+                                <button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded cursor-pointer transition">
+                                    ▶ Sandbox
+                                </button>` : ''}
+                            </div>
+                            <div class="text-[11px] bg-gray-950/80 px-4 py-1 text-gray-400 rounded-t-lg font-mono border-t border-x border-gray-800">${codeLang || 'code'}</div>
+                            <pre class="!mt-0 !rounded-t-none"><code class="language-${codeLang}">${codeText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
+                        </div>
+                    `;
+                };
+
+                formattedContent = `${thinkingHtml}<div class="md-content">${marked.parse(cleanText, { renderer: customRenderer })}</div>`;
+            }
+
+            const encodedText = safeEncode(text);
+            const regenerateBtnHtml = (role !== 'user' && index !== undefined) ? `
+                <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition" title="Regenerate from this message">
+                    🔄 Regenerate
+                </button>
+            ` : '';
+
+            const copyResponseButton = role !== 'user' ? `
+                <div class="flex justify-end mt-2 opacity-0 group-hover/msg:opacity-100 transition-opacity gap-3">
+                    <button onclick="copyTextToClipboard(decodeURIComponent('${encodedText}'), 'Response copied!')" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">
+                        📋 Copy Response
+                    </button>
+                    ${regenerateBtnHtml}
+                </div>
+            ` : '';
+
+            messageDiv.innerHTML = `
+                <span class="text-xs text-gray-500 mb-1 px-1">${senderName}</span>
+                <div class="max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
+                    ${formattedContent}
+                    ${copyResponseButton}
+                </div>
+            `;
+            
+            chatWindow.appendChild(messageDiv);
+        }
+
+        window.copyTextToClipboard = copyTextToClipboard;
+
+        // --- ОТПРАВКА И ОБРАБОТКА ЗАПРОСОВ К API ---
+        async function triggerAiResponse(session) {
+            const providerName = apiProvider.value;
+            const hasKey = PROVIDERS[providerName].hasKey;
+            const apiKey = apiKeyValue.value.trim();
+            const endpoint = apiEndpoint.value.trim();
+            const model = botModelSelect.value;
+            
+            const temperature = parseFloat(tempInput.value);
+            const maxTokens = parseInt(tokensInput.value);
+
+            if (hasKey && !apiKey) {
+                alert("Please enter your API key in the settings panel!");
+                openSidebarUniversal();
+                return;
+            }
+            if (!model) {
+                alert("Please select an AI model first!");
+                openSidebarUniversal();
+                return;
+            }
+
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            let messagesToSend = [];
+            if (session.systemPrompt) {
+                messagesToSend.push({ role: "system", content: session.systemPrompt });
+            }
+            
+            session.messages.forEach(msg => {
+                messagesToSend.push({ role: msg.role, content: msg.content });
+            });
+
+            try {
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = "text-xs text-gray-500 italic px-1 animate-pulse";
+                loadingDiv.id = "apiLoading";
+                loadingDiv.innerText = `${session.botName} is typing...`;
+                chatWindow.appendChild(loadingDiv);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                const headers = { "Content-Type": "application/json" };
+                if (hasKey) {
+                    headers["Authorization"] = `Bearer ${apiKey}`;
+                }
+
+                const response = await fetch(`${endpoint}/chat/completions`, {
+                    method: "POST",
+                    headers: headers,
+                    body: JSON.stringify({
+                        model: model,
+                        messages: messagesToSend,
+                        temperature: temperature,
+                        max_tokens: maxTokens
+                    })
+                });
+
+                const loadingEl = document.getElementById('apiLoading');
+                if (loadingEl) loadingEl.remove();
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error?.message || `HTTP Error Code: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const aiResponse = data.choices[0].message.content;
+
+                session.messages.push({ role: "assistant", content: aiResponse });
+                saveSessionsToStorage();
+                
+                renderMessageToDOM('assistant', aiResponse, session.botName, session.messages.length - 1);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+            } catch (error) {
+                console.error(error);
+                const loadingEl = document.getElementById('apiLoading');
+                if (loadingEl) loadingEl.remove();
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.className = "bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-lg text-xs max-w-xl";
+                errorDiv.innerText = `API Error: ${error.message}`;
+                chatWindow.appendChild(errorDiv);
+            } finally {
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        async function sendMessage() {
+            let text = userInput.value.trim();
+
+            if (!text && !attachedFileContent) return;
+
+            let session = sessions.find(s => s.id === currentSessionId);
+            if (!session) {
+                createNewSession();
+                session = sessions[0];
+            }
+
+            let fullUserContent = text;
+            if (attachedFileContent) {
+                fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
+            }
+
+            userInput.value = "";
+            userInput.style.height = 'auto';
+
+            renderMessageToDOM('user', fullUserContent, 'You', session.messages.length);
+            session.messages.push({ role: "user", content: fullUserContent });
+            
+            if (session.name.startsWith('Chat #')) {
+                session.name = text.slice(0, 24) + (text.length > 24 ? '...' : '');
+            }
+
+            session.systemPrompt = botPromptInput.value.trim();
+            session.botName = botNameInput.value.trim() || 'Default AI';
+
+            saveSessionsToStorage();
+            renderSessionsList();
+            removeAttachedFile();
+
+            await triggerAiResponse(session);
+        }
+
+        // --- ФУНКЦИЯ ПЕРЕГЕНЕРАЦИИ (REGENERATE) ---
+        async function regenerateMessage(index) {
+            const session = sessions.find(s => s.id === currentSessionId);
+            if (!session) return;
+
+            if (index < 0 || index >= session.messages.length) return;
+
+            // Обрезаем историю сессии до указанного ассистентского сообщения (исключая его)
+            session.messages = session.messages.slice(0, index);
+
+            // Сохраняем и сразу же обновляем UI чата
+            saveSessionsToStorage();
+            loadActiveSessionChat();
+
+            // Повторно запрашиваем ответ
+            await triggerAiResponse(session);
+        }
+
+        // Экспортируем функцию в window для вызова через inline onclick в HTML
+        window.regenerateMessage = regenerateMessage;
+
+        // --- УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ И НАБЛЮДАТЕЛИ (LISTENERS) ---
+        apiProvider.addEventListener('change', (e) => {
+            handleProviderChange(e.target.value);
+            saveApiSettings();
+            fetchActiveModels();
+        });
+
+        apiKeyValue.addEventListener('input', () => { saveApiSettings(); });
+        apiKeyValue.addEventListener('change', () => { fetchActiveModels(); });
+        apiEndpoint.addEventListener('input', () => { saveApiSettings(); });
+        apiEndpoint.addEventListener('change', () => { fetchActiveModels(); });
+
+        botNameInput.addEventListener('input', saveApiSettings);
+        botPromptInput.addEventListener('input', saveApiSettings);
+        botModelSelect.addEventListener('change', () => {
+            localStorage.setItem(`gem_selected_model_${apiProvider.value}`, botModelSelect.value);
+            updateStatusCard();
+        });
+
+        tempInput.addEventListener('input', (e) => {
+            tempValue.textContent = e.target.value;
+            saveApiSettings();
+        });
+        tokensInput.addEventListener('input', (e) => {
+            tokensValue.textContent = e.target.value;
+            saveApiSettings();
+        });
+
+        refreshModelsBtn.addEventListener('click', fetchActiveModels);
+
+        clearChatBtn.addEventListener('click', () => {
+            const session = sessions.find(s => s.id === currentSessionId);
+            if (session) {
+                session.messages = [];
+                saveSessionsToStorage();
+                loadActiveSessionChat();
+            }
+        });
+
+        newChatBtn.addEventListener('click', createNewSession);
+
+        // --- УПРАВЛЕНИЕ БОКОВЫМИ ПАНЕЛЯМИ ---
+        toggleChatsBtn.addEventListener('click', () => {
+            if (window.innerWidth >= 768) {
+                chatsPanel.classList.toggle('md:hidden');
+            } else {
+                chatsPanel.classList.toggle('-translate-x-full');
+                chatsOverlay.classList.toggle('hidden');
+            }
+        });
+
+        chatsOverlay.addEventListener('click', () => {
+            chatsPanel.classList.add('-translate-x-full');
+            chatsOverlay.classList.add('hidden');
+        });
+
+        toggleSidebarBtn.addEventListener('click', () => {
+            if (window.innerWidth >= 1024) {
+                sidebar.classList.toggle('lg:hidden');
+            } else {
+                sidebar.classList.remove('translate-x-full');
+                sidebarOverlay.classList.remove('hidden');
+            }
+        });
+
+        closeSidebarBtn.addEventListener('click', closeSidebarUniversal);
+        sidebarOverlay.addEventListener('click', closeSidebarUniversal);
+
+        function openSidebarUniversal() {
+            if (window.innerWidth >= 1024) {
+                sidebar.classList.remove('lg:hidden');
+            } else {
+                sidebar.classList.remove('translate-x-full');
+                sidebarOverlay.classList.remove('hidden');
+            }
+        }
+
+        function closeSidebarUniversal() {
+            if (window.innerWidth >= 1024) {
+                sidebar.classList.add('lg:hidden');
+            } else {
+                sidebar.classList.add('translate-x-full');
+                sidebarOverlay.classList.add('hidden');
+            }
+        }
+
+        // --- ОБРАБОТКА ВЛОЖЕННЫХ ТЕКСТОВЫХ ФАЙЛОВ ---
+        attachmentInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            attachedFileName = file.name;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                attachedFileContent = event.target.result;
+                fileNameDisplay.textContent = attachedFileName;
+                fileIndicator.classList.remove('hidden');
+                fileIndicator.classList.add('flex');
+            };
+            reader.readAsText(file);
+        });
+
+        function removeAttachedFile() {
+            attachedFileContent = null;
+            attachedFileName = "";
+            attachmentInput.value = "";
+            fileIndicator.classList.add('hidden');
+            fileIndicator.classList.remove('flex');
+        }
+        removeFileBtn.addEventListener('click', removeAttachedFile);
+
+        userInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // --- МОДАЛЬНЫЕ ОКНА ---
+        openHelpBtn.addEventListener('click', () => { helpModal.classList.remove('hidden'); });
+        closeHelpModal.addEventListener('click', () => { helpModal.classList.add('hidden'); });
+        closeHelpModalBtn.addEventListener('click', () => { helpModal.classList.add('hidden'); });
+        helpModal.addEventListener('click', (e) => {
+            if (e.target === helpModal) helpModal.classList.add('hidden');
+        });
+
+        // --- ИМПОРТ И ЭКСПОРТ КОНФИГУРАЦИИ ---
+        exportJsonBtn.addEventListener('click', () => {
+            const config = {
+                provider: apiProvider.value,
+                apiKey: apiKeyValue.value.trim(),
+                endpoint: apiEndpoint.value.trim(),
+                botName: botNameInput.value.trim(),
+                systemPrompt: botPromptInput.value.trim(),
+                selectedModel: botModelSelect.value,
+                temperature: parseFloat(tempInput.value),
+                maxTokens: parseInt(tokensInput.value)
+            };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            const filename = config.botName ? `gem-config-${config.botName.toLowerCase().replace(/\s+/g, '-')}.json` : 'gem-hub-config.json';
+            downloadAnchor.setAttribute("download", filename);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        });
+
+        importJsonInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const config = JSON.parse(event.target.result);
+                    if (config.provider) apiProvider.value = config.provider;
+                    handleProviderChange(apiProvider.value);
+                    
+                    if (config.apiKey) apiKeyValue.value = config.apiKey;
+                    if (config.endpoint) apiEndpoint.value = config.endpoint;
+                    if (config.botName) botNameInput.value = config.botName;
+                    if (config.systemPrompt) botPromptInput.value = config.systemPrompt;
+                    if (config.temperature !== undefined) { tempInput.value = config.temperature; tempValue.textContent = config.temperature; }
+                    if (config.maxTokens !== undefined) { tokensInput.value = config.maxTokens; tokensValue.textContent = config.maxTokens; }
+                    
+                    saveApiSettings();
+
+                    if (config.selectedModel) {
+                        localStorage.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
+                    }
+
+                    fetchActiveModels();
+                    alert("Configuration profile loaded successfully!");
+                    closeSidebarUniversal();
+                } catch (error) {
+                    alert("Configuration import error. Invalid JSON file structure.");
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = ''; 
+        });
+
+        function updateStatusCard() {
+            const provider = apiProvider.value.toUpperCase();
+            const model = botModelSelect.value || 'no active model';
+            const name = botNameInput.value.trim() || 'Default AI';
+            const prompt = botPromptInput.value.trim();
+
+            if (!prompt) {
+                activeStatusText.innerHTML = `${name} (No Prompt)<br><span class="text-[10px] text-gray-500 font-mono">Provider: ${provider} | ${model}</span>`;
+            } else {
+                activeStatusText.innerHTML = `
+                    <strong class="text-emerald-400">${name}</strong><br>
+                    <span class="text-gray-400 block truncate text-[11px]">${prompt}</span>
+                    <span class="text-[10px] text-gray-500 font-mono block">Provider: ${provider} | ${model}</span>
+                `;
+            }
+        }
+
+        // --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАПУСКЕ ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadApiSettings();
+            loadSessions();
+        });
+    </script>
+</body>
+</html>
