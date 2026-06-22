@@ -7,7 +7,7 @@ A lightweight, serverless, and privacy-first AI web client & playground with a b
 ---
 
 ## ✨ Live Web App & Premium Store
-👉 **[Launch Traliran AI Hub on Netlify](https://traliran.github.io/traliran-ai-hub/)**
+👉 **[Launch Traliran AI Hub on github pages](https://traliran.github.io/traliran-ai-hub/)**
 
 🏪 **Why the Live Version Rules:** 
 The GitHub repository provides the complete, fully functional core UI and essential free assistant presets. However, the live Netlify version features our cloud-updated **Assistant Store**! 
