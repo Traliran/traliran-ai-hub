@@ -1,14 +1,13 @@
 # 💎 Traliran AI Hub
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Deployment: Netlify](https://img.shields.io/badge/Deployment-Netlify-00C4B4.svg)](https://www.netlify.com/)
 
 A lightweight, serverless, and privacy-first AI web client & playground with a built-in code execution sandbox. Connect directly to **Groq, Gemini, OpenAI, OpenRouter**, and local backends (**Ollama / Llama.cpp**) straight from your browser.
 
 ---
 
 ## ✨ Live Web App & Premium Store
-👉 **[Launch Traliran AI Hub on Netlify](https://traliran-ai-hub.netlify.app/)**
+👉 **[Launch Traliran AI Hub on Netlify](https://traliran.github.io/traliran-ai-hub/)**
 
 🏪 **Why the Live Version Rules:** 
 The GitHub repository provides the complete, fully functional core UI and essential free assistant presets. However, the live Netlify version features our cloud-updated **Assistant Store**! 
