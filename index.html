@@ -53,6 +53,15 @@
             </div>
             
             <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                <!-- Кнопка Blog, ведущая на персональный сайт -->
+                <a href="https://traliran.github.io" target="_blank" id="blogBtn" class="bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1.5">
+                    <span>📝</span> Blog
+                </a>
+
+                <button id="openGroupChatBtn" class="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                    <span>👥</span> AI Group Debate
+                </button>
+
                 <button id="openStoreBtn" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>🏪</span> Assistant Store
                 </button>
@@ -127,9 +136,13 @@
 
                 <div>
                     <label id="step-model" class="block text-xs font-semibold text-gray-400 mb-1">AI Model (Active)</label>
-                    <select id="botModel" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition">
+                    <select id="botModel" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition mb-2">
                         <option value="">(Enter API key to load models)</option>
                     </select>
+                    <button id="openMultiModelBtn" class="w-full bg-indigo-600/30 border border-indigo-500/40 hover:bg-indigo-600/50 text-indigo-300 font-medium py-1.5 rounded-lg text-xs transition flex items-center justify-center gap-1">
+                        ⚙️ Multi-Model Setup / Compare
+                    </button>
+                    <div id="multiModelBadge" class="hidden mt-1.5 p-1.5 bg-indigo-950/40 border border-indigo-900 rounded text-[11px] text-indigo-300"></div>
                 </div>
 
                 <div class="border-t border-gray-800 pt-3 mt-1 space-y-3">
@@ -157,6 +170,15 @@
                             <span id="tempValue" class="font-mono text-emerald-400">0.7</span>
                         </div>
                         <input type="range" id="botTemperature" min="0" max="2" step="0.1" value="0.7" 
+                            class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs text-gray-400 mb-1">
+                            <span>Top P:</span>
+                            <span id="topPValue" class="font-mono text-emerald-400">1.0</span>
+                        </div>
+                        <input type="range" id="botTopP" min="0" max="1" step="0.05" value="1.0" 
                             class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     </div>
 
@@ -255,7 +277,7 @@
             <div id="sandboxColumn" class="hidden w-full md:w-[45%] bg-gray-900 border-t md:border-t-0 md:border-l border-gray-800 flex flex-col h-full overflow-hidden absolute md:static inset-0 z-40">
                 <div class="p-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                        <span class="text-sm">💻</span>
+                        <span>💻</span>
                         <h3 class="font-bold text-sm text-emerald-400">Sandbox Interpreter</h3>
                     </div>
                     <div class="flex items-center gap-2">
@@ -283,6 +305,44 @@
 
         </section>
     </main>
+
+    <!-- Модалка конфигуратора мульти-моделей -->
+    <div id="multiModelModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative flex flex-col max-h-[85vh]">
+            <button id="closeMultiModelModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <div>
+                <h2 class="text-xl font-bold text-indigo-400">🤖 Multi-Model Setup</h2>
+                <p class="text-xs text-gray-400 mt-0.5">Select multiple models to poll them simultaneously.</p>
+            </div>
+            <div id="multiModelList" class="flex-1 overflow-y-auto chat-scroll space-y-2 border border-gray-800 p-3 rounded-xl bg-gray-950">
+                <!-- Заполняется динамически -->
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t border-gray-800">
+                <button id="clearMultiModels" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded-lg transition">Reset</button>
+                <button id="saveMultiModels" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-4 rounded-lg transition">Apply Selection</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка Группового Чат Дебатов -->
+    <div id="groupChatModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl relative">
+            <button id="closeGroupChatModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <div>
+                <h2 class="text-xl font-black text-indigo-400">👥 AI Group Debate Panel</h2>
+                <p class="text-xs text-gray-400 mt-1">Submit your idea. Three specialized AI agents will review it from multiple perspectives (Optimist, Critic, Technologist).</p>
+            </div>
+            <div class="space-y-2">
+                <label class="block text-xs font-semibold text-gray-400">Your Idea / Thesis:</label>
+                <textarea id="groupIdeaInput" rows="4" placeholder="e.g., Launching a decentralized P2P marketplace template for local products inside a Linux containers container system..." class="w-full bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm focus:outline-none focus:border-indigo-500 resize-none chat-scroll text-gray-100"></textarea>
+            </div>
+            <div class="flex justify-end">
+                <button id="startGroupDebateBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-5 rounded-lg text-sm transition cursor-pointer">
+                    Initiate Multi-Agent Analysis 🚀
+                </button>
+            </div>
+        </div>
+    </div>
 
     <div id="storeModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative flex flex-col max-h-[90vh]">
@@ -332,7 +392,7 @@
                 <div>
                     <h3 class="text-sm font-bold uppercase text-gray-400 tracking-wider mb-3 border-b border-gray-800 pb-1">PAID:</h3>
                     <div id="paidBotsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -386,10 +446,7 @@
     </div>
 
     <script>
-        // ==========================================
-        //  ⚙️ КОНФИГУРАЦИЯ ПЛАТНЫХ АССИСТЕНТОВ
-        //  Вставляй сюда названия, описания и ссылки
-        // ==========================================
+        // Конфигурация платных ассистентов
         const PAID_ASSISTANTS_CONFIG = [
             {
                 name: "Markdown assistant - $5",
@@ -410,17 +467,26 @@
                 name: "Mind-Map & Pin-Card Designer - $5",
                 description: "An analytical AI assistant specialized in information architecture, helping users transform raw data and complex ideas into logical, highly structured hierarchical diagrams.",
                 link: "https://whop.com/joined/traliran-ai-huub/products/mind-map-pin-card-designer/"
+            },
+            {
+                name: "Deep Script Analyst - $4",
+                description: "An advanced structural and narrative analytics AI designed for professional screenwriters, script doctors, and script supervisors. It deconstructs feature-length or episodic screenplays to analyze pacing, thematic cohesion, and character arc metrics without modifying the writer's creative voice.",
+                link: "https://whop.com/joined/traliran-ai-huub/products/deep-script-analyst/"
+            },
+            {
+                name: "AI Knowledge Auditor - $6",
+                description: "An advanced educational AI designed to battle information hoarding. Instead of just organizing notes, it audits the user's actual understanding of their saved materials through adaptive, Socratic-style testing and conceptual stress-tests.",
+                link: "https://whop.com/joined/traliran-ai-huub/products/ai-knowledge-auditor/"
             }
         ];
 
-        // --- ГЛОБАЛЬНЫЕ НАСТРОЙКИ И СОСТОЯНИЕ ---
         let sessions = []; 
         let currentSessionId = null; 
-        
         let attachedFileContent = null;
         let attachedFileName = "";
+        let selectedMultiModels = []; // Список выбранных моделей для мульти-запроса
 
-        // Ссылки на элементы UI настроек API
+        // DOM элементы
         const apiProvider = document.getElementById('apiProvider');
         const apiKeyValue = document.getElementById('apiKeyValue');
         const apiEndpoint = document.getElementById('apiEndpoint');
@@ -428,28 +494,42 @@
         const endpointContainer = document.getElementById('endpointContainer');
         const botModelSelect = document.getElementById('botModel');
         const refreshModelsBtn = document.getElementById('refreshModelsBtn');
-
         const botNameInput = document.getElementById('botName');
         const botPromptInput = document.getElementById('botPrompt');
         const tempInput = document.getElementById('botTemperature');
         const tempValue = document.getElementById('tempValue');
+        const topPInput = document.getElementById('botTopP');
+        const topPValue = document.getElementById('topPValue');
         const tokensInput = document.getElementById('botMaxTokens');
         const tokensValue = document.getElementById('tokensValue');
 
-        // Модалки помощи
+        // Модалки
         const helpModal = document.getElementById('helpModal');
         const openHelpBtn = document.getElementById('openHelpBtn');
         const closeHelpModal = document.getElementById('closeHelpModal');
         const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
         const startIntroBtn = document.getElementById('startIntroBtn');
-
-        // Модалка стора ассистентов
         const storeModal = document.getElementById('storeModal');
         const openStoreBtn = document.getElementById('openStoreBtn');
         const closeStoreModal = document.getElementById('closeStoreModal');
         const paidBotsContainer = document.getElementById('paidBotsContainer');
 
-        // Сэндбокс интерпретатор
+        // Мульти-модели и Групповой Чат
+        const openMultiModelBtn = document.getElementById('openMultiModelBtn');
+        const multiModelModal = document.getElementById('multiModelModal');
+        const closeMultiModelModal = document.getElementById('closeMultiModelModal');
+        const multiModelList = document.getElementById('multiModelList');
+        const saveMultiModelsBtn = document.getElementById('saveMultiModels');
+        const clearMultiModelsBtn = document.getElementById('clearMultiModels');
+        const multiModelBadge = document.getElementById('multiModelBadge');
+
+        const openGroupChatBtn = document.getElementById('openGroupChatBtn');
+        const groupChatModal = document.getElementById('groupChatModal');
+        const closeGroupChatModal = document.getElementById('closeGroupChatModal');
+        const groupIdeaInput = document.getElementById('groupIdeaInput');
+        const startGroupDebateBtn = document.getElementById('startGroupDebateBtn');
+
+        // Сэндбокс
         const toggleSandboxBtn = document.getElementById('toggleSandboxBtn');
         const sandboxColumn = document.getElementById('sandboxColumn');
         const closeSandboxBtn = document.getElementById('closeSandboxBtn');
@@ -461,42 +541,33 @@
         const sandboxIframe = document.getElementById('sandboxIframe');
         const runCodeBtn = document.getElementById('runCodeBtn');
 
-        // Элементы окна чата
+        // Окно чата
         const chatWindow = document.getElementById('chatWindow');
         const welcomeMessage = document.getElementById('welcomeMessage');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
         const clearChatBtn = document.getElementById('clearChat');
-
-        // Навигация сессий чатов
         const chatsList = document.getElementById('chatsList');
         const newChatBtn = document.getElementById('newChatBtn');
 
-        // Обработка прикрепленных файлов
+        // Файлы и интерфейс
         const attachmentInput = document.getElementById('attachmentInput');
         const fileIndicator = document.getElementById('fileIndicator');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
         const removeFileBtn = document.getElementById('removeFileBtn');
-
-        // Мобильная панель навигации
         const sidebar = document.getElementById('sidebar');
         const toggleSidebarBtn = document.getElementById('toggleSidebar');
         const closeSidebarBtn = document.getElementById('closeSidebar');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
-
         const chatsPanel = document.getElementById('chatsPanel');
         const toggleChatsBtn = document.getElementById('toggleChats');
         const chatsOverlay = document.getElementById('chatsOverlay');
-
-        // Импорт/Экспорт конфигурации
         const exportJsonBtn = document.getElementById('exportJson');
         const importJsonInput = document.getElementById('importJson');
         const activeStatusText = document.getElementById('activeStatusText');
 
-        // Настройка рендеринга Markdown (используем новый синтаксис marked.use)
         marked.use({ breaks: true, gfm: true });
 
-        // --- МАРШРУТЫ РАУТИНГА API ПО УМОЛЧАНИЮ ---
         const PROVIDERS = {
             groq: { url: "https://api.groq.com/openai/v1", hasKey: true },
             google: { url: "https://generativelanguage.googleapis.com/v1beta/openai", hasKey: true },
@@ -506,13 +577,12 @@
             llamacpp: { url: "http://localhost:8080/v1", hasKey: false }
         };
 
-        // Безопасное экранирование строк
         function safeEncode(str) {
             if (!str) return "";
             return encodeURIComponent(str).replace(/'/g, "%27");
         }
 
-        // --- ИНТЕГРАЦИЯ СТОР-ДВИЖКА ---
+        // Рендеринг расширений магазина
         function renderPaidStoreBots() {
             paidBotsContainer.innerHTML = '';
             PAID_ASSISTANTS_CONFIG.forEach(bot => {
@@ -536,8 +606,6 @@
             botPromptInput.value = promptText;
             saveApiSettings();
             storeModal.classList.add('hidden');
-            
-            // Создание новой сессии под выбранного ассистента
             createNewSession();
             alert(`Assistant Profile "${name}" is now online!`);
         };
@@ -547,34 +615,26 @@
             storeModal.classList.remove('hidden'); 
         });
         closeStoreModal.addEventListener('click', () => { storeModal.classList.add('hidden'); });
-        storeModal.addEventListener('click', (e) => { if(e.target === storeModal) storeModal.classList.add('hidden'); });
 
-        // --- РАБОТА С ЛОКАЛЬНЫМ ХРАНИЛИЩЕМ (LOCALSTORAGE) ---
+        // --- ЛОКАЛЬНЫЕ НАСТРОЙКИ (LOCALSTORAGE) ---
         function loadApiSettings() {
             const provider = localStorage.getItem('gem_provider') || 'groq';
             apiProvider.value = provider;
-            
             handleProviderChange(provider);
 
-            const savedKey = localStorage.getItem(`gem_key_${provider}`) || '';
-            apiKeyValue.value = savedKey;
-
-            const savedEndpoint = localStorage.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url;
-            apiEndpoint.value = savedEndpoint;
-
-            const savedName = localStorage.getItem('gem_bot_name') || 'System AI';
-            botNameInput.value = savedName;
-
-            const savedPrompt = localStorage.getItem('gem_system_prompt') || '';
-            botPromptInput.value = savedPrompt;
-
+            apiKeyValue.value = localStorage.getItem(`gem_key_${provider}`) || '';
+            apiEndpoint.value = localStorage.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url;
+            botNameInput.value = localStorage.getItem('gem_bot_name') || 'System AI';
+            botPromptInput.value = localStorage.getItem('gem_system_prompt') || '';
+            
             const savedTemp = localStorage.getItem('gem_temp') || '0.7';
-            tempInput.value = savedTemp;
-            tempValue.textContent = savedTemp;
+            tempInput.value = savedTemp; tempValue.textContent = savedTemp;
+
+            const savedTopP = localStorage.getItem('gem_topp') || '1.0';
+            topPInput.value = savedTopP; topPValue.textContent = savedTopP;
 
             const savedTokens = localStorage.getItem('gem_tokens') || '2048';
-            tokensInput.value = savedTokens;
-            tokensValue.textContent = savedTokens;
+            tokensInput.value = savedTokens; tokensValue.textContent = savedTokens;
 
             fetchActiveModels();
         }
@@ -587,6 +647,7 @@
             localStorage.setItem('gem_bot_name', botNameInput.value.trim());
             localStorage.setItem('gem_system_prompt', botPromptInput.value.trim());
             localStorage.setItem('gem_temp', tempInput.value);
+            localStorage.setItem('gem_topp', topPInput.value);
             localStorage.setItem('gem_tokens', tokensInput.value);
             updateStatusCard();
         }
@@ -600,35 +661,65 @@
                 apiKeyContainer.classList.add('hidden');
                 endpointContainer.classList.remove('hidden');
             }
-
-            const savedEndpoint = localStorage.getItem(`gem_endpoint_${provider}`);
-            apiEndpoint.value = savedEndpoint || details.url;
+            apiEndpoint.value = localStorage.getItem(`gem_endpoint_${provider}`) || details.url;
             apiKeyValue.value = localStorage.getItem(`gem_key_${provider}`) || '';
+            selectedMultiModels = [];
+            updateMultiModelUI();
         }
 
-        // --- УПРАВЛЕНИЕ СЕССИЯМИ ЧАТОВ ---
+        // --- УПРАВЛЕНИЕ МУЛЬТИ-МОДЕЛЯМИ ---
+        openMultiModelBtn.addEventListener('click', () => {
+            multiModelList.innerHTML = '';
+            const options = Array.from(botModelSelect.options);
+            if(options.length === 0 || options[0].value === "") {
+                multiModelList.innerHTML = '<p class="text-xs text-gray-500">Please fetch models using a valid API key first.</p>';
+            } else {
+                options.forEach(opt => {
+                    const modelId = opt.value;
+                    const item = document.createElement('label');
+                    item.className = "flex items-center gap-2 p-1.5 hover:bg-gray-900 rounded text-xs text-gray-300 cursor-pointer";
+                    const isChecked = selectedMultiModels.includes(modelId);
+                    item.innerHTML = `<input type="checkbox" value="${modelId}" ${isChecked ? 'checked' : ''} class="accent-indigo-500"> <span>${modelId}</span>`;
+                    multiModelList.appendChild(item);
+                });
+            }
+            multiModelModal.classList.remove('hidden');
+        });
+
+        closeMultiModelModal.addEventListener('click', () => multiModelModal.classList.add('hidden'));
+        clearMultiModelsBtn.addEventListener('click', () => {
+            selectedMultiModels = [];
+            updateMultiModelUI();
+            multiModelModal.classList.add('hidden');
+        });
+
+        saveMultiModelsBtn.addEventListener('click', () => {
+            const checkboxes = multiModelList.querySelectorAll('input[type="checkbox"]:checked');
+            selectedMultiModels = Array.from(checkboxes).map(cb => cb.value);
+            updateMultiModelUI();
+            multiModelModal.classList.add('hidden');
+        });
+
+        function updateMultiModelUI() {
+            if(selectedMultiModels.length > 0) {
+                multiModelBadge.textContent = `⚡ Parallel Mode Active: ${selectedMultiModels.length} models`;
+                multiModelBadge.classList.remove('hidden');
+                botModelSelect.disabled = true;
+            } else {
+                multiModelBadge.classList.add('hidden');
+                botModelSelect.disabled = false;
+            }
+            updateStatusCard();
+        }
+
+        // --- СЕССИИ ЧАТОВ ---
         function loadSessions() {
             const saved = localStorage.getItem('gem_sessions');
-            if (saved) {
-                try {
-                    sessions = JSON.parse(saved);
-                } catch (e) {
-                    sessions = [];
-                }
-            }
-
-            if (sessions.length === 0) {
-                createNewSession();
-            } else {
-                currentSessionId = sessions[0].id;
-                renderSessionsList();
-                loadActiveSessionChat();
-            }
+            if (saved) { try { sessions = JSON.parse(saved); } catch (e) { sessions = []; } }
+            if (sessions.length === 0) { createNewSession(); } else { currentSessionId = sessions[0].id; renderSessionsList(); loadActiveSessionChat(); }
         }
 
-        function saveSessionsToStorage() {
-            localStorage.setItem('gem_sessions', JSON.stringify(sessions));
-        }
+        function saveSessionsToStorage() { localStorage.setItem('gem_sessions', JSON.stringify(sessions)); }
 
         function createNewSession() {
             const id = 'session_' + Date.now();
@@ -651,7 +742,6 @@
             currentSessionId = id;
             loadActiveSessionChat();
             renderSessionsList();
-            
             chatsPanel.classList.add('-translate-x-full');
             chatsOverlay.classList.add('hidden');
         }
@@ -659,32 +749,18 @@
         function deleteSession(id, event) {
             event.stopPropagation();
             sessions = sessions.filter(s => s.id !== id);
-            if (sessions.length === 0) {
-                createNewSession();
-            } else {
-                if (currentSessionId === id) {
-                    currentSessionId = sessions[0].id;
-                }
-                saveSessionsToStorage();
-                renderSessionsList();
-                loadActiveSessionChat();
-            }
+            if (sessions.length === 0) { createNewSession(); } else { if (currentSessionId === id) currentSessionId = sessions[0].id; saveSessionsToStorage(); renderSessionsList(); loadActiveSessionChat(); }
         }
 
         function renameSession(id, newName) {
             const session = sessions.find(s => s.id === id);
-            if (session) {
-                session.name = newName;
-                saveSessionsToStorage();
-                renderSessionsList();
-            }
+            if (session) { session.name = newName; saveSessionsToStorage(); renderSessionsList(); }
         }
 
         function renderSessionsList() {
             chatsList.innerHTML = '';
             sessions.forEach(session => {
                 const isActive = session.id === currentSessionId;
-                
                 const itemDiv = document.createElement('div');
                 itemDiv.className = `group flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
                 itemDiv.onclick = () => selectSession(session.id);
@@ -699,9 +775,7 @@
                 renameBtn.onclick = (e) => {
                     e.stopPropagation();
                     const promptName = prompt("Enter new chat name:", session.name);
-                    if (promptName && promptName.trim() !== "") {
-                        renameSession(session.id, promptName.trim());
-                    }
+                    if (promptName && promptName.trim() !== "") renameSession(session.id, promptName.trim());
                 };
 
                 const deleteBtn = document.createElement('button');
@@ -719,20 +793,13 @@
         function loadActiveSessionChat() {
             const session = sessions.find(s => s.id === currentSessionId);
             chatWindow.innerHTML = '';
-            
-            if (!session || session.messages.length === 0) {
-                welcomeMessage.classList.remove('hidden');
-                return;
-            }
-
+            if (!session || session.messages.length === 0) { welcomeMessage.classList.remove('hidden'); return; }
             welcomeMessage.classList.add('hidden');
-            session.messages.forEach((msg, idx) => {
-                renderMessageToDOM(msg.role, msg.content, session.botName, idx);
-            });
+            session.messages.forEach((msg, idx) => { renderMessageToDOM(msg.role, msg.content, session.botName, idx); });
             chatWindow.scrollTop = chatWindow.scrollHeight;
         }
 
-        // --- ДИНАМИЧЕСКИЙ ЗАГРУЗЧИК МОДЕЛЕЙ ИЗ API ---
+        // --- ДИНАМИЧЕСКИЙ ЗАГРУЗЧИК МОДЕЛЕЙ ---
         async function fetchActiveModels() {
             const provider = apiProvider.value;
             const hasKey = PROVIDERS[provider].hasKey;
@@ -743,32 +810,17 @@
                 botModelSelect.innerHTML = '<option value="">(Provide API key for models)</option>';
                 return;
             }
-
             botModelSelect.innerHTML = '<option value="">Loading models...</option>';
 
             try {
                 const headers = { "Content-Type": "application/json" };
-                if (hasKey) {
-                    headers["Authorization"] = `Bearer ${key}`;
-                }
+                if (hasKey) headers["Authorization"] = `Bearer ${key}`;
 
-                const response = await fetch(`${endpoint}/models`, {
-                    method: "GET",
-                    headers: headers
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Status Error: ${response.status}`);
-                }
+                const response = await fetch(`${endpoint}/models`, { method: "GET", headers: headers });
+                if (!response.ok) throw new Error(`Status Error: ${response.status}`);
 
                 const json = await response.json();
-                let models = [];
-
-                if (json.data && Array.isArray(json.data)) {
-                    models = json.data;
-                } else if (Array.isArray(json)) {
-                    models = json;
-                }
+                let models = json.data && Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
 
                 models = models.filter(m => {
                     const id = (m.id || m.name || '').toLowerCase();
@@ -781,12 +833,10 @@
                 }
 
                 const savedSelected = localStorage.getItem(`gem_selected_model_${provider}`);
-
                 botModelSelect.innerHTML = '';
                 models.forEach(m => {
                     const modelId = m.id || m.name;
-                    const option = new Option(modelId, modelId);
-                    botModelSelect.add(option);
+                    botModelSelect.add(new Option(modelId, modelId));
                 });
 
                 if (savedSelected && [...botModelSelect.options].some(o => o.value === savedSelected)) {
@@ -794,83 +844,54 @@
                 } else {
                     botModelSelect.selectedIndex = 0;
                 }
-                
                 localStorage.setItem(`gem_selected_model_${provider}`, botModelSelect.value);
                 updateStatusCard();
-
             } catch (err) {
-                console.error("Error fetching available models:", err);
+                console.error(err);
                 botModelSelect.innerHTML = '<option value="">Error fetching model list</option>';
             }
         }
 
-        // --- ИНТЕГРАЦИЯ СЭНДБОКСА (SANDBOX) ---
+        // --- ИНТЕГРАЦИЯ СЭНДБОКСА ---
         function copyTextToClipboard(text, successMessage = "Copied to clipboard!") {
             const textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed"; 
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                alert(successMessage);
-            } catch (err) {
-                console.error('Copy execution tracking exception logged:', err);
-            }
+            textArea.value = text; textArea.style.position = "fixed"; document.body.appendChild(textArea);
+            textArea.focus(); textArea.select();
+            try { document.execCommand('copy'); alert(successMessage); } catch (err) { console.error(err); }
             document.body.removeChild(textArea);
         }
 
+        // Функция запуска кода в Sandbox
         function runSandboxCode() {
             const code = sandboxCode.value;
             const iframeDoc = sandboxIframe.contentDocument || sandboxIframe.contentWindow.document;
-            iframeDoc.open();
-            iframeDoc.write(code);
-            iframeDoc.close();
+            iframeDoc.open(); iframeDoc.write(code); iframeDoc.close();
         }
 
         tabEditor.addEventListener('click', () => {
-            tabEditor.classList.add('border-emerald-500', 'text-gray-200');
-            tabEditor.classList.remove('border-transparent', 'text-gray-400');
-            tabPreview.classList.add('border-transparent', 'text-gray-400');
-            tabPreview.classList.remove('border-emerald-500', 'text-gray-200');
-            
-            sandboxEditorContainer.classList.remove('hidden');
-            sandboxPreviewContainer.classList.add('hidden');
+            tabEditor.classList.add('border-emerald-500', 'text-gray-200'); tabEditor.classList.remove('border-transparent', 'text-gray-400');
+            tabPreview.classList.add('border-transparent', 'text-gray-400'); tabPreview.classList.remove('border-emerald-500', 'text-gray-200');
+            sandboxEditorContainer.classList.remove('hidden'); sandboxPreviewContainer.classList.add('hidden');
         });
 
         tabPreview.addEventListener('click', () => {
-            tabPreview.classList.add('border-emerald-500', 'text-gray-200');
-            tabPreview.classList.remove('border-transparent', 'text-gray-400');
-            tabEditor.classList.add('border-transparent', 'text-gray-400');
-            tabEditor.classList.remove('border-emerald-500', 'text-gray-200');
-            
-            sandboxPreviewContainer.classList.remove('hidden');
-            sandboxEditorContainer.classList.add('hidden');
-            
+            tabPreview.classList.add('border-emerald-500', 'text-gray-200'); tabPreview.classList.remove('border-transparent', 'text-gray-400');
+            tabEditor.classList.add('border-transparent', 'text-gray-400'); tabEditor.classList.remove('border-emerald-500', 'text-gray-200');
+            sandboxPreviewContainer.classList.remove('hidden'); sandboxEditorContainer.classList.add('hidden');
             runSandboxCode();
         });
 
-        runCodeBtn.addEventListener('click', () => {
-            tabPreview.click();
-        });
-
-        toggleSandboxBtn.addEventListener('click', () => {
-            sandboxColumn.classList.toggle('hidden');
-        });
-
-        closeSandboxBtn.addEventListener('click', () => {
-            sandboxColumn.classList.add('hidden');
-        });
+        runCodeBtn.addEventListener('click', () => tabPreview.click());
+        toggleSandboxBtn.addEventListener('click', () => sandboxColumn.classList.toggle('hidden'));
+        closeSandboxBtn.addEventListener('click', () => sandboxColumn.classList.add('hidden'));
 
         window.sendToSandbox = function(encodedCode) {
-            const code = decodeURIComponent(encodedCode);
-            sandboxCode.value = code;
+            sandboxCode.value = decodeURIComponent(encodedCode);
             sandboxColumn.classList.remove('hidden');
             tabPreview.click();
         };
 
-        // --- ИНТЕРАКТИВНЫЙ ОБУЧАЮЩИЙ ТУР ---
+        // --- ИНТЕРФЕЙС ТУРА ---
         let currentIntroStep = 0;
         const introSteps = [
             { element: 'step-provider', text: '1. Select your AI provider here: cloud-based Groq, Gemini, OpenAI, OpenRouter, or a local instance running on your PC via Ollama.' },
@@ -879,45 +900,25 @@
             { element: 'step-prompt', text: '4. Set a system prompt (instruction) to fine-tune the persona and character of your bot companion.' }
         ];
 
-        function startIntro() {
-            currentIntroStep = 0;
-            openSidebarUniversal();
-            showIntroStep();
-        }
-
+        function startIntro() { currentIntroStep = 0; openSidebarUniversal(); showIntroStep(); }
         function showIntroStep() {
-            if (currentIntroStep >= introSteps.length) {
-                alert("Congratulations! You've completed the tour. You're now ready to customize your own assistant!");
-                closeSidebarUniversal();
-                return;
-            }
-
-            const step = introSteps[currentIntroStep];
-            const el = document.getElementById(step.element);
-            
+            if (currentIntroStep >= introSteps.length) { alert("Congratulations! You've completed the tour."); closeSidebarUniversal(); return; }
+            const step = introSteps[currentIntroStep]; const el = document.getElementById(step.element);
             if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 el.classList.add('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
                 setTimeout(() => {
-                    const confirmStep = confirm(`${step.text}\n\n[Click OK to proceed]`);
+                    confirm(`${step.text}\n\n[Click OK to proceed]`);
                     el.classList.remove('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
-                    if (confirmStep || !confirmStep) {
-                        currentIntroStep++;
-                        showIntroStep();
-                    }
+                    currentIntroStep++; showIntroStep();
                 }, 400);
-            } else {
-                currentIntroStep++;
-                showIntroStep();
-            }
+            } else { currentIntroStep++; showIntroStep(); }
         }
-
         startIntroBtn.addEventListener('click', startIntro);
 
-        // --- ОТРИСОВКА СООБЩЕНИЙ В ДЕРЕВЕ ЧАТА (DOM) ---
+        // --- ОТРИСОВКА СООБЩЕНИЙ С ПОДДЕРЖКОЙ THINKING ---
         function renderMessageToDOM(role, text, botName, index) {
             welcomeMessage.classList.add('hidden');
-
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full group/msg`;
 
@@ -932,13 +933,13 @@
                 let thinkingHtml = "";
                 let cleanText = text;
                 
+                // Извлечение мыслей, завернутых в тег <think>
                 const thinkRegex = /<think>([\s\S]*?)<\/think>/i;
                 const match = text.match(thinkRegex);
                 
                 if (match) {
                     const thinkingContent = match[1].trim();
                     cleanText = text.replace(thinkRegex, "").trim();
-                    
                     if (thinkingContent) {
                         thinkingHtml = `
                             <details class="thinking-block w-full mb-3 bg-gray-950/60 border border-gray-800 rounded-lg p-2.5 transition">
@@ -955,27 +956,18 @@
                 }
 
                 const customRenderer = new marked.Renderer();
-                
                 customRenderer.code = function(codeArg, language) {
                     let codeText = (codeArg && typeof codeArg === 'object') ? codeArg.text : codeArg;
                     let codeLang = (codeArg && typeof codeArg === 'object') ? codeArg.lang : language;
-                    
-                    codeText = codeText || '';
-                    codeLang = codeLang || '';
-
+                    codeText = codeText || ''; codeLang = codeLang || '';
                     const encodedCode = safeEncode(codeText);
                     const isRunnable = ['html', 'js', 'css', 'javascript', 'svg'].includes(codeLang.toLowerCase());
                     
                     return `
                         <div class="relative group/code my-4">
                             <div class="absolute right-2 top-2 z-10 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity">
-                                <button onclick="copyTextToClipboard(decodeURIComponent('${encodedCode}'), 'Code copied successfully!')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded border border-gray-700 cursor-pointer transition">
-                                    📋 Copy
-                                </button>
-                                ${isRunnable ? `
-                                <button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded cursor-pointer transition">
-                                    ▶ Sandbox
-                                </button>` : ''}
+                                <button onclick="copyTextToClipboard(decodeURIComponent('${encodedCode}'), 'Code copied!')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded border border-gray-700 cursor-pointer transition">📋 Copy</button>
+                                ${isRunnable ? `<button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded cursor-pointer transition">▶ Sandbox</button>` : ''}
                             </div>
                             <div class="text-[11px] bg-gray-950/80 px-4 py-1 text-gray-400 rounded-t-lg font-mono border-t border-x border-gray-800">${codeLang || 'code'}</div>
                             <pre class="!mt-0 !rounded-t-none"><code class="language-${codeLang}">${codeText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
@@ -988,16 +980,12 @@
 
             const encodedText = safeEncode(text);
             const regenerateBtnHtml = (role !== 'user' && index !== undefined) ? `
-                <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition" title="Regenerate from this message">
-                    🔄 Regenerate
-                </button>
+                <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">🔄 Regenerate</button>
             ` : '';
 
             const copyResponseButton = role !== 'user' ? `
                 <div class="flex justify-end mt-2 opacity-0 group-hover/msg:opacity-100 transition-opacity gap-3">
-                    <button onclick="copyTextToClipboard(decodeURIComponent('${encodedText}'), 'Response copied!')" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">
-                        📋 Copy Response
-                    </button>
+                    <button onclick="copyTextToClipboard(decodeURIComponent('${encodedText}'), 'Response copied!')" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">📋 Copy Response</button>
                     ${regenerateBtnHtml}
                 </div>
             ` : '';
@@ -1009,369 +997,321 @@
                     ${copyResponseButton}
                 </div>
             `;
-            
             chatWindow.appendChild(messageDiv);
         }
 
-        window.copyTextToClipboard = copyTextToClipboard;
+        // --- ОТПРАВКА И ПАРАЛЛЕЛЬНЫЕ ЗАПРОСЫ (COMPLETIONS) ---
+        async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload) {
+            const headers = { "Content-Type": "application/json" };
+            if (hasKey && apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+            
+            const response = await fetch(`${endpoint}/chat/completions`, {
+                method: "POST",
+                headers: headers,
+                body: JSON.stringify(bodyPayload)
+            });
 
-        // --- ОТПРАВКА И ОБРАБОТКА ЗАПРОСОВ К API ---
+            if(!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+            }
+            return await response.json();
+        }
+
         async function triggerAiResponse(session) {
             const providerName = apiProvider.value;
             const hasKey = PROVIDERS[providerName].hasKey;
             const apiKey = apiKeyValue.value.trim();
             const endpoint = apiEndpoint.value.trim();
-            const model = botModelSelect.value;
-            
             const temperature = parseFloat(tempInput.value);
+            const topP = parseFloat(topPInput.value);
             const maxTokens = parseInt(tokensInput.value);
 
-            if (hasKey && !apiKey) {
-                alert("Please enter your API key in the settings panel!");
-                openSidebarUniversal();
-                return;
-            }
-            if (!model) {
-                alert("Please select an AI model first!");
-                openSidebarUniversal();
-                return;
-            }
+            if (hasKey && !apiKey) { alert("Please enter your API key!"); openSidebarUniversal(); return; }
 
-            userInput.disabled = true;
-            sendBtn.disabled = true;
+            // Логика определения задействованных моделей (одна или пул мульти-запроса)
+            const activeModels = selectedMultiModels.length > 0 ? selectedMultiModels : [botModelSelect.value];
+            if (activeModels.length === 1 && !activeModels[0]) { alert("Please select an AI model!"); openSidebarUniversal(); return; }
+
+            userInput.disabled = true; sendBtn.disabled = true;
 
             let messagesToSend = [];
-            if (session.systemPrompt) {
-                messagesToSend.push({ role: "system", content: session.systemPrompt });
-            }
-            
-            session.messages.forEach(msg => {
-                messagesToSend.push({ role: msg.role, content: msg.content });
-            });
+            if (session.systemPrompt) messagesToSend.push({ role: "system", content: session.systemPrompt });
+            session.messages.forEach(msg => messagesToSend.push({ role: msg.role, content: msg.content }));
+
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = "text-xs text-gray-500 italic px-1 animate-pulse";
+            loadingDiv.id = "apiLoading";
+            loadingDiv.innerText = `Connecting to endpoints [${activeModels.join(', ')}]...`;
+            chatWindow.appendChild(loadingDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
 
             try {
-                const loadingDiv = document.createElement('div');
-                loadingDiv.className = "text-xs text-gray-500 italic px-1 animate-pulse";
-                loadingDiv.id = "apiLoading";
-                loadingDiv.innerText = `${session.botName} is typing...`;
-                chatWindow.appendChild(loadingDiv);
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-
-                const headers = { "Content-Type": "application/json" };
-                if (hasKey) {
-                    headers["Authorization"] = `Bearer ${apiKey}`;
-                }
-
-                const response = await fetch(`${endpoint}/chat/completions`, {
-                    method: "POST",
-                    headers: headers,
-                    body: JSON.stringify({
-                        model: model,
+                // Создаем массив параллельных промисов
+                const requests = activeModels.map(modelId => {
+                    const payload = {
+                        model: modelId,
                         messages: messagesToSend,
                         temperature: temperature,
+                        top_p: topP,
                         max_tokens: maxTokens
-                    })
+                    };
+                    return fetchSingleCompletion(endpoint, apiKey, hasKey, payload)
+                        .then(res => ({ success: true, model: modelId, data: res }))
+                        .catch(err => ({ success: false, model: modelId, error: err.message }));
                 });
 
-                const loadingEl = document.getElementById('apiLoading');
-                if (loadingEl) loadingEl.remove();
+                const results = await Promise.all(requests);
+                if (loadingDiv) loadingDiv.remove();
 
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error?.message || `HTTP Error Code: ${response.status}`);
+                // Формируем результирующий ответ
+                if(results.length === 1) {
+                    const res = results[0];
+                    if(!res.success) throw new Error(res.error);
+                    
+                    const choice = res.data.choices[0].message;
+                    let content = choice.content || "";
+                    // Извлечение нативного мышления, если пришло в отдельных полях
+                    const thinking = choice.reasoning_content || choice.thinking_content || "";
+                    if(thinking) content = `<think>${thinking}</think>\n${content}`;
+
+                    session.messages.push({ role: "assistant", content: content });
+                    saveSessionsToStorage();
+                    renderMessageToDOM('assistant', content, session.botName, session.messages.length - 1);
+                } else {
+                    // Агрегация мульти-ответов в одну структуру-сравнение
+                    let multiMarkdown = "### 📊 Multi-Model Performance Comparison\n\n";
+                    results.forEach(res => {
+                        multiMarkdown += `#### 🤖 Model: \`${res.model}\`\n`;
+                        if(res.success) {
+                            const choice = res.data.choices[0].message;
+                            let text = choice.content || "";
+                            const thinking = choice.reasoning_content || choice.thinking_content || "";
+                            if(thinking) {
+                                multiMarkdown += `<details class="mb-2"><summary class="text-amber-400 text-xs cursor-pointer">View Reasoning Log</summary><div class="p-2 bg-gray-950 text-xs italic text-gray-400 border border-gray-800 rounded mt-1">${thinking}</div></details>\n`;
+                            }
+                            multiMarkdown += `${text}\n\n---\n`;
+                        } else {
+                            multiMarkdown += `❌ *API Error Encountered:* \`${res.error}\`\n\n---\n`;
+                        }
+                    });
+
+                    session.messages.push({ role: "assistant", content: multiMarkdown });
+                    saveSessionsToStorage();
+                    renderMessageToDOM('assistant', multiMarkdown, "Hub Comparator", session.messages.length - 1);
                 }
-
-                const data = await response.json();
-                const aiResponse = data.choices[0].message.content;
-
-                session.messages.push({ role: "assistant", content: aiResponse });
-                saveSessionsToStorage();
-                
-                renderMessageToDOM('assistant', aiResponse, session.botName, session.messages.length - 1);
                 chatWindow.scrollTop = chatWindow.scrollHeight;
-
             } catch (error) {
                 console.error(error);
-                const loadingEl = document.getElementById('apiLoading');
-                if (loadingEl) loadingEl.remove();
-                
+                if (document.getElementById('apiLoading')) document.getElementById('apiLoading').remove();
                 const errorDiv = document.createElement('div');
                 errorDiv.className = "bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-lg text-xs max-w-xl";
-                errorDiv.innerText = `API Error: ${error.message}`;
+                errorDiv.innerText = `Execution Interrupted: ${error.message}`;
                 chatWindow.appendChild(errorDiv);
             } finally {
-                userInput.disabled = false;
-                sendBtn.disabled = false;
-                userInput.focus();
+                userInput.disabled = false; sendBtn.disabled = false; userInput.focus();
             }
         }
 
         async function sendMessage() {
             let text = userInput.value.trim();
-
             if (!text && !attachedFileContent) return;
 
             let session = sessions.find(s => s.id === currentSessionId);
-            if (!session) {
-                createNewSession();
-                session = sessions[0];
-            }
+            if (!session) { createNewSession(); session = sessions[0]; }
 
             let fullUserContent = text;
-            if (attachedFileContent) {
-                fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
-            }
+            if (attachedFileContent) { fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``; }
 
-            userInput.value = "";
-            userInput.style.height = 'auto';
-
+            userInput.value = ""; userInput.style.height = 'auto';
             renderMessageToDOM('user', fullUserContent, 'You', session.messages.length);
             session.messages.push({ role: "user", content: fullUserContent });
             
-            if (session.name.startsWith('Chat #')) {
-                session.name = text.slice(0, 24) + (text.length > 24 ? '...' : '');
-            }
+            if (session.name.startsWith('Chat #')) session.name = text.slice(0, 24) + (text.length > 24 ? '...' : '');
 
             session.systemPrompt = botPromptInput.value.trim();
             session.botName = botNameInput.value.trim() || 'Default AI';
 
-            saveSessionsToStorage();
-            renderSessionsList();
-            removeAttachedFile();
-
+            saveSessionsToStorage(); renderSessionsList(); removeAttachedFile();
             await triggerAiResponse(session);
         }
 
-        // --- ФУНКЦИЯ ПЕРЕГЕНЕРАЦИИ (REGENERATE) ---
         async function regenerateMessage(index) {
             const session = sessions.find(s => s.id === currentSessionId);
-            if (!session) return;
-
-            if (index < 0 || index >= session.messages.length) return;
-
-            // Обрезаем историю сессии до указанного ассистентского сообщения (исключая его)
+            if (!session || index < 0 || index >= session.messages.length) return;
             session.messages = session.messages.slice(0, index);
-
-            // Сохраняем и сразу же обновляем UI чата
-            saveSessionsToStorage();
-            loadActiveSessionChat();
-
-            // Повторно запрашиваем ответ
+            saveSessionsToStorage(); loadActiveSessionChat();
             await triggerAiResponse(session);
         }
-
-        // Экспортируем функцию в window для вызова через inline onclick в HTML
         window.regenerateMessage = regenerateMessage;
 
-        // --- УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ И НАБЛЮДАТЕЛИ (LISTENERS) ---
-        apiProvider.addEventListener('change', (e) => {
-            handleProviderChange(e.target.value);
-            saveApiSettings();
-            fetchActiveModels();
+        // --- ЛОГИКА ГРУППОВОГО ЧАТА ДЕБАТОВ ---
+        openGroupChatBtn.addEventListener('click', () => groupChatModal.classList.remove('hidden'));
+        closeGroupChatModal.addEventListener('click', () => groupChatModal.classList.add('hidden'));
+
+        startGroupDebateBtn.addEventListener('click', async () => {
+            const idea = groupIdeaInput.value.trim();
+            if(!idea) { alert("Please formulate your thesis/idea first!"); return; }
+
+            const providerName = apiProvider.value;
+            const apiKey = apiKeyValue.value.trim();
+            const endpoint = apiEndpoint.value.trim();
+            const model = botModelSelect.value;
+            if(!model) { alert("Please select an active model in the configuration panel first!"); groupChatModal.classList.add('hidden'); openSidebarUniversal(); return; }
+
+            groupChatModal.classList.add('hidden');
+            createNewSession();
+            let session = sessions[0];
+            session.name = "👥 Debate: " + idea.slice(0, 20) + "...";
+            renderSessionsList();
+
+            renderMessageToDOM('user', `**[Initiating AI Panel Evaluation]** For the following proposition:\n> ${idea}`, 'System Operator');
+            session.messages.push({role: "user", content: `Proposition for debate:\n${idea}`});
+
+            const agents = [
+                { name: "🌟 Agent Optimist", prompt: "You are an optimistic market strategist. Analyze the given idea, highlight its strongest disruptive potentials, hidden opportunities, and scalable micro-advantages. Keep your response brief, targeted, and focused entirely on potential success vectors." },
+                { name: "🛡️ Agent Critic", prompt: "You are a ruthless risk analyst and security architect. Deconstruct the user's idea to find conceptual faults, operational vulnerabilities, security pitfalls, and hidden execution expenses. Be brutally honest." },
+                { name: "🔧 Agent Technologist", prompt: "You are a pragmatic solutions engineer. Evaluate the architectural feasibility of the idea, map out a realistic software/hardware stack layout, data handling structures, and step-by-step developer pipeline roadmap." }
+            ];
+
+            userInput.disabled = true; sendBtn.disabled = true;
+
+            // Запускаем последовательный цикл обсуждения (2 круга дебатов)
+            for(let round = 1; round <= 2; round++) {
+                for(const agent of agents) {
+                    const loadingDiv = document.createElement('div');
+                    loadingDiv.className = "text-xs text-indigo-400 italic px-1 animate-pulse";
+                    loadingDiv.id = "agentLoading";
+                    loadingDiv.innerText = `${agent.name} is evaluating the current state (Round ${round}/2)...`;
+                    chatWindow.appendChild(loadingDiv);
+                    chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                    // Собираем историю для конкретного агента, подменяя его системную инструкцию
+                    let currentContext = [{ role: "system", content: agent.prompt }];
+                    session.messages.forEach(m => currentContext.push({role: m.role, content: m.content}));
+
+                    try {
+                        const payload = {
+                            model: model,
+                            messages: currentContext,
+                            temperature: 0.8,
+                            top_p: 0.95,
+                            max_tokens: 1500
+                        };
+                        const res = await fetchSingleCompletion(endpoint, apiKey, PROVIDERS[providerName].hasKey, payload);
+                        if(loadingDiv) loadingDiv.remove();
+
+                        const rawContent = res.choices[0].message.content || "";
+                        const thinking = res.choices[0].message.reasoning_content || res.choices[0].message.thinking_content || "";
+                        const finalContent = thinking ? `<think>${thinking}</think>\n${rawContent}` : rawContent;
+
+                        session.messages.push({ role: "assistant", content: `**[${agent.name}]**\n\n${finalContent}` });
+                        saveSessionsToStorage();
+                        renderMessageToDOM('assistant', finalContent, agent.name, session.messages.length - 1);
+                        chatWindow.scrollTop = chatWindow.scrollHeight;
+                    } catch(e) {
+                        if(loadingDiv) loadingDiv.remove();
+                        console.error(e);
+                    }
+                }
+            }
+            userInput.disabled = false; sendBtn.disabled = false;
+            groupIdeaInput.value = "";
         });
 
+        // --- LISTENERS & UI HANDLERS ---
+        apiProvider.addEventListener('change', (e) => { handleProviderChange(e.target.value); saveApiSettings(); fetchActiveModels(); });
         apiKeyValue.addEventListener('input', () => { saveApiSettings(); });
         apiKeyValue.addEventListener('change', () => { fetchActiveModels(); });
         apiEndpoint.addEventListener('input', () => { saveApiSettings(); });
         apiEndpoint.addEventListener('change', () => { fetchActiveModels(); });
-
         botNameInput.addEventListener('input', saveApiSettings);
         botPromptInput.addEventListener('input', saveApiSettings);
-        botModelSelect.addEventListener('change', () => {
-            localStorage.setItem(`gem_selected_model_${apiProvider.value}`, botModelSelect.value);
-            updateStatusCard();
-        });
-
-        tempInput.addEventListener('input', (e) => {
-            tempValue.textContent = e.target.value;
-            saveApiSettings();
-        });
-        tokensInput.addEventListener('input', (e) => {
-            tokensValue.textContent = e.target.value;
-            saveApiSettings();
-        });
+        botModelSelect.addEventListener('change', () => { localStorage.setItem(`gem_selected_model_${apiProvider.value}`, botModelSelect.value); updateStatusCard(); });
+        
+        tempInput.addEventListener('input', (e) => { tempValue.textContent = e.target.value; saveApiSettings(); });
+        topPInput.addEventListener('input', (e) => { topPValue.textContent = e.target.value; saveApiSettings(); });
+        tokensInput.addEventListener('input', (e) => { tokensValue.textContent = e.target.value; saveApiSettings(); });
 
         refreshModelsBtn.addEventListener('click', fetchActiveModels);
-
         clearChatBtn.addEventListener('click', () => {
             const session = sessions.find(s => s.id === currentSessionId);
-            if (session) {
-                session.messages = [];
-                saveSessionsToStorage();
-                loadActiveSessionChat();
-            }
+            if (session) { session.messages = []; saveSessionsToStorage(); loadActiveSessionChat(); }
         });
-
         newChatBtn.addEventListener('click', createNewSession);
 
-        // --- УПРАВЛЕНИЕ БОКОВЫМИ ПАНЕЛЯМИ ---
-        toggleChatsBtn.addEventListener('click', () => {
-            if (window.innerWidth >= 768) {
-                chatsPanel.classList.toggle('md:hidden');
-            } else {
-                chatsPanel.classList.toggle('-translate-x-full');
-                chatsOverlay.classList.toggle('hidden');
-            }
-        });
-
-        chatsOverlay.addEventListener('click', () => {
-            chatsPanel.classList.add('-translate-x-full');
-            chatsOverlay.classList.add('hidden');
-        });
-
-        toggleSidebarBtn.addEventListener('click', () => {
-            if (window.innerWidth >= 1024) {
-                sidebar.classList.toggle('lg:hidden');
-            } else {
-                sidebar.classList.remove('translate-x-full');
-                sidebarOverlay.classList.remove('hidden');
-            }
-        });
-
+        toggleChatsBtn.addEventListener('click', () => { if (window.innerWidth >= 768) { chatsPanel.classList.toggle('md:hidden'); } else { chatsPanel.classList.toggle('-translate-x-full'); chatsOverlay.classList.toggle('hidden'); } });
+        chatsOverlay.addEventListener('click', () => { chatsPanel.classList.add('-translate-x-full'); chatsOverlay.classList.add('hidden'); });
+        toggleSidebarBtn.addEventListener('click', () => { if (window.innerWidth >= 1024) { sidebar.classList.toggle('lg:hidden'); } else { sidebar.classList.remove('translate-x-full'); sidebarOverlay.classList.remove('hidden'); } });
         closeSidebarBtn.addEventListener('click', closeSidebarUniversal);
         sidebarOverlay.addEventListener('click', closeSidebarUniversal);
 
-        function openSidebarUniversal() {
-            if (window.innerWidth >= 1024) {
-                sidebar.classList.remove('lg:hidden');
-            } else {
-                sidebar.classList.remove('translate-x-full');
-                sidebarOverlay.classList.remove('hidden');
-            }
-        }
+        function openSidebarUniversal() { if (window.innerWidth >= 1024) { sidebar.classList.remove('lg:hidden'); } else { sidebar.classList.remove('translate-x-full'); sidebarOverlay.classList.remove('hidden'); } }
+        function closeSidebarUniversal() { if (window.innerWidth >= 1024) { sidebar.classList.add('lg:hidden'); } else { sidebar.classList.add('translate-x-full'); sidebarOverlay.classList.add('hidden'); } }
 
-        function closeSidebarUniversal() {
-            if (window.innerWidth >= 1024) {
-                sidebar.classList.add('lg:hidden');
-            } else {
-                sidebar.classList.add('translate-x-full');
-                sidebarOverlay.classList.add('hidden');
-            }
-        }
-
-        // --- ОБРАБОТКА ВЛОЖЕННЫХ ТЕКСТОВЫХ ФАЙЛОВ ---
         attachmentInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            attachedFileName = file.name;
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                attachedFileContent = event.target.result;
-                fileNameDisplay.textContent = attachedFileName;
-                fileIndicator.classList.remove('hidden');
-                fileIndicator.classList.add('flex');
-            };
+            const file = e.target.files[0]; if (!file) return;
+            attachedFileName = file.name; const reader = new FileReader();
+            reader.onload = function(event) { attachedFileContent = event.target.result; fileNameDisplay.textContent = attachedFileName; fileIndicator.classList.remove('hidden'); fileIndicator.classList.add('flex'); };
             reader.readAsText(file);
         });
 
-        function removeAttachedFile() {
-            attachedFileContent = null;
-            attachedFileName = "";
-            attachmentInput.value = "";
-            fileIndicator.classList.add('hidden');
-            fileIndicator.classList.remove('flex');
-        }
+        function removeAttachedFile() { attachedFileContent = null; attachedFileName = ""; attachmentInput.value = ""; fileIndicator.classList.add('hidden'); fileIndicator.classList.remove('flex'); }
         removeFileBtn.addEventListener('click', removeAttachedFile);
 
-        userInput.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = (this.scrollHeight) + 'px';
-        });
-
+        userInput.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px'; });
         sendBtn.addEventListener('click', sendMessage);
-        userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
+        userInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) { e.preventDefault(); sendMessage(); } });
 
-        // --- МОДАЛЬНЫЕ ОКНА ---
         openHelpBtn.addEventListener('click', () => { helpModal.classList.remove('hidden'); });
         closeHelpModal.addEventListener('click', () => { helpModal.classList.add('hidden'); });
         closeHelpModalBtn.addEventListener('click', () => { helpModal.classList.add('hidden'); });
-        helpModal.addEventListener('click', (e) => {
-            if (e.target === helpModal) helpModal.classList.add('hidden');
-        });
 
-        // --- ИМПОРТ И ЭКСПОРТ КОНФИГУРАЦИИ ---
         exportJsonBtn.addEventListener('click', () => {
-            const config = {
-                provider: apiProvider.value,
-                apiKey: apiKeyValue.value.trim(),
-                endpoint: apiEndpoint.value.trim(),
-                botName: botNameInput.value.trim(),
-                systemPrompt: botPromptInput.value.trim(),
-                selectedModel: botModelSelect.value,
-                temperature: parseFloat(tempInput.value),
-                maxTokens: parseInt(tokensInput.value)
-            };
+            const config = { provider: apiProvider.value, apiKey: apiKeyValue.value.trim(), endpoint: apiEndpoint.value.trim(), botName: botNameInput.value.trim(), systemPrompt: botPromptInput.value.trim(), selectedModel: botModelSelect.value, temperature: parseFloat(tempInput.value), topP: parseFloat(topPInput.value), maxTokens: parseInt(tokensInput.value) };
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
-            const filename = config.botName ? `gem-config-${config.botName.toLowerCase().replace(/\s+/g, '-')}.json` : 'gem-hub-config.json';
-            downloadAnchor.setAttribute("download", filename);
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
+            const downloadAnchor = document.createElement('a'); downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", config.botName ? `config-${config.botName.toLowerCase().replace(/\s+/g, '-')}.json` : 'hub-config.json');
+            document.body.appendChild(downloadAnchor); downloadAnchor.click(); downloadAnchor.remove();
         });
 
         importJsonInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+            const file = e.target.files[0]; if (!file) return;
             const reader = new FileReader();
             reader.onload = function(event) {
                 try {
                     const config = JSON.parse(event.target.result);
                     if (config.provider) apiProvider.value = config.provider;
                     handleProviderChange(apiProvider.value);
-                    
                     if (config.apiKey) apiKeyValue.value = config.apiKey;
                     if (config.endpoint) apiEndpoint.value = config.endpoint;
                     if (config.botName) botNameInput.value = config.botName;
                     if (config.systemPrompt) botPromptInput.value = config.systemPrompt;
                     if (config.temperature !== undefined) { tempInput.value = config.temperature; tempValue.textContent = config.temperature; }
+                    if (config.topP !== undefined) { topPInput.value = config.topP; topPValue.textContent = config.topP; }
                     if (config.maxTokens !== undefined) { tokensInput.value = config.maxTokens; tokensValue.textContent = config.maxTokens; }
-                    
                     saveApiSettings();
-
-                    if (config.selectedModel) {
-                        localStorage.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
-                    }
-
+                    if (config.selectedModel) localStorage.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
                     fetchActiveModels();
-                    alert("Configuration profile loaded successfully!");
-                    closeSidebarUniversal();
-                } catch (error) {
-                    alert("Configuration import error. Invalid JSON file structure.");
-                }
+                    alert("Configuration Loaded!"); closeSidebarUniversal();
+                } catch (error) { alert("Invalid structure."); }
             };
-            reader.readAsText(file);
-            e.target.value = ''; 
+            reader.readAsText(file); e.target.value = ''; 
         });
 
         function updateStatusCard() {
             const provider = apiProvider.value.toUpperCase();
-            const model = botModelSelect.value || 'no active model';
+            const model = selectedMultiModels.length > 0 ? `[Multi Mode: ${selectedMultiModels.length} models]` : (botModelSelect.value || 'no active model');
             const name = botNameInput.value.trim() || 'Default AI';
             const prompt = botPromptInput.value.trim();
-
             if (!prompt) {
                 activeStatusText.innerHTML = `${name} (No Prompt)<br><span class="text-[10px] text-gray-500 font-mono">Provider: ${provider} | ${model}</span>`;
             } else {
-                activeStatusText.innerHTML = `
-                    <strong class="text-emerald-400">${name}</strong><br>
-                    <span class="text-gray-400 block truncate text-[11px]">${prompt}</span>
-                    <span class="text-[10px] text-gray-500 font-mono block">Provider: ${provider} | ${model}</span>
-                `;
+                activeStatusText.innerHTML = `<strong class="text-emerald-400">${name}</strong><br><span class="text-gray-400 block truncate text-[11px]">${prompt}</span><span class="text-[10px] text-gray-500 font-mono block">Provider: ${provider} | ${model}</span>`;
             }
         }
 
-        // --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАПУСКЕ ---
-        document.addEventListener('DOMContentLoaded', () => {
-            loadApiSettings();
-            loadSessions();
-        });
+        document.addEventListener('DOMContentLoaded', () => { loadApiSettings(); loadSessions(); });
     </script>
 </body>
 </html>
