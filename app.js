@@ -671,6 +671,14 @@ function extractAssistantContent(response, providerName) {
     };
 }
 
+function buildLanguageHint(sourceText = '') {
+    const baseHint = 'Answer in the same language as the user\'s prompt and keep the response complete, without cutting off the answer mid-sentence.';
+    if (/[А-Яа-яЁё]/.test(sourceText)) {
+        return `Ответь на русском языке. ${baseHint}`;
+    }
+    return baseHint;
+}
+
 function convertContentForAnthropic(content) {
     if (typeof content === 'string') return content;
     if (!Array.isArray(content)) return normalizeContentToText(content);
@@ -880,10 +888,14 @@ async function sendMessage() {
     session.messages.push({ role: 'user', content: fullUserContent });
 
     if (session.name.startsWith('Chat #')) {
-        session.name = text.slice(0, 24) + (text.length > 24 ? '...' : '');
+        session.name = text.slice(0, 24) + (text.length > 24 ? '...' : '...');
     }
 
-    session.systemPrompt = botPromptInput.value.trim();
+    const baseSystemPrompt = botPromptInput.value.trim();
+    const userLanguageHint = buildLanguageHint(typeof fullUserContent === 'string' ? fullUserContent : text);
+    session.systemPrompt = baseSystemPrompt
+        ? `${baseSystemPrompt}\n\n${userLanguageHint}`
+        : userLanguageHint;
     session.botName = botNameInput.value.trim() || 'Default AI';
 
     saveSessionsToStorage();
@@ -932,10 +944,11 @@ startGroupDebateBtn.addEventListener('click', async () => {
     renderMessageToDOM('user', `**[Initiating AI Panel Evaluation]** For the following proposition:\n> ${idea}`, 'System Operator');
     session.messages.push({ role: 'user', content: `Proposition for debate:\n${idea}` });
 
+    const languageHint = 'Answer in the same language as the user\'s proposition. If the proposition is in Russian, respond in Russian; if it is in English, respond in English. Do not switch languages and keep your output complete, avoiding cut-off fragments.';
     const agents = [
-        { name: '🌟 Agent Optimist', prompt: 'You are an optimistic market strategist. Analyze the given idea, highlight its strongest disruptive potentials, hidden opportunities, and scalable micro-advantages. Keep your response brief, targeted, and focused entirely on potential success vectors.' },
-        { name: '🛡️ Agent Critic', prompt: 'You are a ruthless risk analyst and security architect. Deconstruct the user\'s idea to find conceptual faults, operational vulnerabilities, security pitfalls, and hidden execution expenses. Be brutally honest.' },
-        { name: '🔧 Agent Technologist', prompt: 'You are a pragmatic solutions engineer. Evaluate the architectural feasibility of the idea, map out a realistic software/hardware stack layout, data handling structures, and step-by-step developer pipeline roadmap.' }
+        { name: '🌟 Agent Optimist', prompt: `You are an optimistic market strategist. Analyze the given idea, highlight its strongest disruptive potentials, hidden opportunities, and scalable micro-advantages. Keep your response brief, targeted, and focused entirely on potential success vectors. ${languageHint}` },
+        { name: '🛡️ Agent Critic', prompt: `You are a ruthless risk analyst and security architect. Deconstruct the user\'s idea to find conceptual faults, operational vulnerabilities, security pitfalls, and hidden execution expenses. Be brutally honest. ${languageHint}` },
+        { name: '🔧 Agent Technologist', prompt: `You are a pragmatic solutions engineer. Evaluate the architectural feasibility of the idea, map out a realistic software/hardware stack layout, data handling structures, and step-by-step developer pipeline roadmap. ${languageHint}` }
     ];
 
     userInput.disabled = true;
@@ -954,12 +967,13 @@ startGroupDebateBtn.addEventListener('click', async () => {
             session.messages.forEach(m => currentContext.push({ role: m.role, content: m.content }));
 
             try {
+                const maxTokens = Math.max(1500, parseInt(tokensInput.value, 10) || 2048);
                 const payload = {
                     model,
                     messages: currentContext,
                     temperature: 0.8,
                     top_p: 0.95,
-                    max_tokens: 1500
+                    max_tokens: maxTokens
                 };
                 const res = await fetchSingleCompletion(endpoint, apiKey, PROVIDERS[providerName].hasKey, payload, providerName);
                 if (loadingDiv) loadingDiv.remove();
