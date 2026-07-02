@@ -88,6 +88,10 @@
                         <option value="google">Google Gemini (OpenAI API)</option>
                         <option value="openrouter">OpenRouter</option>
                         <option value="openai">OpenAI</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="qwen">Qwen</option>
+                        <option value="glm">GLM</option>
+                        <option value="claude">Claude</option>
                         <option value="ollama">Ollama (Local)</option>
                         <option value="llamacpp">Llama.cpp (Local)</option>
                     </select>
@@ -197,7 +201,7 @@
                         <span class="text-4xl">🚀</span>
                         <h3 class="font-bold text-xl text-emerald-400">Welcome to Traliran AI Hub!</h3>
                         <p class="text-sm text-gray-300 leading-relaxed">
-                            This is an advanced sandbox environment for managing workflows with neural networks. It seamlessly connects to **Groq, Google Gemini, OpenRouter, OpenAI** services, as well as local backend nodes running **Ollama/Llama.cpp**.
+                            This is an advanced sandbox environment for managing workflows with neural networks. It seamlessly connects to **Groq, Google Gemini, OpenRouter, OpenAI, DeepSeek, Qwen, GLM, Claude** services, as well as local backend nodes running **Ollama/Llama.cpp**.
                         </p>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left text-xs text-gray-400 pt-2">
                             <div class="bg-gray-950 p-3 rounded-lg border border-gray-800">
@@ -233,9 +237,9 @@
                     </div>
 
                     <div class="max-w-4xl w-full mx-auto flex gap-2 items-end">
-                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text file">
+                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text, image or video">
                             <span>📎</span>
-                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c">
+                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,image/*,video/*">
                         </label>
 
                         <textarea id="userInput" rows="1" placeholder="Ask a question..." 
@@ -396,6 +400,14 @@
                 <div>
                     <h4 class="font-bold text-emerald-300 mb-0.5">🟢 OpenAI</h4>
                     <p class="text-xs text-gray-400">Standard direct infrastructure connections to mainline GPT models. Setup authorization key at platform.openai.com.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 DeepSeek / Qwen / GLM</h4>
+                    <p class="text-xs text-gray-400">Use compatible OpenAI-style endpoints with your API key. These providers can handle multimodal prompts and rich media-aware conversations.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Claude</h4>
+                    <p class="text-xs text-gray-400">Anthropic's Claude models support direct API access with an Anthropic-compatible endpoint and can be used for text and media-oriented workflows.</p>
                 </div>
                 <div>
                     <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Local Ollama</h4>

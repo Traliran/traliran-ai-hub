@@ -35,6 +35,7 @@ let sessions = [];
 let currentSessionId = null;
 let attachedFileContent = null;
 let attachedFileName = "";
+let attachedFileType = "";
 let selectedMultiModels = [];
 
 const apiProvider = document.getElementById('apiProvider');
@@ -114,17 +115,64 @@ const activeStatusText = document.getElementById('activeStatusText');
 marked.use({ breaks: true, gfm: true });
 
 const PROVIDERS = {
-    groq: { url: 'https://api.groq.com/openai/v1', hasKey: true },
-    google: { url: 'https://generativelanguage.googleapis.com/v1beta/openai', hasKey: true },
-    openrouter: { url: 'https://openrouter.ai/api/v1', hasKey: true },
-    openai: { url: 'https://api.openai.com/v1', hasKey: true },
-    ollama: { url: 'http://localhost:11434/v1', hasKey: false },
-    llamacpp: { url: 'http://localhost:8080/v1', hasKey: false }
+    groq: { url: 'https://api.groq.com/openai/v1', hasKey: true, type: 'openai' },
+    google: { url: 'https://generativelanguage.googleapis.com/v1beta/openai', hasKey: true, type: 'openai' },
+    openrouter: { url: 'https://openrouter.ai/api/v1', hasKey: true, type: 'openai' },
+    openai: { url: 'https://api.openai.com/v1', hasKey: true, type: 'openai' },
+    deepseek: { url: 'https://api.deepseek.com/v1', hasKey: true, type: 'openai' },
+    qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', hasKey: true, type: 'openai' },
+    glm: { url: 'https://open.bigmodel.cn/api/paas/v4', hasKey: true, type: 'openai' },
+    claude: { url: 'https://api.anthropic.com/v1', hasKey: true, type: 'anthropic' },
+    ollama: { url: 'http://localhost:11434/v1', hasKey: false, type: 'openai' },
+    llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
 };
 
 function safeEncode(str) {
     if (!str) return '';
     return encodeURIComponent(str).replace(/'/g, '%27');
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function normalizeContentToText(content) {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+        return content.map(part => {
+            if (typeof part === 'string') return part;
+            if (part?.type === 'text' || part?.type === 'input_text') return part.text || part.content || '';
+            if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') return '[Image attachment]';
+            if (part?.type === 'video_url' || part?.type === 'video' || part?.type === 'input_video') return '[Video attachment]';
+            return '';
+        }).filter(Boolean).join('\n');
+    }
+    return '';
+}
+
+function buildMediaHtmlFromContent(content) {
+    if (!Array.isArray(content)) return '';
+
+    return content.map(part => {
+        if (typeof part === 'string' || !part) return '';
+
+        const source = part.image_url?.url || part.video_url?.url || part.url || part.src || '';
+        if (!source) return '';
+
+        if (part.type === 'image_url' || part.type === 'image' || part.type === 'input_image') {
+            return `<div class="media-block my-3"><img src="${escapeHtml(source)}" alt="Generated image" class="rounded-lg border border-gray-700 max-w-full h-auto shadow-lg"></div>`;
+        }
+
+        if (part.type === 'video_url' || part.type === 'video' || part.type === 'input_video') {
+            return `<div class="media-block my-3"><video controls preload="metadata" class="rounded-lg border border-gray-700 max-w-full bg-black shadow-lg"><source src="${escapeHtml(source)}"></video></div>`;
+        }
+
+        return '';
+    }).filter(Boolean).join('');
 }
 
 function renderPaidStoreBots() {
@@ -379,6 +427,16 @@ async function fetchActiveModels() {
     botModelSelect.innerHTML = '<option value="">Loading models...</option>';
 
     try {
+        if (provider === 'claude') {
+            const fallbackModels = ['claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest'];
+            botModelSelect.innerHTML = '';
+            fallbackModels.forEach(model => botModelSelect.add(new Option(model, model)));
+            botModelSelect.selectedIndex = 0;
+            localStorage.setItem(`gem_selected_model_${provider}`, botModelSelect.value);
+            updateStatusCard();
+            return;
+        }
+
         const headers = { 'Content-Type': 'application/json' };
         if (hasKey) headers.Authorization = `Bearer ${key}`;
 
@@ -510,7 +568,7 @@ function showIntroStep() {
 
 startIntroBtn.addEventListener('click', startIntro);
 
-function renderMessageToDOM(role, text, botName, index) {
+function renderMessageToDOM(role, content, botName, index) {
     welcomeMessage.classList.add('hidden');
     const messageDiv = document.createElement('div');
     messageDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full group/msg`;
@@ -521,17 +579,20 @@ function renderMessageToDOM(role, text, botName, index) {
     let formattedContent = '';
 
     if (role === 'user') {
-        formattedContent = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+        const textValue = typeof content === 'string' ? content : normalizeContentToText(content);
+        const mediaHtml = Array.isArray(content) ? buildMediaHtmlFromContent(content) : '';
+        formattedContent = `${escapeHtml(textValue).replace(/\n/g, '<br>')}${mediaHtml ? `<div class="mt-2">${mediaHtml}</div>` : ''}`;
     } else {
+        const textValue = typeof content === 'string' ? content : normalizeContentToText(content);
         let thinkingHtml = '';
-        let cleanText = text;
+        let cleanText = textValue;
 
         const thinkRegex = /<think>([\s\S]*?)<\/think>/i;
-        const match = text.match(thinkRegex);
+        const match = textValue.match(thinkRegex);
 
         if (match) {
             const thinkingContent = match[1].trim();
-            cleanText = text.replace(thinkRegex, '').trim();
+            cleanText = textValue.replace(thinkRegex, '').trim();
             if (thinkingContent) {
                 thinkingHtml = `
                     <details class="thinking-block w-full mb-3 bg-gray-950/60 border border-gray-800 rounded-lg p-2.5 transition">
@@ -540,7 +601,7 @@ function renderMessageToDOM(role, text, botName, index) {
                             <span class="text-[10px] text-gray-500 uppercase tracking-wider">Expand</span>
                         </summary>
                         <div class="mt-2 text-xs text-gray-400 border-t border-gray-900 pt-2 whitespace-pre-wrap leading-relaxed italic font-sans">
-                            ${thinkingContent}
+                            ${escapeHtml(thinkingContent)}
                         </div>
                     </details>
                 `;
@@ -563,15 +624,16 @@ function renderMessageToDOM(role, text, botName, index) {
                         ${isRunnable ? `<button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded cursor-pointer transition">▶ Sandbox</button>` : ''}
                     </div>
                     <div class="text-[11px] bg-gray-950/80 px-4 py-1 text-gray-400 rounded-t-lg font-mono border-t border-x border-gray-800">${codeLang || 'code'}</div>
-                    <pre class="!mt-0 !rounded-t-none"><code class="language-${codeLang}">${codeText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
+                    <pre class="!mt-0 !rounded-t-none"><code class="language-${codeLang}">${escapeHtml(codeText)}</code></pre>
                 </div>
             `;
         };
 
-        formattedContent = `${thinkingHtml}<div class="md-content">${marked.parse(cleanText, { renderer: customRenderer })}</div>`;
+        const mediaHtml = buildMediaHtmlFromContent(content);
+        formattedContent = `${thinkingHtml}<div class="md-content">${marked.parse(cleanText, { renderer: customRenderer })}</div>${mediaHtml ? `<div class="mt-3">${mediaHtml}</div>` : ''}`;
     }
 
-    const encodedText = safeEncode(text);
+    const encodedText = safeEncode(typeof content === 'string' ? content : normalizeContentToText(content));
     const regenerateBtnHtml = (role !== 'user' && index !== undefined) ? `
         <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">🔄 Regenerate</button>
     ` : '';
@@ -593,7 +655,83 @@ function renderMessageToDOM(role, text, botName, index) {
     chatWindow.appendChild(messageDiv);
 }
 
-async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload) {
+function extractAssistantContent(response, providerName) {
+    if (providerName === 'claude') {
+        const content = Array.isArray(response.content) ? response.content : (response.content || '');
+        const text = Array.isArray(response.content)
+            ? response.content.filter(part => part.type === 'text').map(part => part.text).join('\n')
+            : (response.content || '');
+        return { content, reasoning_content: '' };
+    }
+
+    const choice = response.choices?.[0]?.message || {};
+    return {
+        content: choice.content || '',
+        reasoning_content: choice.reasoning_content || choice.thinking_content || ''
+    };
+}
+
+function convertContentForAnthropic(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return normalizeContentToText(content);
+
+    return content.map(part => {
+        if (typeof part === 'string') return { type: 'text', text: part };
+        if (part?.type === 'text' || part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
+        if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') {
+            const dataUrl = part.image_url?.url || part.url || '';
+            if (dataUrl.startsWith('data:')) {
+                const [meta, payload] = dataUrl.split(',');
+                const mime = meta.match(/data:(.+);/)?.[1] || 'image/png';
+                return { type: 'image', source: { type: 'base64', media_type: mime, data: payload } };
+            }
+            return { type: 'text', text: '[Image attachment]' };
+        }
+        if (part?.type === 'video_url' || part?.type === 'video' || part?.type === 'input_video') {
+            return { type: 'text', text: '[Video attachment]' };
+        }
+        return { type: 'text', text: '' };
+    }).filter(item => item && (item.text || item.type === 'image'));
+}
+
+async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName) {
+    const provider = PROVIDERS[providerName] || PROVIDERS.openai;
+    if (provider.type === 'anthropic') {
+        const headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+        };
+
+        const systemMessage = bodyPayload.messages.find(msg => msg.role === 'system');
+        const anthropicPayload = {
+            model: bodyPayload.model,
+            max_tokens: bodyPayload.max_tokens || 1024,
+            messages: bodyPayload.messages.filter(msg => msg.role !== 'system').map(msg => ({
+                role: msg.role === 'assistant' ? 'assistant' : 'user',
+                content: convertContentForAnthropic(msg.content)
+            })),
+            temperature: bodyPayload.temperature,
+            top_p: bodyPayload.top_p
+        };
+
+        if (systemMessage) {
+            anthropicPayload.system = typeof systemMessage.content === 'string' ? systemMessage.content : normalizeContentToText(systemMessage.content);
+        }
+
+        const response = await fetch(`${endpoint}/messages`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(anthropicPayload)
+        });
+
+        if (!response.ok) {
+            const errJson = await response.json().catch(() => ({}));
+            throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
     const headers = { 'Content-Type': 'application/json' };
     if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
@@ -637,7 +775,7 @@ async function triggerAiResponse(session) {
 
     let messagesToSend = [];
     if (session.systemPrompt) messagesToSend.push({ role: 'system', content: session.systemPrompt });
-    session.messages.forEach(msg => messagesToSend.push({ role: msg.role, content: msg.content }));
+    session.messages.forEach(msg => messagesToSend.push({ role: msg.role, content: typeof msg.content === 'string' ? msg.content : msg.content }));
 
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'text-xs text-gray-500 italic px-1 animate-pulse';
@@ -655,7 +793,7 @@ async function triggerAiResponse(session) {
                 top_p: topP,
                 max_tokens: maxTokens
             };
-            return fetchSingleCompletion(endpoint, apiKey, hasKey, payload)
+            return fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName)
                 .then(res => ({ success: true, model: modelId, data: res }))
                 .catch(err => ({ success: false, model: modelId, error: err.message }));
         });
@@ -667,9 +805,9 @@ async function triggerAiResponse(session) {
             const res = results[0];
             if (!res.success) throw new Error(res.error);
 
-            const choice = res.data.choices[0].message;
-            let content = choice.content || '';
-            const thinking = choice.reasoning_content || choice.thinking_content || '';
+            const parsed = extractAssistantContent(res.data, providerName);
+            let content = parsed.content || '';
+            const thinking = parsed.reasoning_content || '';
             if (thinking) content = `<think>${thinking}</think>\n${content}`;
 
             session.messages.push({ role: 'assistant', content });
@@ -680,9 +818,9 @@ async function triggerAiResponse(session) {
             results.forEach(res => {
                 multiMarkdown += `#### 🤖 Model: \`${res.model}\`\n`;
                 if (res.success) {
-                    const choice = res.data.choices[0].message;
-                    let text = choice.content || '';
-                    const thinking = choice.reasoning_content || choice.thinking_content || '';
+                    const parsed = extractAssistantContent(res.data, providerName);
+                    let text = parsed.content || '';
+                    const thinking = parsed.reasoning_content || '';
                     if (thinking) {
                         multiMarkdown += `<details class="mb-2"><summary class="text-amber-400 text-xs cursor-pointer">View Reasoning Log</summary><div class="p-2 bg-gray-950 text-xs italic text-gray-400 border border-gray-800 rounded mt-1">${thinking}</div></details>\n`;
                     }
@@ -723,7 +861,17 @@ async function sendMessage() {
 
     let fullUserContent = text;
     if (attachedFileContent) {
-        fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
+        if (attachedFileType.startsWith('image/') || attachedFileType.startsWith('video/')) {
+            fullUserContent = {
+                role: 'user',
+                content: [
+                    { type: 'text', text: text || `Attached ${attachedFileType.startsWith('image/') ? 'image' : 'video'}: ${attachedFileName}` },
+                    { type: attachedFileType.startsWith('image/') ? 'image_url' : 'video_url', url: attachedFileContent }
+                ]
+            };
+        } else {
+            fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
+        }
     }
 
     userInput.value = '';
@@ -813,7 +961,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
                     top_p: 0.95,
                     max_tokens: 1500
                 };
-                const res = await fetchSingleCompletion(endpoint, apiKey, PROVIDERS[providerName].hasKey, payload);
+                const res = await fetchSingleCompletion(endpoint, apiKey, PROVIDERS[providerName].hasKey, payload, providerName);
                 if (loadingDiv) loadingDiv.remove();
 
                 const rawContent = res.choices[0].message.content || '';
@@ -912,6 +1060,20 @@ attachmentInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     attachedFileName = file.name;
+    attachedFileType = file.type || '';
+
+    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            attachedFileContent = event.target.result;
+            fileNameDisplay.textContent = attachedFileName;
+            fileIndicator.classList.remove('hidden');
+            fileIndicator.classList.add('flex');
+        };
+        reader.readAsDataURL(file);
+        return;
+    }
+
     const reader = new FileReader();
     reader.onload = function(event) {
         attachedFileContent = event.target.result;
@@ -925,6 +1087,7 @@ attachmentInput.addEventListener('change', (e) => {
 function removeAttachedFile() {
     attachedFileContent = null;
     attachedFileName = '';
+    attachedFileType = '';
     attachmentInput.value = '';
     fileIndicator.classList.add('hidden');
     fileIndicator.classList.remove('flex');
