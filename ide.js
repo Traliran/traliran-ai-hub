@@ -527,7 +527,8 @@ async function fetchCompletion(messages) {
 
     const temperature = parseFloat(localStorage.getItem('gem_temp') || '0.7');
     const topP = parseFloat(localStorage.getItem('gem_topp') || '1.0');
-    const maxTokens = parseInt(localStorage.getItem('gem_tokens') || '2048');
+    // Set default high token limit (e.g. 90000 or custom) to support extremely large files/payloads
+    const maxTokens = 90000;
     const model = botModelSelect.value;
 
     if (hasKey && !apiKey) {
@@ -542,9 +543,10 @@ async function fetchCompletion(messages) {
         };
 
         const systemMessage = messages.find(msg => msg.role === 'system');
+        // Claude typically supports up to 8192 output tokens max depending on model, so we cap it appropriately
         const anthropicPayload = {
             model: model || 'claude-3-5-sonnet-latest',
-            max_tokens: maxTokens,
+            max_tokens: Math.min(maxTokens, 8192),
             messages: messages.filter(msg => msg.role !== 'system').map(msg => ({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
                 content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
@@ -647,7 +649,7 @@ function renderCopilotMessage(role, text) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full space-y-1`;
 
-    const sender = role === 'user' ? 'You' : 'Copilot';
+    const sender = role === 'user' ? 'You' : 'AI';
     const bgClass = role === 'user' ? 'bg-violet-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-100';
 
     const customRenderer = new marked.Renderer();
@@ -706,7 +708,7 @@ async function handleAiRequest(customPrompt = "") {
         codebaseDescription += `\n\n--- FILE: ${filename} ---\n${content}`;
     });
 
-    const systemPrompt = `You are Traliran AI Copilot inside a professional browser IDE.
+    const systemPrompt = `You are Traliran AI inside a professional browser IDE.
 You have complete write/read permissions to modify the current workspace files.
 The current files in the user's workspace are listed below:
 ${codebaseDescription}
@@ -765,7 +767,7 @@ You can update multiple files inside a single response. Every update must be wra
         console.error(e);
         const errorDiv = document.createElement('div');
         errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-2.5 rounded-lg text-xs';
-        errorDiv.textContent = `Copilot error: ${e.message}`;
+        errorDiv.textContent = `AI error: ${e.message}`;
         aiChatWindow.appendChild(errorDiv);
     } finally {
         aiInput.disabled = false;
