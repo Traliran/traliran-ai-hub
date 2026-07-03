@@ -25,6 +25,9 @@
 
             <!-- API Selection in Header for easy status tracking -->
             <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+                <button id="ideApiSettingsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-1.5 rounded-lg border border-gray-700 transition shrink-0 flex items-center gap-1" title="API Settings">
+                    <span>⚙️</span> <span class="hidden md:inline text-xs">API Settings</span>
+                    </button>
                 <div class="flex items-center gap-2">
                     <label class="text-xs text-gray-400 font-medium">Provider:</label>
                     <select id="apiProvider" class="bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-violet-500 text-gray-200">
@@ -40,7 +43,6 @@
                         <option value="llamacpp">Llama.cpp (Local)</option>
                     </select>
                 </div>
-
                 <div class="flex items-center gap-2">
                     <label class="text-xs text-gray-400 font-medium">Model:</label>
                     <select id="botModel" class="bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-violet-500 max-w-[200px] text-gray-200">
@@ -66,8 +68,8 @@
             <div class="p-3 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
                 <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">📁 File Explorer</h2>
                 <button id="addNewFileBtn" class="text-violet-400 hover:text-violet-300 font-bold text-sm px-2 py-0.5 rounded hover:bg-gray-800 transition" title="New File">+ Add</button>
-            </div>
-            
+                </div>
+
             <!-- File List -->
             <div id="fileList" class="flex-1 overflow-y-auto p-2 space-y-1 chat-scroll">
                 <!-- Populated via JS -->
@@ -180,22 +182,59 @@
             </div>
         </section>
     </main>
-
     <!-- Key Warning overlay -->
     <div id="keyWarningModal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
-        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-center">
-            <span class="text-4xl">⚠️</span>
-            <h3 class="text-lg font-bold text-violet-400">Missing API Key</h3>
-            <p class="text-xs text-gray-300 leading-relaxed">
-                Traliran AI IDE requires an API Key for your active provider. We share the same database of keys with the main chat!
-            </p>
-            <div class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-left text-xs font-mono">
-                Please go to settings on the main page, configure your provider, input your API key, and reload this page.
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <div class="text-center">
+                <span class="text-4xl">⚙️</span>
+                <h3 class="text-lg font-bold text-violet-400 mt-2">API Configuration</h3>
+                <p class="text-xs text-gray-400 leading-relaxed mt-1">
+                    Configure your API key or endpoint to use the AI Copilot. We share the same database of keys with the main chat!
+                </p>
             </div>
-            <div class="flex justify-center gap-3 pt-2">
-                <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded-lg border border-gray-700 transition">
-                    Go to Main Page Settings
-                </a>
+
+            <div class="space-y-3 pt-2 text-left">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 mb-1">AI Provider</label>
+                    <select id="modalApiProvider" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 text-gray-200">
+                        <option value="groq">Groq Cloud</option>
+                        <option value="google">Google Gemini (OpenAI API)</option>
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="qwen">Qwen</option>
+                        <option value="glm">GLM</option>
+                        <option value="claude">Claude</option>
+                        <option value="ollama">Ollama (Local)</option>
+                        <option value="llamacpp">Llama.cpp (Local)</option>
+                    </select>
+                </div>
+
+                <div id="modalApiKeyContainer">
+                    <label class="block text-xs font-semibold text-gray-400 mb-1">API Key (token)</label>
+                    <input type="password" id="modalApiKeyValue" placeholder="Enter your API key..."
+                        class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 font-mono text-gray-200">
+                </div>
+
+                <div id="modalEndpointContainer" class="hidden">
+                    <label class="block text-xs font-semibold text-gray-400 mb-1">Base Endpoint URL</label>
+                    <input type="text" id="modalApiEndpoint" placeholder="http://localhost:11434/v1"
+                        class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 font-mono text-gray-200">
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2 pt-2">
+                <button id="modalSaveBtn" class="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-2 px-4 rounded-lg text-xs transition cursor-pointer">
+                    Save and Continue
+                </button>
+                <div class="flex gap-2">
+                    <a href="index.html" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-3 rounded-lg border border-gray-700 transition text-center">
+                        Back to Hub
+                    </a>
+                    <button id="modalCloseBtn" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white text-xs py-2 px-3 rounded-lg border border-gray-700 transition cursor-pointer">
+                        Close
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -204,3 +243,4 @@
     <script src="ide.js"></script>
 </body>
 </html>
+
