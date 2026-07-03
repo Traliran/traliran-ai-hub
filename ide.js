@@ -2,9 +2,11 @@
 let projectFiles = {};
 let activeFileName = "index.html";
 let proposedChanges = null;
+let aiApiCallCount = 0;
 
 // DOM Elements
 const apiProvider = document.getElementById('apiProvider');
+const callCountIndicator = document.getElementById('callCountIndicator');
 const botModelSelect = document.getElementById('botModel');
 const refreshModelsBtn = document.getElementById('refreshModelsBtn');
 const runCodeBtn = document.getElementById('runCodeBtn');
@@ -608,37 +610,185 @@ function extractAiResponse(response) {
 
 // Parsing AI response files
 // Format: <<<FILE_START: path/to/file>>>file contents<<<FILE_END>>>
-function parseAndExtractFiles(responseText) {
+function setAiCallCount(count) {
+    aiApiCallCount = count;
+    if (callCountIndicator) {
+        callCountIndicator.textContent = `API Calls: ${count}/5`;
+    }
+}
+
+function tryParseJson(value) {
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
+}
+
+function stripFileMarkers(responseText) {
+    return responseText
+        .replace(/<<<FILE_START:\s*.*?\s*>>>([\s\S]*?)<<<FILE_END>>>/g, '')
+        .replace(/```\w*\s*<<<FILE_START[\s\S]*?<<<FILE_END>>>\s*```/g, '')
+        .trim();
+}
+
+function parseFileTags(responseText) {
     const fileRegex = /<<<FILE_START:\s*(.*?)\s*>>>([\s\S]*?)<<<FILE_END>>>/g;
     let match;
     const extractedFiles = {};
-    let cleanText = responseText;
 
     while ((match = fileRegex.exec(responseText)) !== null) {
         const filePath = match[1].trim();
-        const fileContent = match[2]; // keep exact lines but trim start/end newlines
-        
-        // Trim one leading newline and trailing newline if present
-        let trimmedContent = fileContent;
-        if (trimmedContent.startsWith('\r\n')) trimmedContent = trimmedContent.substring(2);
-        else if (trimmedContent.startsWith('\n')) trimmedContent = trimmedContent.substring(1);
-        
-        if (trimmedContent.endsWith('\r\n')) trimmedContent = trimmedContent.substring(0, trimmedContent.length - 2);
-        else if (trimmedContent.endsWith('\n')) trimmedContent = trimmedContent.substring(0, trimmedContent.length - 1);
+        let fileContent = match[2];
 
-        extractedFiles[filePath] = trimmedContent;
+        if (fileContent.startsWith('\r\n')) fileContent = fileContent.substring(2);
+        else if (fileContent.startsWith('\n')) fileContent = fileContent.substring(1);
+        if (fileContent.endsWith('\r\n')) fileContent = fileContent.substring(0, fileContent.length - 2);
+        else if (fileContent.endsWith('\n')) fileContent = fileContent.substring(0, fileContent.length - 1);
+
+        extractedFiles[filePath] = fileContent;
+    }
+    return extractedFiles;
+}
+
+function parseJsonFileInstructions(responseText) {
+    let jsonText = responseText.trim();
+    let parsed = null;
+
+    if (!jsonText.startsWith('{')) {
+        const jsonMatch = responseText.match(/\{[\s\S]*?"files"\s*:\s*\{[\s\S]*?\}\s*\}/);
+        if (jsonMatch) {
+            jsonText = jsonMatch[0];
+        }
     }
 
-    // Strip the code blocks from display text
-    cleanText = responseText.replace(/<<<FILE_START:\s*(.*?)\s*>>>([\s\S]*?)<<<FILE_END>>>/g, '');
-    
-    // Also strip markdown codeblocks wrapping file blocks if any
-    cleanText = cleanText.replace(/```\w*\s*<<<FILE_START[\s\S]*?<<<FILE_END>>>\s*```/g, '');
+    parsed = tryParseJson(jsonText);
+    if (!parsed || typeof parsed !== 'object') return {};
+
+    const payload = parsed.files || parsed.file_updates || parsed.updates;
+    if (!payload || typeof payload !== 'object') return {};
+
+    const extractedFiles = {};
+    Object.entries(payload).forEach(([filename, content]) => {
+        if (typeof content === 'string') {
+            extractedFiles[filename.trim()] = content.trim();
+        }
+    });
+    return extractedFiles;
+}
+
+function parseMarkdownFenceFiles(responseText) {
+    const extractedFiles = {};
+    const fenceRegex = /(?:^|\n)([^\n`]+?\.(?:html|css|js|json|txt|md))\s*\n```(?:[\w+-]*)\n([\s\S]*?)\n```/gi;
+    let match;
+    while ((match = fenceRegex.exec(responseText)) !== null) {
+        extractedFiles[match[1].trim()] = match[2].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
+    }
+    return extractedFiles;
+}
+
+function parseFallbackActiveFile(responseText) {
+    const activeExtension = activeFileName.split('.').pop().toLowerCase();
+    const supportedExtensions = ['html', 'css', 'js', 'json', 'md', 'txt'];
+    if (!supportedExtensions.includes(activeExtension)) return {};
+
+    const codeFenceRegex = /```(?:[\w+-]*)\n([\s\S]*?)\n```/;
+    const fenceMatch = responseText.match(codeFenceRegex);
+    if (fenceMatch && fenceMatch[1] && fenceMatch[1].trim()) {
+        return {
+            [activeFileName]: fenceMatch[1].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '')
+        };
+    }
+
+    if (activeExtension === 'html') {
+        const htmlMatch = responseText.match(/(<(?:!doctype|html|head|body)[\s\S]*)/i);
+        if (htmlMatch && htmlMatch[1] && htmlMatch[1].trim()) {
+            return {
+                [activeFileName]: htmlMatch[1].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '')
+            };
+        }
+    }
+
+    return {};
+}
+
+function parseAndExtractFiles(responseText) {
+    const fileTags = parseFileTags(responseText);
+    if (Object.keys(fileTags).length > 0) {
+        return {
+            cleanText: stripFileMarkers(responseText),
+            files: fileTags
+        };
+    }
+
+    const jsonFiles = parseJsonFileInstructions(responseText);
+    if (Object.keys(jsonFiles).length > 0) {
+        return {
+            cleanText: stripFileMarkers(responseText),
+            files: jsonFiles
+        };
+    }
+
+    const fenceFiles = parseMarkdownFenceFiles(responseText);
+    if (Object.keys(fenceFiles).length > 0) {
+        return {
+            cleanText: stripFileMarkers(responseText),
+            files: fenceFiles
+        };
+    }
+
+    const fallbackFiles = parseFallbackActiveFile(responseText);
+    if (Object.keys(fallbackFiles).length > 0) {
+        return {
+            cleanText: stripFileMarkers(responseText),
+            files: fallbackFiles
+        };
+    }
 
     return {
-        cleanText: cleanText.trim(),
-        files: extractedFiles
+        cleanText: responseText.trim(),
+        files: {}
     };
+}
+
+async function runAiAgentRequest(userPromptText) {
+    const maxCalls = 5;
+    let attemptPrompt = userPromptText;
+    const baseSystemPrompt = `You are Traliran AI operating in a browser IDE. You have full access to the workspace files and can modify or create files directly.
+
+Current workspace files:
+${Object.entries(projectFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
+
+Active file: ${activeFileName}
+
+Write updates using one of these formats only:
+1) <<<FILE_START: filename>>>\n...file contents...\n<<<FILE_END>>>
+2) JSON object with a top-level \"files\" field mapping filenames to content.
+
+Do not include any extra text outside of the file output blocks unless you are providing a short explanation. If you need to retry, respond with file outputs only.`;
+
+    let lastResult = { cleanText: '', files: {}, rawText: '' };
+    for (let attempt = 1; attempt <= maxCalls; attempt++) {
+        setAiCallCount(attempt);
+        const messages = [
+            { role: 'system', content: baseSystemPrompt },
+            { role: 'user', content: attemptPrompt }
+        ];
+
+        const response = await fetchCompletion(messages);
+        const rawText = extractAiResponse(response);
+        const parsed = parseAndExtractFiles(rawText);
+
+        lastResult = { cleanText: parsed.cleanText, files: parsed.files, rawText };
+        if (Object.keys(parsed.files).length > 0) {
+            return { ...lastResult, calls: attempt };
+        }
+
+        if (attempt < maxCalls) {
+            attemptPrompt = `The previous response did not contain any parseable file updates. Please resend the updated file contents using either the exact <<<FILE_START: filename>>>...<<<FILE_END>>> format or a valid JSON object with a top-level \"files\" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${rawText}`;
+        }
+    }
+    return { ...lastResult, calls: maxCalls };
 }
 
 // UI Message rendering
@@ -700,67 +850,41 @@ async function handleAiRequest(customPrompt = "") {
 
     renderCopilotMessage('user', userPromptText);
 
-    // Prepare system instructions with exact workspace details
-    const activeFileCode = projectFiles[activeFileName] || "";
-    
-    let codebaseDescription = "";
-    Object.entries(projectFiles).forEach(([filename, content]) => {
-        codebaseDescription += `\n\n--- FILE: ${filename} ---\n${content}`;
-    });
+    if (activeFileName && projectFiles[activeFileName] !== undefined) {
+        projectFiles[activeFileName] = codeEditor.value;
+        saveWorkspace();
+    }
 
-    const systemPrompt = `You are Traliran AI inside a professional browser IDE.
-You have complete write/read permissions to modify the current workspace files.
-The current files in the user's workspace are listed below:
-${codebaseDescription}
-
-Currently selected file for editing: "${activeFileName}"
-
-DIRECTIONS & PROTOCOL:
-1. Provide a concise, professional explanation/response explaining your modifications, logic, or guidance.
-2. If you want to create or edit ANY file, output the full complete updated contents of that file using the following exact tag format:
-<<<FILE_START: path_to_file>>>
-fully written file content here (do not skip any existing lines, output the complete file to ensure clean integration)
-<<<FILE_END>>>
-
-You can update multiple files inside a single response. Every update must be wrapped inside its own <<<FILE_START:...>>> and <<<FILE_END>>> tags.
-3. Keep the text conversation in Russian or English matching the user language.
-4. Minimize conversational filler. Be extremely fast and precise.`;
-
-    // Disable input
     aiInput.disabled = true;
     aiSendBtn.disabled = true;
 
-    // Show Loading
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'text-xs text-violet-400 italic px-1 animate-pulse';
     loadingDiv.id = 'copilotLoading';
-    loadingDiv.textContent = 'Analyzing codebase & generating edits (1 call max)...';
+    loadingDiv.textContent = 'Analyzing codebase & generating edits...';
     aiChatWindow.appendChild(loadingDiv);
     aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
 
     try {
-        const messages = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPromptText }
-        ];
-
-        const response = await fetchCompletion(messages);
+        const result = await runAiAgentRequest(userPromptText);
         if (loadingDiv) loadingDiv.remove();
 
-        const rawText = extractAiResponse(response);
-        const parsed = parseAndExtractFiles(rawText);
+        const parsed = { cleanText: result.cleanText, files: result.files };
+        const responseSummary = result.cleanText || `Received ${Object.keys(parsed.files).length} file updates.`;
+        const callInfo = ` (API calls used: ${result.calls})`;
 
-        renderCopilotMessage('assistant', parsed.cleanText || "Successfully integrated files!");
+        renderCopilotMessage('assistant', responseSummary + callInfo);
 
-        // Handle file edits
         const extractedFilesCount = Object.keys(parsed.files).length;
         if (extractedFilesCount > 0) {
             proposedChanges = parsed.files;
-            changesIndicator.classList.remove('hidden');
-            changesIndicator.classList.add('flex');
-            
-            // Automatically apply files to workspace directly to make IDE responsive
             applyProposedChanges();
+        } else {
+            const noChangeDiv = document.createElement('div');
+            noChangeDiv.className = 'bg-amber-950/40 border border-amber-900 text-amber-300 p-2.5 rounded-lg text-xs';
+            noChangeDiv.textContent = 'No valid file updates were extracted from the AI response.';
+            aiChatWindow.appendChild(noChangeDiv);
+            aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
         }
     } catch (e) {
         if (loadingDiv) loadingDiv.remove();
