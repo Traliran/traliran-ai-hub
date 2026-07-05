@@ -30,6 +30,7 @@ const btnAiFix = document.getElementById('btnAiFix');
 const aiChatWindow = document.getElementById('aiChatWindow');
 const aiInput = document.getElementById('aiInput');
 const aiSendBtn = document.getElementById('aiSendBtn');
+const aiStopBtn = document.getElementById('aiStopBtn');
 const changesIndicator = document.getElementById('changesIndicator');
 const applyChangesBtn = document.getElementById('applyChangesBtn');
 const keyWarningModal = document.getElementById('keyWarningModal');
@@ -43,6 +44,8 @@ const modalEndpointContainer = document.getElementById('modalEndpointContainer')
 const modalApiEndpoint = document.getElementById('modalApiEndpoint');
 const modalSaveBtn = document.getElementById('modalSaveBtn');
 const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+let currentAiAbortController = null;
 
 const PROVIDERS = {
     groq: { url: 'https://api.groq.com/openai/v1', hasKey: true, type: 'openai' },
@@ -520,7 +523,7 @@ async function fetchActiveModels() {
 refreshModelsBtn.addEventListener('click', fetchActiveModels);
 
 // API Core Call Integration (Same as chat, optimized to 1 API Call)
-async function fetchCompletion(messages) {
+async function fetchCompletion(messages, signal) {
     const providerName = apiProvider.value;
     const provider = PROVIDERS[providerName] || PROVIDERS.openai;
     const hasKey = provider.hasKey;
@@ -563,7 +566,8 @@ async function fetchCompletion(messages) {
         const response = await fetch(`${endpoint}/messages`, {
             method: 'POST',
             headers,
-            body: JSON.stringify(anthropicPayload)
+            body: JSON.stringify(anthropicPayload),
+            signal
         });
 
         if (!response.ok) {
@@ -587,7 +591,8 @@ async function fetchCompletion(messages) {
     const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(bodyPayload)
+        body: JSON.stringify(bodyPayload),
+        signal
     });
 
     if (!response.ok) {
@@ -775,17 +780,22 @@ Do not include any extra text outside of the file output blocks unless you are p
             { role: 'user', content: attemptPrompt }
         ];
 
-        const response = await fetchCompletion(messages);
-        const rawText = extractAiResponse(response);
-        const parsed = parseAndExtractFiles(rawText);
+        try {
+            const response = await fetchCompletion(messages, currentAiAbortController.signal);
+            const rawText = extractAiResponse(response);
+            const parsed = parseAndExtractFiles(rawText);
 
-        lastResult = { cleanText: parsed.cleanText, files: parsed.files, rawText };
-        if (Object.keys(parsed.files).length > 0) {
-            return { ...lastResult, calls: attempt };
+            lastResult = { cleanText: parsed.cleanText, files: parsed.files, rawText };
+            if (Object.keys(parsed.files).length > 0) {
+                return { ...lastResult, calls: attempt };
+            }
+    } catch (e) {
+            if (e.name === 'AbortError') throw e;
+            // If one attempt fails, we might try the next one unless it's an abort
         }
 
         if (attempt < maxCalls) {
-            attemptPrompt = `The previous response did not contain any parseable file updates. Please resend the updated file contents using either the exact <<<FILE_START: filename>>>...<<<FILE_END>>> format or a valid JSON object with a top-level \"files\" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${rawText}`;
+            attemptPrompt = `The previous response did not contain any parseable file updates. Please resend the updated file contents using either the exact <<<FILE_START: filename>>>...<<<FILE_END>>> format or a valid JSON object with a top-level \"files\" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${lastResult.rawText}`;
         }
     }
     return { ...lastResult, calls: maxCalls };
@@ -795,7 +805,6 @@ Do not include any extra text outside of the file output blocks unless you are p
 function renderCopilotMessage(role, text) {
     const welcomeMsg = document.getElementById('ideWelcomeMessage');
     if (welcomeMsg) welcomeMsg.remove();
-
     const msgDiv = document.createElement('div');
     msgDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full space-y-1`;
 
@@ -826,7 +835,6 @@ function renderCopilotMessage(role, text) {
             <div class="md-content leading-relaxed">${formattedContent}</div>
         </div>
     `;
-
     aiChatWindow.appendChild(msgDiv);
     aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
 }
@@ -857,6 +865,10 @@ async function handleAiRequest(customPrompt = "") {
 
     aiInput.disabled = true;
     aiSendBtn.disabled = true;
+    aiSendBtn.classList.add('hidden');
+    aiStopBtn.classList.remove('hidden');
+
+    currentAiAbortController = new AbortController();
 
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'text-xs text-violet-400 italic px-1 animate-pulse';
@@ -889,13 +901,20 @@ async function handleAiRequest(customPrompt = "") {
     } catch (e) {
         if (loadingDiv) loadingDiv.remove();
         console.error(e);
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-2.5 rounded-lg text-xs';
-        errorDiv.textContent = `AI error: ${e.message}`;
-        aiChatWindow.appendChild(errorDiv);
+        if (e.name === 'AbortError') {
+            // Для IDE: ничего не отображаем и игнорируем ответ
+        } else {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-2.5 rounded-lg text-xs';
+            errorDiv.textContent = `AI error: ${e.message}`;
+            aiChatWindow.appendChild(errorDiv);
+        }
     } finally {
         aiInput.disabled = false;
         aiSendBtn.disabled = false;
+        aiSendBtn.classList.remove('hidden');
+        aiStopBtn.classList.add('hidden');
+        currentAiAbortController = null;
         aiInput.focus();
     }
 }
@@ -956,6 +975,12 @@ aiInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleAiRequest();
+    }
+});
+
+aiStopBtn.addEventListener('click', () => {
+    if (currentAiAbortController) {
+        currentAiAbortController.abort();
     }
 });
 

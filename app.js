@@ -37,6 +37,7 @@ let attachedFileContent = null;
 let attachedFileName = "";
 let attachedFileType = "";
 let selectedMultiModels = [];
+let currentAbortController = null;
 
 const apiProvider = document.getElementById('apiProvider');
 const apiKeyValue = document.getElementById('apiKeyValue');
@@ -93,10 +94,10 @@ const chatWindow = document.getElementById('chatWindow');
 const welcomeMessage = document.getElementById('welcomeMessage');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
+const stopBtn = document.getElementById('stopBtn');
 const clearChatBtn = document.getElementById('clearChat');
 const chatsList = document.getElementById('chatsList');
 const newChatBtn = document.getElementById('newChatBtn');
-
 const attachmentInput = document.getElementById('attachmentInput');
 const fileIndicator = document.getElementById('fileIndicator');
 const fileNameDisplay = document.getElementById('fileNameDisplay');
@@ -702,7 +703,7 @@ function convertContentForAnthropic(content) {
     }).filter(item => item && (item.text || item.type === 'image'));
 }
 
-async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName) {
+async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal) {
     const provider = PROVIDERS[providerName] || PROVIDERS.openai;
     if (provider.type === 'anthropic') {
         const headers = {
@@ -730,7 +731,8 @@ async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, prov
         const response = await fetch(`${endpoint}/messages`, {
             method: 'POST',
             headers,
-            body: JSON.stringify(anthropicPayload)
+            body: JSON.stringify(anthropicPayload),
+            signal
         });
 
         if (!response.ok) {
@@ -746,7 +748,8 @@ async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, prov
     const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(bodyPayload)
+        body: JSON.stringify(bodyPayload),
+        signal
     });
 
     if (!response.ok) {
@@ -780,6 +783,10 @@ async function triggerAiResponse(session) {
 
     userInput.disabled = true;
     sendBtn.disabled = true;
+    sendBtn.classList.add('hidden');
+    stopBtn.classList.remove('hidden');
+
+    currentAbortController = new AbortController();
 
     let messagesToSend = [];
     if (session.systemPrompt) messagesToSend.push({ role: 'system', content: session.systemPrompt });
@@ -801,9 +808,12 @@ async function triggerAiResponse(session) {
                 top_p: topP,
                 max_tokens: maxTokens
             };
-            return fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName)
+            return fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName, currentAbortController.signal)
                 .then(res => ({ success: true, model: modelId, data: res }))
-                .catch(err => ({ success: false, model: modelId, error: err.message }));
+                .catch(err => {
+                    if (err.name === 'AbortError') throw err;
+                    return { success: false, model: modelId, error: err.message };
+                });
         });
 
         const results = await Promise.all(requests);
@@ -846,13 +856,24 @@ async function triggerAiResponse(session) {
     } catch (error) {
         console.error(error);
         if (document.getElementById('apiLoading')) document.getElementById('apiLoading').remove();
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-lg text-xs max-w-xl';
-        errorDiv.innerText = `Execution Interrupted: ${error.message}`;
-        chatWindow.appendChild(errorDiv);
+
+        if (error.name === 'AbortError') {
+            const stopDiv = document.createElement('div');
+            stopDiv.className = 'text-xs text-gray-500 italic px-1';
+            stopDiv.innerText = 'Generation stopped by user.';
+            chatWindow.appendChild(stopDiv);
+        } else {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-lg text-xs max-w-xl';
+            errorDiv.innerText = `Execution Interrupted: ${error.message}`;
+            chatWindow.appendChild(errorDiv);
+        }
     } finally {
-        userInput.disabled = false;
-        sendBtn.disabled = false;
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+        sendBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        currentAbortController = null;
         userInput.focus();
     }
 }
@@ -876,11 +897,11 @@ async function sendMessage() {
                     { type: 'text', text: text || `Attached ${attachedFileType.startsWith('image/') ? 'image' : 'video'}: ${attachedFileName}` },
                     { type: attachedFileType.startsWith('image/') ? 'image_url' : 'video_url', url: attachedFileContent }
                 ]
-            };
-        } else {
+        };
+    } else {
             fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
-        }
     }
+}
 
     userInput.value = '';
     userInput.style.height = 'auto';
@@ -1113,6 +1134,11 @@ userInput.addEventListener('input', function() {
     this.style.height = this.scrollHeight + 'px';
 });
 sendBtn.addEventListener('click', sendMessage);
+stopBtn.addEventListener('click', () => {
+    if (currentAbortController) {
+        currentAbortController.abort();
+    }
+});
 userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
         e.preventDefault();
@@ -1190,3 +1216,4 @@ document.addEventListener('DOMContentLoaded', () => {
     loadApiSettings();
     loadSessions();
 });
+
