@@ -101,9 +101,13 @@ const attachmentInput = document.getElementById('attachmentInput');
 const fileIndicator = document.getElementById('fileIndicator');
 const fileNameDisplay = document.getElementById('fileNameDisplay');
 const removeFileBtn = document.getElementById('removeFileBtn');
+const usageInfo = document.getElementById('usageInfo');
+const streamingStatus = document.getElementById('streamingStatus');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggleSidebar');
 const closeSidebarBtn = document.getElementById('closeSidebar');
+
+const TOKEN_COST_PER_1K = 0.03; // Approximate cost estimate for user-facing display
 const sidebarOverlay = document.getElementById('sidebarOverlay');
 const chatsPanel = document.getElementById('chatsPanel');
 const toggleChatsBtn = document.getElementById('toggleChats');
@@ -695,6 +699,132 @@ function buildLanguageHint(sourceText = '') {
     return baseHint;
 }
 
+function estimateTokenCount(text) {
+    if (!text) return 0;
+    const normalized = String(text).trim();
+    return Math.max(1, Math.ceil(normalized.length / 4));
+}
+
+function formatUsd(value) {
+    return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+function updateUsageIndicator({ tokens = 0, cost = 0, streaming = false } = {}) {
+    if (!usageInfo || !streamingStatus) return;
+    const wrapper = usageInfo.parentElement;
+    if (tokens || streaming) {
+        usageInfo.textContent = `Tokens: ${tokens} | Cost: ≈ ${formatUsd(cost)}`;
+        streamingStatus.textContent = streaming ? 'Streaming active' : 'Streaming inactive';
+        if (wrapper) wrapper.classList.remove('hidden');
+    } else {
+        if (wrapper) wrapper.classList.add('hidden');
+        streamingStatus.textContent = 'Streaming inactive';
+    }
+}
+
+function buildPromptText(messages) {
+    return messages.map(msg => {
+        if (typeof msg.content === 'string') return msg.content;
+        return normalizeContentToText(msg.content || '');
+    }).join('\n');
+}
+
+function createAssistantStreamingPlaceholder(botName) {
+    welcomeMessage.classList.add('hidden');
+    const placeholder = document.createElement('div');
+    placeholder.className = 'flex flex-col items-start w-full group/msg';
+    const senderName = document.createElement('span');
+    senderName.className = 'text-xs text-gray-500 mb-1 px-1';
+    senderName.textContent = botName;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words';
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'whitespace-pre-wrap break-words text-sm';
+    contentDiv.textContent = '';
+
+    bubble.appendChild(contentDiv);
+    placeholder.appendChild(senderName);
+    placeholder.appendChild(bubble);
+    chatWindow.appendChild(placeholder);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    return { placeholder, contentDiv };
+}
+
+function updateStreamingPlaceholder(placeholderData, text) {
+    if (!placeholderData?.contentDiv) return;
+    placeholderData.contentDiv.textContent = text;
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal, onDelta) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+    bodyPayload.stream = true;
+
+    const response = await fetch(`${endpoint}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyPayload),
+        signal
+    });
+
+    if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+        const result = await response.json();
+        return { content: result.choices?.[0]?.message?.content || '' };
+    }
+
+    const decoder = new TextDecoder();
+    let accumulated = '';
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (let line of lines) {
+            line = line.trim();
+            if (!line) continue;
+            if (line === 'data: [DONE]') {
+                continue;
+            }
+            if (line.startsWith('data:')) {
+                const payload = line.slice(5).trim();
+                if (!payload) continue;
+                try {
+                    const eventData = JSON.parse(payload);
+                    const delta = eventData.choices?.[0]?.delta?.content || '';
+                    accumulated += delta;
+                    if (delta) onDelta(delta);
+                } catch (error) {
+                    // ignore parse errors for partial chunks
+                }
+            }
+        }
+    }
+
+    return { content: accumulated };
+}
+
+function getEstimatedCostFromText(promptText, outputText) {
+    const promptTokens = estimateTokenCount(promptText);
+    const outputTokens = estimateTokenCount(outputText);
+    const totalTokens = promptTokens + outputTokens;
+    const estimatedCost = (totalTokens / 1000) * TOKEN_COST_PER_1K;
+    return { totalTokens, estimatedCost };
+}
+
 function convertContentForAnthropic(content) {
     if (typeof content === 'string') return content;
     if (!Array.isArray(content)) return normalizeContentToText(content);
@@ -815,7 +945,8 @@ async function triggerAiResponse(session) {
     chatWindow.scrollTop = chatWindow.scrollHeight;
 
     try {
-        const requests = activeModels.map(modelId => {
+        if (activeModels.length === 1) {
+            const modelId = activeModels[0];
             const payload = {
                 model: modelId,
                 messages: messagesToSend,
@@ -823,30 +954,59 @@ async function triggerAiResponse(session) {
                 top_p: topP,
                 max_tokens: maxTokens
             };
-            return fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName, currentAbortController.signal)
-                .then(res => ({ success: true, model: modelId, data: res }))
-                .catch(err => {
-                    if (err.name === 'AbortError') throw err;
-                    return { success: false, model: modelId, error: err.message };
-                });
-        });
 
-        const results = await Promise.all(requests);
-        if (loadingDiv) loadingDiv.remove();
+            const promptText = buildPromptText(messagesToSend);
+            const placeholderData = createAssistantStreamingPlaceholder(session.botName);
+            updateUsageIndicator({ streaming: true });
 
-        if (results.length === 1) {
-            const res = results[0];
-            if (!res.success) throw new Error(res.error);
+            const streamResult = await fetchStreamingCompletion(
+                endpoint,
+                apiKey,
+                hasKey,
+                payload,
+                providerName,
+                currentAbortController.signal,
+                delta => {
+                    placeholderData.current = (placeholderData.current || '') + delta;
+                    updateStreamingPlaceholder(placeholderData, placeholderData.current);
+                }
+            );
 
-            const parsed = extractAssistantContent(res.data, providerName);
+            if (loadingDiv) loadingDiv.remove();
+
+            const parsed = extractAssistantContent({ choices: [{ message: { content: streamResult.content } }] }, providerName);
             let content = parsed.content || '';
             const thinking = parsed.reasoning_content || '';
             if (thinking) content = `<think>${thinking}</think>\n${content}`;
 
+            const usage = getEstimatedCostFromText(promptText, content);
+            updateUsageIndicator({ tokens: usage.totalTokens, cost: usage.estimatedCost, streaming: false });
+
             session.messages.push({ role: 'assistant', content });
             saveSessionsToStorage();
+            // Replace placeholder with final rendered rich content
+            placeholderData.placeholder.remove();
             renderMessageToDOM('assistant', content, session.botName, session.messages.length - 1);
         } else {
+            const requests = activeModels.map(modelId => {
+                const payload = {
+                    model: modelId,
+                    messages: messagesToSend,
+                    temperature,
+                    top_p: topP,
+                    max_tokens: maxTokens
+                };
+                return fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName, currentAbortController.signal)
+                    .then(res => ({ success: true, model: modelId, data: res }))
+                    .catch(err => {
+                        if (err.name === 'AbortError') throw err;
+                        return { success: false, model: modelId, error: err.message };
+                    });
+            });
+
+            const results = await Promise.all(requests);
+            if (loadingDiv) loadingDiv.remove();
+
             let multiMarkdown = '### 📊 Multi-Model Performance Comparison\n\n';
             results.forEach(res => {
                 multiMarkdown += `#### 🤖 Model: \`${res.model}\`\n`;
@@ -866,6 +1026,7 @@ async function triggerAiResponse(session) {
             session.messages.push({ role: 'assistant', content: multiMarkdown });
             saveSessionsToStorage();
             renderMessageToDOM('assistant', multiMarkdown, 'Hub Comparator', session.messages.length - 1);
+            updateUsageIndicator({ tokens: estimateTokenCount(buildPromptText(messagesToSend)), cost: (estimateTokenCount(buildPromptText(messagesToSend)) / 1000) * TOKEN_COST_PER_1K, streaming: false });
         }
         chatWindow.scrollTop = chatWindow.scrollHeight;
     } catch (error) {
@@ -1098,19 +1259,37 @@ function closeSidebarUniversal() {
     }
 }
 
-attachmentInput.addEventListener('change', (e) => {
+attachmentInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     attachedFileName = file.name;
     attachedFileType = file.type || '';
 
+    fileNameDisplay.textContent = attachedFileName;
+    fileIndicator.classList.remove('hidden');
+    fileIndicator.classList.add('flex');
+
+    if (file.type === 'application/pdf' || attachedFileName.toLowerCase().endsWith('.pdf')) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let extractedText = '';
+            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
+                const page = await pdf.getPage(i);
+                const pageText = await page.getTextContent();
+                extractedText += pageText.items.map(item => item.str).join(' ') + '\n\n';
+            }
+            attachedFileContent = extractedText.trim();
+        } catch (error) {
+            attachedFileContent = `Unable to parse PDF file content. File name: ${attachedFileName}`;
+        }
+        return;
+    }
+
     if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
         const reader = new FileReader();
         reader.onload = function(event) {
             attachedFileContent = event.target.result;
-            fileNameDisplay.textContent = attachedFileName;
-            fileIndicator.classList.remove('hidden');
-            fileIndicator.classList.add('flex');
         };
         reader.readAsDataURL(file);
         return;
@@ -1119,9 +1298,6 @@ attachmentInput.addEventListener('change', (e) => {
     const reader = new FileReader();
     reader.onload = function(event) {
         attachedFileContent = event.target.result;
-        fileNameDisplay.textContent = attachedFileName;
-        fileIndicator.classList.remove('hidden');
-        fileIndicator.classList.add('flex');
     };
     reader.readAsText(file);
 });
@@ -1146,6 +1322,9 @@ stopBtn.addEventListener('click', () => {
         currentAbortController.abort();
     }
 });
+
+updateUsageIndicator({});
+
 userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
         e.preventDefault();

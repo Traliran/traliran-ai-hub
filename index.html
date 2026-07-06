@@ -6,6 +6,7 @@
     <title>Traliran AI Hub</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.105/pdf.min.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
@@ -245,11 +246,15 @@
                         </div>
                         <button id="removeFileBtn" class="text-rose-400 hover:text-rose-300 cursor-pointer px-1 font-bold">✕</button>
                     </div>
+                    <div id="usageIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-900/80 border border-gray-800 px-3 py-2 rounded-lg text-xs text-gray-400">
+                        <span id="usageInfo">Tokens: 0 | Cost: ≈ $0.00</span>
+                        <span id="streamingStatus">Streaming inactive</span>
+                    </div>
 
                     <div class="max-w-4xl w-full mx-auto flex flex-col sm:flex-row gap-2 items-end">
-                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text, image or video">
+                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text, image, video or PDF">
                             <span>📎</span>
-                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,image/*,video/*">
+                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,.pdf,image/*,video/*">
                         </label>
 
                         <textarea id="userInput" rows="1" placeholder="Ask a question..." 
