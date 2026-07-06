@@ -144,9 +144,21 @@
                     </div>
                 </div>
 
+                <div class="border-t border-gray-800 pt-3 mt-1 space-y-3">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Appearance</h3>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Theme Preset</label>
+                        <select id="themeSelector" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition">
+                            <option value="default">Default Dark</option>
+                            <option value="cyberpunk">Cyberpunk</option>
+                            <option value="matrix">Matrix</option>
+                            <option value="light">Light Mode</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div class="border-t border-gray-800 pt-3 space-y-3">
                     <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Parameters</h3>
-                    
                     <div>
                         <div class="flex justify-between text-xs text-gray-400 mb-1">
                             <span>Temperature:</span>
@@ -155,7 +167,6 @@
                         <input type="range" id="botTemperature" min="0" max="2" step="0.1" value="0.7" 
                             class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     </div>
-
                     <div>
                         <div class="flex justify-between text-xs text-gray-400 mb-1">
                             <span>Top P:</span>
@@ -164,7 +175,6 @@
                         <input type="range" id="botTopP" min="0" max="1" step="0.05" value="1.0" 
                             class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     </div>
-
                     <div>
                         <div class="flex justify-between text-xs text-gray-400 mb-1">
                             <span>Max Tokens:</span>
@@ -227,9 +237,9 @@
                         </div>
                         <button id="startIntroBtn" class="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-5 rounded-lg text-sm transition cursor-pointer">
                             Launch Interface Guide 🎓
-                        </button>
-                    </div>
-                </div>
+                </button>
+            </div>
+        </div>
 
                 <div class="p-4 bg-gray-900/40 border-t border-gray-900 flex flex-col gap-2">
                     <div id="fileIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs">
@@ -257,9 +267,9 @@
                             <span class="sm:inline hidden">Stop</span>
                             <span class="inline sm:hidden">⏹</span>
                         </button>
-                    </div>
-                </div>
             </div>
+        </div>
+    </div>
 
             <div id="sandboxColumn" class="hidden w-full md:w-[45%] bg-gray-900 border-t md:border-t-0 md:border-l border-gray-800 flex flex-col h-full overflow-hidden absolute md:static inset-0 z-40">
                 <div class="p-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between">

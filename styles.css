@@ -1,23 +1,94 @@
+:root {
+    --bg-main: #030712;
+    --bg-secondary: #111827;
+    --text-main: #f3f4f6;
+    --text-muted: #9ca3af;
+    --accent-color: #34d399;
+    --accent-secondary: #6ee7b7;
+    --accent-hover: #10b981;
+    --border-color: #1f2937;
+    --code-bg: #1f2937;
+    --code-text: #e5e7eb;
+    --code-highlight: #f472b6;
+    --scrollbar-thumb: #4b5563;
+}
+
+.theme-cyberpunk {
+    --bg-main: #0d0221;
+    --bg-secondary: #240b36;
+    --text-main: #00ff9f;
+    --text-muted: #ff00ff;
+    --accent-color: #fdee06;
+    --accent-secondary: #00ffff;
+    --accent-hover: #ff00ff;
+    --border-color: #ff00ff;
+    --code-bg: #1a0a2e;
+    --code-text: #00ffff;
+    --code-highlight: #fdee06;
+    --scrollbar-thumb: #ff00ff;
+}
+
+.theme-matrix {
+    --bg-main: #000000;
+    --bg-secondary: #001100;
+    --text-main: #00ff41;
+    --text-muted: #008f11;
+    --accent-color: #00ff41;
+    --accent-secondary: #00ff41;
+    --accent-hover: #00cc33;
+    --border-color: #003300;
+    --code-bg: #001100;
+    --code-text: #00ff41;
+    --code-highlight: #00ff41;
+    --scrollbar-thumb: #008f11;
+}
+
+.theme-light {
+    --bg-main: #f9fafb;
+    --bg-secondary: #ffffff;
+    --text-main: #111827;
+    --text-muted: #6b7280;
+    --accent-color: #059669;
+    --accent-secondary: #10b981;
+    --accent-hover: #047857;
+    --border-color: #e5e7eb;
+    --code-bg: #f3f4f6;
+    --code-text: #111827;
+    --code-highlight: #db2777;
+    --scrollbar-thumb: #d1d5db;
+}
+
+/* Global Theme Overrides for Tailwind classes */
+body { background-color: var(--bg-main) !important; color: var(--text-main) !important; }
+header, #chatsPanel, #sidebar, #welcomeMessage, #chatbot-message-user, #chatbot-message-assistant, .bg-gray-900 { 
+    background-color: var(--bg-secondary) !important; 
+}
+.border-gray-800, .border-gray-700, .border-gray-900 { 
+    border-color: var(--border-color) !important; 
+}
+.text-gray-400, .text-gray-300 { color: var(--text-muted) !important; }
+.text-emerald-400 { color: var(--accent-color) !important; }
+
 .chat-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
 .chat-scroll::-webkit-scrollbar-track { background: transparent; }
-.chat-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+.chat-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 
 /* Стилизация Markdown */
-.md-content h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; color: #34d399; }
-.md-content h2 { font-size: 1.25rem; font-weight: 600; margin-top: 0.75rem; margin-bottom: 0.5rem; color: #6ee7b7; }
+.md-content h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--accent-color); }
+.md-content h2 { font-size: 1.25rem; font-weight: 600; margin-top: 0.75rem; margin-bottom: 0.5rem; color: var(--accent-secondary); }
 .md-content h3 { font-size: 1.1rem; font-weight: 600; margin-top: 0.5rem; }
 .md-content p { margin-bottom: 0.75rem; line-height: 1.5; }
 .md-content ul { list-style-type: disc; margin-left: 1.25rem; margin-bottom: 0.75rem; }
 .md-content ol { list-style-type: decimal; margin-left: 1.25rem; margin-bottom: 0.75rem; }
 .md-content li { margin-bottom: 0.25rem; }
-.md-content code { background-color: #374151; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.9em; color: #f472b6; }
-.md-content pre { background-color: #1f2937; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; border: 1px solid #374151; position: relative; }
-.md-content pre code { background-color: transparent; padding: 0; color: #e5e7eb; font-size: 0.875rem; }
-.md-content blockquote { border-left: 4px solid #10b981; padding-left: 0.75rem; color: #9ca3af; font-style: italic; margin: 0.75rem 0; }
-.md-content strong { color: #fff; font-weight: 600; }
+.md-content code { background-color: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.9em; color: var(--code-highlight); }
+.md-content pre { background-color: var(--code-bg); padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; border: 1px solid var(--border-color); position: relative; }
+.md-content pre code { background-color: transparent; padding: 0; color: var(--code-text); font-size: 0.875rem; }
+.md-content blockquote { border-left: 4px solid var(--accent-hover); padding-left: 0.75rem; color: var(--text-muted); font-style: italic; margin: 0.75rem 0; }
+.md-content strong { color: var(--text-main); font-weight: 600; }
 .md-content table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; text-align: left; }
-.md-content th, .md-content td { border: 1px solid #374151; padding: 0.5rem; }
-.md-content th { background-color: #2dd4bf20; }
+.md-content th, .md-content td { border: 1px solid var(--border-color); padding: 0.5rem; }
+.md-content th { background-color: var(--accent-color)20; }
 
 /* Стилизация блоков размышления */
 .thinking-block summary { list-style: none; display: flex; align-items: center; justify-content: space-between; }

@@ -54,7 +54,7 @@ const topPInput = document.getElementById('botTopP');
 const topPValue = document.getElementById('topPValue');
 const tokensInput = document.getElementById('botMaxTokens');
 const tokensValue = document.getElementById('tokensValue');
-
+const themeSelector = document.getElementById('themeSelector');
 const helpModal = document.getElementById('helpModal');
 const openHelpBtn = document.getElementById('openHelpBtn');
 const closeHelpModal = document.getElementById('closeHelpModal');
@@ -228,6 +228,10 @@ function loadApiSettings() {
     const savedTokens = localStorage.getItem('gem_tokens') || '2048';
     tokensInput.value = savedTokens; tokensValue.textContent = savedTokens;
 
+    const savedTheme = localStorage.getItem('gem_theme') || 'default';
+    themeSelector.value = savedTheme;
+    applyTheme(savedTheme);
+
     fetchActiveModels();
 }
 
@@ -243,6 +247,18 @@ function saveApiSettings() {
     localStorage.setItem('gem_tokens', tokensInput.value);
     updateStatusCard();
 }
+
+function applyTheme(theme) {
+    document.body.className = `bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden theme-${theme}`;
+    if (theme === 'default') {
+        document.body.classList.remove('theme-cyberpunk', 'theme-matrix', 'theme-light');
+    }
+    localStorage.setItem('gem_theme', theme);
+}
+
+themeSelector.addEventListener('change', (e) => {
+    applyTheme(e.target.value);
+});
 
 function handleProviderChange(provider) {
     const details = PROVIDERS[provider];
