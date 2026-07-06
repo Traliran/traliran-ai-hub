@@ -29,15 +29,15 @@
             
             <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
                 <!-- Кнопка Blog, ведущая на персональный сайт -->
-                <a href="https://traliran.github.io" target="_blank" id="blogBtn" class="bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1.5">
+                <a href="https://traliran.github.io" target="_blank" id="blogBtn" class="hidden lg:flex bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1.5">
                     <span>📝</span> Blog
                 </a>
 
-                <button id="openGroupChatBtn" class="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                <button id="openGroupChatBtn" class="hidden lg:flex bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>👥</span> AI Group Debate
                 </button>
 
-                <button id="openStoreBtn" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                <button id="openStoreBtn" class="hidden lg:flex bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>🏪</span> Assistant Store
                 </button>
 
@@ -49,12 +49,8 @@
                     <span>⚡</span> AI IDE
                 </a>
 
-                <button id="toggleSandboxBtn" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                <button id="toggleSandboxBtn" class="hidden lg:flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>💻</span> Sandbox
-                </button>
-
-                <button id="clearChat" class="bg-rose-600/80 hover:bg-rose-700 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition cursor-pointer shrink-0">
-                    Clear Chat
                 </button>
             </div>
         </div>
@@ -250,7 +246,7 @@
                         <button id="removeFileBtn" class="text-rose-400 hover:text-rose-300 cursor-pointer px-1 font-bold">✕</button>
                     </div>
 
-                    <div class="max-w-4xl w-full mx-auto flex gap-2 items-end">
+                    <div class="max-w-4xl w-full mx-auto flex flex-col sm:flex-row gap-2 items-end">
                         <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text, image or video">
                             <span>📎</span>
                             <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,image/*,video/*">
@@ -259,15 +255,17 @@
                         <textarea id="userInput" rows="1" placeholder="Ask a question..." 
                             class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none max-h-32 chat-scroll min-h-[42px]"></textarea>
                         
-                        <button id="sendBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
-                            <span class="sm:inline hidden">Send</span>
-                            <span class="inline sm:hidden">➤</span>
-                        </button>
-                        <button id="stopBtn" class="hidden bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
-                            <span class="sm:inline hidden">Stop</span>
-                            <span class="inline sm:hidden">⏹</span>
-                        </button>
-            </div>
+                        <div class="flex gap-2 w-full sm:w-auto">
+                            <button id="sendBtn" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                                <span class="sm:inline hidden">Send</span>
+                                <span class="inline sm:hidden">➤</span>
+                            </button>
+                            <button id="stopBtn" class="hidden w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                                <span class="sm:inline hidden">Stop</span>
+                                <span class="inline sm:hidden">⏹</span>
+                            </button>
+                        </div>
+                    </div>
         </div>
     </div>
 

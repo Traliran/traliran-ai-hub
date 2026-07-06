@@ -19,8 +19,8 @@ const tabEditor = document.getElementById('tabEditor');
 const tabPreview = document.getElementById('tabPreview');
 const editorContainer = document.getElementById('editorContainer');
 const previewContainer = document.getElementById('previewContainer');
-const codeEditor = document.getElementById('codeEditor');
-const lineCounter = document.getElementById('lineCounter');
+const codeEditorElement = document.getElementById('codeEditor');
+let codeEditor = null;
 const projectIframe = document.getElementById('projectIframe');
 
 const btnAiGenerate = document.getElementById('btnAiGenerate');
@@ -175,8 +175,8 @@ function initWorkspace() {
 
 function saveWorkspace() {
     // Save active file content first
-    if (activeFileName && projectFiles[activeFileName] !== undefined) {
-        projectFiles[activeFileName] = codeEditor.value;
+    if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
+        projectFiles[activeFileName] = codeEditor.getValue();
     }
     localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
     localStorage.setItem('ide_active_file', activeFileName);
@@ -215,20 +215,23 @@ function renderFileList() {
 }
 
 function selectFile(filename) {
-    if (activeFileName && projectFiles[activeFileName] !== undefined) {
-        projectFiles[activeFileName] = codeEditor.value;
+    if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
+        projectFiles[activeFileName] = codeEditor.getValue();
     }
 
     activeFileName = filename;
     activeFileNameSpan.textContent = filename;
-    codeEditor.value = projectFiles[filename] || "";
-    
-    // Save and re-render file list to update selection styling
     localStorage.setItem('ide_active_file', filename);
     renderFileList();
-    
-    // Update lines Counter
-    updateLineNumbers();
+
+    if (codeEditor) {
+        const fileContent = projectFiles[filename] || "";
+        codeEditor.setValue(fileContent);
+        const model = codeEditor.getModel();
+        if (model) {
+            monaco.editor.setModelLanguage(model, getLanguageForFile(filename));
+        }
+    }
 }
 
 function deleteFile(filename) {
@@ -263,26 +266,46 @@ addNewFileBtn.addEventListener('click', () => {
 });
 
 // Line numbers logic
-function updateLineNumbers() {
-    const lines = codeEditor.value.split('\n');
-    const totalLines = lines.length;
-    let numbersHtml = '';
-    for (let i = 1; i <= totalLines; i++) {
-        numbersHtml += `<div>${i}</div>`;
+function getLanguageForFile(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    switch (ext) {
+        case 'html': return 'html';
+        case 'css': return 'css';
+        case 'js': return 'javascript';
+        case 'json': return 'json';
+        case 'md': return 'markdown';
+        case 'ts': return 'typescript';
+        case 'py': return 'python';
+        default: return 'plaintext';
     }
-    lineCounter.innerHTML = numbersHtml;
 }
 
-codeEditor.addEventListener('input', () => {
-    updateLineNumbers();
-    // Auto save on type
-    projectFiles[activeFileName] = codeEditor.value;
-    localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
-});
+function initializeMonaco() {
+    if (!window.require || !codeEditorElement) return;
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+        codeEditor = monaco.editor.create(codeEditorElement, {
+            value: '',
+            language: getLanguageForFile(activeFileName),
+            theme: 'vs-dark',
+            automaticLayout: true,
+            fontSize: 13,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            formatOnType: true,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+        });
 
-codeEditor.addEventListener('scroll', () => {
-    lineCounter.scrollTop = codeEditor.scrollTop;
-});
+        codeEditor.onDidChangeModelContent(() => {
+            if (activeFileName && projectFiles[activeFileName] !== undefined) {
+                projectFiles[activeFileName] = codeEditor.getValue();
+                localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
+            }
+        });
+
+        selectFile(activeFileName);
+    });
+}
 
 // Assembly & Preview Logic
 function getPreviewHtml() {
@@ -858,8 +881,8 @@ async function handleAiRequest(customPrompt = "") {
 
     renderCopilotMessage('user', userPromptText);
 
-    if (activeFileName && projectFiles[activeFileName] !== undefined) {
-        projectFiles[activeFileName] = codeEditor.value;
+    if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
+        projectFiles[activeFileName] = codeEditor.getValue();
         saveWorkspace();
     }
 
@@ -930,9 +953,8 @@ function applyProposedChanges() {
     renderFileList();
     
     // Refresh current selected file editor
-    if (projectFiles[activeFileName] !== undefined) {
-        codeEditor.value = projectFiles[activeFileName];
-        updateLineNumbers();
+if (projectFiles[activeFileName] !== undefined && codeEditor) {
+                codeEditor.setValue(projectFiles[activeFileName]);
     }
 
     proposedChanges = null;
@@ -994,5 +1016,6 @@ aiInput.addEventListener('input', function() {
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     initWorkspace();
+    initializeMonaco();
 });
 

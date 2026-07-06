@@ -95,7 +95,6 @@ const welcomeMessage = document.getElementById('welcomeMessage');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const stopBtn = document.getElementById('stopBtn');
-const clearChatBtn = document.getElementById('clearChat');
 const chatsList = document.getElementById('chatsList');
 const newChatBtn = document.getElementById('newChatBtn');
 const attachmentInput = document.getElementById('attachmentInput');
@@ -1055,14 +1054,6 @@ topPInput.addEventListener('input', (e) => { topPValue.textContent = e.target.va
 tokensInput.addEventListener('input', (e) => { tokensValue.textContent = e.target.value; saveApiSettings(); });
 
 refreshModelsBtn.addEventListener('click', fetchActiveModels);
-clearChatBtn.addEventListener('click', () => {
-    const session = sessions.find(s => s.id === currentSessionId);
-    if (session) {
-        session.messages = [];
-        saveSessionsToStorage();
-        loadActiveSessionChat();
-    }
-});
 newChatBtn.addEventListener('click', createNewSession);
 
 toggleChatsBtn.addEventListener('click', () => {
