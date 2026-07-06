@@ -60,11 +60,23 @@ const openHelpBtn = document.getElementById('openHelpBtn');
 const closeHelpModal = document.getElementById('closeHelpModal');
 const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
 const startIntroBtn = document.getElementById('startIntroBtn');
+const openNotesBtn = document.getElementById('openNotesBtn');
+const notesPage = document.getElementById('notesPage');
+const closeNotesPage = document.getElementById('closeNotesPage');
+const newNoteBtn = document.getElementById('newNoteBtn');
+const notesList = document.getElementById('notesList');
+const notesSearch = document.getElementById('notesSearch');
+const noteTitle = document.getElementById('noteTitle');
+const noteContent = document.getElementById('noteContent');
+const notePreview = document.getElementById('notePreview');
+const toggleNotePreview = document.getElementById('toggleNotePreview');
+const deleteNoteBtn = document.getElementById('deleteNoteBtn');
+const noteTagsContainer = document.getElementById('noteTagsContainer');
+const aiComplementBtn = document.getElementById('aiComplementBtn');
 const storeModal = document.getElementById('storeModal');
 const openStoreBtn = document.getElementById('openStoreBtn');
 const closeStoreModal = document.getElementById('closeStoreModal');
 const paidBotsContainer = document.getElementById('paidBotsContainer');
-
 const openMultiModelBtn = document.getElementById('openMultiModelBtn');
 const multiModelModal = document.getElementById('multiModelModal');
 const closeMultiModelModal = document.getElementById('closeMultiModelModal');
@@ -72,13 +84,11 @@ const multiModelList = document.getElementById('multiModelList');
 const saveMultiModelsBtn = document.getElementById('saveMultiModels');
 const clearMultiModelsBtn = document.getElementById('clearMultiModels');
 const multiModelBadge = document.getElementById('multiModelBadge');
-
 const openGroupChatBtn = document.getElementById('openGroupChatBtn');
 const groupChatModal = document.getElementById('groupChatModal');
 const closeGroupChatModal = document.getElementById('closeGroupChatModal');
 const groupIdeaInput = document.getElementById('groupIdeaInput');
 const startGroupDebateBtn = document.getElementById('startGroupDebateBtn');
-
 const toggleSandboxBtn = document.getElementById('toggleSandboxBtn');
 const sandboxColumn = document.getElementById('sandboxColumn');
 const closeSandboxBtn = document.getElementById('closeSandboxBtn');
@@ -89,7 +99,6 @@ const sandboxPreviewContainer = document.getElementById('sandboxPreviewContainer
 const sandboxCode = document.getElementById('sandboxCode');
 const sandboxIframe = document.getElementById('sandboxIframe');
 const runCodeBtn = document.getElementById('runCodeBtn');
-
 const chatWindow = document.getElementById('chatWindow');
 const welcomeMessage = document.getElementById('welcomeMessage');
 const userInput = document.getElementById('userInput');
@@ -130,6 +139,9 @@ const PROVIDERS = {
     ollama: { url: 'http://localhost:11434/v1', hasKey: false, type: 'openai' },
     llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
 };
+
+let notes = [];
+let currentNoteId = null;
 
 function safeEncode(str) {
     if (!str) return '';
@@ -497,19 +509,19 @@ async function fetchActiveModels() {
 }
 
 function copyTextToClipboard(text, successMessage = 'Copied to clipboard!') {
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    textArea.style.position = 'fixed';
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
+    const textPlain = document.createElement('textarea');
+    textPlain.value = text;
+    textPlain.style.position = 'fixed';
+    document.body.appendChild(textPlain);
+    textPlain.focus();
+    textPlain.select();
     try {
         document.execCommand('copy');
         alert(successMessage);
     } catch (err) {
         console.error(err);
     }
-    document.body.removeChild(textArea);
+    document.body.removeChild(textPlain);
 }
 
 function runSandboxCode() {
@@ -588,6 +600,180 @@ function showIntroStep() {
 
 startIntroBtn.addEventListener('click', startIntro);
 
+function loadNotes() {
+    const saved = localStorage.getItem('gem_notes');
+    if (saved) {
+        try { notes = JSON.parse(saved); } catch (e) { notes = []; }
+    }
+    if (notes.length === 0) {
+        createNewNote();
+    }
+    renderNotesList();
+}
+
+function saveNotesToStorage() {
+    localStorage.setItem('gem_notes', JSON.stringify(notes));
+}
+function createNewNote() {
+    const id = 'note_' + Date.now();
+    const newNote = {
+        id,
+        title: '',
+        content: '',
+        tags: [],
+        updatedAt: Date.now()
+    };
+    notes.unshift(newNote);
+    currentNoteId = id;
+        saveNotesToStorage();
+        renderNotesList();
+    openNote(id);
+}
+
+function openNote(id) {
+    currentNoteId = id;
+    const note = notes.find(n => n.id === id);
+    if (note) {
+        noteTitle.value = note.title;
+        noteContent.value = note.content;
+        updateNoteTags();
+    }
+    renderNotesList();
+}
+
+function updateNoteContent() {
+    if (!currentNoteId) return;
+    const note = notes.find(n => n.id === currentNoteId);
+    if (note) {
+        note.title = noteTitle.value;
+        note.content = noteContent.value;
+        note.updatedAt = Date.now();
+
+        // Auto-tagging logic
+        const tagRegex = /#(\w+)/g;
+        const tags = [...note.content.matchAll(tagRegex)].map(match => match[1]);
+        note.tags = [...new Set(tags)];
+
+        saveNotesToStorage();
+        renderNotesList();
+        updateNoteTags();
+    }
+}
+
+function updateNoteTags() {
+    if (!currentNoteId) return;
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note) return;
+
+    noteTagsContainer.innerHTML = '';
+    note.tags.forEach(tag => {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'text-[10px] bg-emerald-900/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full';
+        tagEl.textContent = `#${tag}`;
+        noteTagsContainer.appendChild(tagEl);
+    });
+}
+
+function renderNotesList() {
+    const search = notesSearch.value.toLowerCase();
+    notesList.innerHTML = '';
+
+    const filtered = notes.filter(n =>
+        n.title.toLowerCase().includes(search) ||
+        n.content.toLowerCase().includes(search) ||
+        n.tags.some(t => t.toLowerCase().includes(search.replace('#', '')))
+    );
+
+    filtered.forEach(note => {
+        const isActive = note.id === currentNoteId;
+        const div = document.createElement('div');
+        div.className = `p-3 rounded-lg cursor-pointer transition flex flex-col gap-1 ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
+        div.onclick = () => openNote(note.id);
+
+        div.innerHTML = `
+            <span class="text-xs font-bold truncate">${note.title || 'Untitled Note'}</span>
+            <span class="text-[10px] text-gray-500 truncate">${note.content.slice(0, 30).replace(/\n/g, ' ')}...</span>
+        `;
+        notesList.appendChild(div);
+    });
+}
+
+// AI Complement functionality
+async function complementNote() {
+    console.log('AI Complement button clicked');
+    if (!currentNoteId) {
+        console.warn('No active note selected');
+        return;
+    }
+
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note || !note.content) {
+        console.warn('Note is empty, nothing to complement');
+        alert('Please write some text in the note first!');
+        return;
+    }
+
+    const providerName = apiProvider.value;
+    const hasKey = PROVIDERS[providerName].hasKey;
+    const apiKey = apiKeyValue.value.trim();
+    const endpoint = apiEndpoint.value.trim();
+    const model = botModelSelect.value;
+
+    console.log('AI Config:', { providerName, model, hasKey });
+
+    if (hasKey && !apiKey) {
+        alert('Please enter your API key first!');
+        openSidebarUniversal();
+        return;
+    }
+    if (!model) {
+        alert('Please select an AI model in settings first!');
+        openSidebarUniversal();
+        return;
+    }
+
+    const originalText = note.content;
+    // Visual feedback
+    const placeholder = '\n\n(AI is thinking...)';
+    noteContent.value += placeholder;
+    updateNoteContent();
+    try {
+        console.log('Calling AI API for complement...');
+        const systemPrompt = `You are a helpful note-completion assistant. Your task is to expand and complement the current note. Use Markdown formatting. Keep the tone consistent with the original text. Do not repeat the existing text, just add meaningful continuation or detailed expansion. Answer in the same language as the note content.`;
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Please complement and expand this note:\n\n${originalText}` }
+        ];
+
+        const response = await fetchSingleCompletion(endpoint, apiKey, hasKey, {
+            model,
+            messages,
+            temperature: 0.7,
+            max_tokens: 5000
+        }, providerName);
+
+        console.log('AI Response received:', response);
+
+        const resultData = extractAssistantContent(response, providerName);
+        const resultText = resultData.content;
+
+        if (!resultText) {
+            throw new Error('AI returned an empty response');
+        }
+
+        // Remove the "thinking" placeholder and add result
+        const textWithoutPlaceholder = noteContent.value.replace(placeholder, '');
+        noteContent.value = textWithoutPlaceholder + '\n\n' + resultText;
+        updateNoteContent();
+        console.log('Note successfully complemented');
+        } catch (error) {
+        console.error('AI Complement Error:', error);
+        alert('AI Complement failed: ' + error.message);
+        noteContent.value = noteContent.value.replace(placeholder, '');
+        updateNoteContent();
+        }
+}
+
 function renderMessageToDOM(role, content, botName, index) {
     welcomeMessage.classList.add('hidden');
     const messageDiv = document.createElement('div');
@@ -625,8 +811,8 @@ function renderMessageToDOM(role, content, botName, index) {
                         </div>
                     </details>
                 `;
-            }
         }
+}
 
         const customRenderer = new marked.Renderer();
         customRenderer.code = function(codeArg, language) {
@@ -1045,8 +1231,8 @@ async function triggerAiResponse(session) {
             chatWindow.appendChild(errorDiv);
         }
     } finally {
-    userInput.disabled = false;
-    sendBtn.disabled = false;
+        userInput.disabled = false;
+        sendBtn.disabled = false;
         sendBtn.classList.remove('hidden');
         stopBtn.classList.add('hidden');
         currentAbortController = null;
@@ -1073,11 +1259,11 @@ async function sendMessage() {
                     { type: 'text', text: text || `Attached ${attachedFileType.startsWith('image/') ? 'image' : 'video'}: ${attachedFileName}` },
                     { type: attachedFileType.startsWith('image/') ? 'image_url' : 'video_url', url: attachedFileContent }
                 ]
-        };
-    } else {
+            };
+        } else {
             fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
+        }
     }
-}
 
     userInput.value = '';
     userInput.style.height = 'auto';
@@ -1336,6 +1522,46 @@ openHelpBtn.addEventListener('click', () => { helpModal.classList.remove('hidden
 closeHelpModal.addEventListener('click', () => { helpModal.classList.add('hidden'); });
 closeHelpModalBtn.addEventListener('click', () => { helpModal.classList.add('hidden'); });
 
+openNotesBtn.addEventListener('click', () => {
+    notesPage.classList.remove('hidden');
+    loadNotes();
+});
+closeNotesPage.addEventListener('click', () => notesPage.classList.add('hidden'));
+newNoteBtn.addEventListener('click', createNewNote);
+noteTitle.addEventListener('input', updateNoteContent);
+noteContent.addEventListener('input', updateNoteContent);
+notesSearch.addEventListener('input', renderNotesList);
+deleteNoteBtn.addEventListener('click', () => {
+    if (!currentNoteId) return;
+    if (confirm('Delete this note?')) {
+        notes = notes.filter(n => n.id !== currentNoteId);
+        saveNotesToStorage();
+        if (notes.length > 0) {
+            openNote(notes[0].id);
+        } else {
+            currentNoteId = null;
+            noteTitle.value = '';
+            noteContent.value = '';
+            updateNoteTags();
+        }
+        renderNotesList();
+    }
+});
+toggleNotePreview.addEventListener('click', () => {
+    const isPreview = !notePreview.classList.contains('hidden');
+    if (isPreview) {
+        notePreview.classList.add('hidden');
+        noteContent.classList.remove('hidden');
+        toggleNotePreview.textContent = '👁️ Preview';
+    } else {
+        notePreview.classList.remove('hidden');
+        noteContent.classList.add('hidden');
+        toggleNotePreview.textContent = 'Close Preview';
+        notePreview.innerHTML = marked.parse(noteContent.value);
+    }
+});
+aiComplementBtn.addEventListener('click', complementNote);
+
 exportJsonBtn.addEventListener('click', () => {
     const config = {
         provider: apiProvider.value,
@@ -1401,5 +1627,6 @@ function updateStatusCard() {
 document.addEventListener('DOMContentLoaded', () => {
     loadApiSettings();
     loadSessions();
+    loadNotes();
 });
 
