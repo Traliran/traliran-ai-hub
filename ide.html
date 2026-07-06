@@ -70,24 +70,68 @@
 
         <!-- Left: File Explorer & File Actions -->
         <section class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
-            <div class="p-3 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
-                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">📁 File Explorer</h2>
-                <button id="addNewFileBtn" class="text-violet-400 hover:text-violet-300 font-bold text-sm px-2 py-0.5 rounded hover:bg-gray-800 transition" title="New File">+ Add</button>
-                </div>
-
-            <!-- File List -->
-            <div id="fileList" class="flex-1 overflow-y-auto p-2 space-y-1 chat-scroll">
-                <!-- Populated via JS -->
+            <!-- Tabs: Files / Git -->
+            <div class="flex border-b border-gray-800">
+                <button id="tabFiles" class="flex-1 px-3 py-2 text-xs font-bold text-violet-400 bg-gray-950 border-b-2 border-violet-500 transition">
+                    📁 Files
+                </button>
+                <button id="tabGit" class="flex-1 px-3 py-2 text-xs font-bold text-gray-500 hover:text-gray-300 transition border-b-2 border-transparent">
+                    🔀 Git
+                </button>
             </div>
 
-            <!-- Download Project -->
-            <div class="p-3 border-t border-gray-800 bg-gray-900/50 space-y-2">
-                <button id="downloadZipBtn" class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs font-semibold py-2 rounded-lg transition flex items-center justify-center gap-1.5">
-                    📥 Download Project files
-                </button>
-                <button id="resetProjectBtn" class="w-full bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/40 text-rose-300 text-xs py-1.5 rounded-lg transition text-center">
-                    Reset Workspace
-                </button>
+            <!-- FILES TAB -->
+            <div id="filesPanel" class="flex-1 flex flex-col">
+                <div class="p-3 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">📁 File Explorer</h2>
+                    <button id="addNewFileBtn" class="text-violet-400 hover:text-violet-300 font-bold text-sm px-2 py-0.5 rounded hover:bg-gray-800 transition" title="New File">+ Add</button>
+                </div>
+
+                <!-- File List -->
+                <div id="fileList" class="flex-1 overflow-y-auto p-2 space-y-1 chat-scroll">
+                    <!-- Populated via JS -->
+                </div>
+
+                <!-- Download Project -->
+                <div class="p-3 border-t border-gray-800 bg-gray-900/50 space-y-2">
+                    <button id="downloadZipBtn" class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs font-semibold py-2 rounded-lg transition flex items-center justify-center gap-1.5">
+                        📥 Download Project files
+                    </button>
+                    <button id="resetProjectBtn" class="w-full bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/40 text-rose-300 text-xs py-1.5 rounded-lg transition text-center">
+                        Reset Workspace
+                    </button>
+                </div>
+            </div>
+
+            <!-- GIT TAB -->
+            <div id="gitPanel" class="hidden flex-1 flex flex-col">
+                <div class="p-3 border-b border-gray-800 bg-gray-900/50">
+                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">🔀 Git Control</h2>
+                </div>
+
+                <!-- Commit Button -->
+                <div class="p-3 border-b border-gray-800 bg-gray-950/40 space-y-2">
+                    <input id="commitMessage" type="text" placeholder="Commit message..." 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-violet-500 text-gray-100 placeholder-gray-600">
+                    <button id="createCommitBtn" class="w-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold py-2 rounded-lg transition cursor-pointer">
+                        💾 Create Commit
+                    </button>
+                </div>
+
+                <!-- History List -->
+                <div id="gitHistory" class="flex-1 overflow-y-auto p-2 space-y-1 chat-scroll">
+                    <!-- Populated via JS -->
+                </div>
+
+                <!-- Git Stats -->
+                <div class="p-3 border-t border-gray-800 bg-gray-900/50">
+                    <div class="text-[11px] text-gray-400 space-y-1">
+                        <div>Commits: <span id="commitCount" class="text-violet-400 font-bold">0</span></div>
+                        <button id="clearGitBtn" class="mt-2 w-full bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/40 text-rose-300 text-xs py-1 rounded transition">
+                            Clear History
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -128,8 +172,7 @@
                     <h2 class="text-xs font-black text-violet-400 uppercase tracking-wider">AI Architect</h2>
                 </div>
                 <div class="flex gap-2 items-center">
-                    <span id="callCountIndicator" class="text-[10px] bg-violet-950 text-violet-300 border border-violet-800/50 px-2 py-0.5 rounded font-mono">API Calls: 0/5</span>
-                    <span class="text-[10px] bg-violet-950 text-violet-300 border border-violet-800/50 px-2 py-0.5 rounded font-mono">Up to 5 API calls</span>
+                    <span id="callCountIndicator" class="text-[10px] bg-violet-950 text-violet-300 border border-violet-800/50 px-2 py-0.5 rounded font-mono">API Calls: ∞</span>
                 </div>
             </div>
 
