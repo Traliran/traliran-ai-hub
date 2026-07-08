@@ -899,7 +899,7 @@ function updateUsageIndicator({ tokens = 0, cost = 0, streaming = false } = {}) 
     if (!usageInfo || !streamingStatus) return;
     const wrapper = usageInfo.parentElement;
     if (tokens || streaming) {
-        usageInfo.textContent = `Tokens: ${tokens} | Cost: ≈ ${formatUsd(cost)}`;
+        usageInfo.textContent = `Tokens: ${tokens}`;
         streamingStatus.textContent = streaming ? 'Streaming active' : 'Streaming inactive';
         if (wrapper) wrapper.classList.remove('hidden');
     } else {
