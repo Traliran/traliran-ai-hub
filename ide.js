@@ -3,6 +3,8 @@ let projectFiles = {};
 let activeFileName = "index.html";
 let proposedChanges = null;
 let aiApiCallCount = 0;
+let selectedFilesForAI = {}; // Track which files to send to AI
+let gitCommits = []; // Git history
 
 // DOM Elements
 const apiProvider = document.getElementById('apiProvider');
@@ -17,10 +19,19 @@ const resetProjectBtn = document.getElementById('resetProjectBtn');
 const activeFileNameSpan = document.getElementById('activeFileName');
 const tabEditor = document.getElementById('tabEditor');
 const tabPreview = document.getElementById('tabPreview');
+const tabFiles = document.getElementById('tabFiles');
+const tabGit = document.getElementById('tabGit');
+const filesPanel = document.getElementById('filesPanel');
+const gitPanel = document.getElementById('gitPanel');
+const commitMessage = document.getElementById('commitMessage');
+const createCommitBtn = document.getElementById('createCommitBtn');
+const gitHistory = document.getElementById('gitHistory');
+const commitCount = document.getElementById('commitCount');
+const clearGitBtn = document.getElementById('clearGitBtn');
 const editorContainer = document.getElementById('editorContainer');
 const previewContainer = document.getElementById('previewContainer');
-const codeEditor = document.getElementById('codeEditor');
-const lineCounter = document.getElementById('lineCounter');
+const codeEditorElement = document.getElementById('codeEditor');
+let codeEditor = null;
 const projectIframe = document.getElementById('projectIframe');
 
 const btnAiGenerate = document.getElementById('btnAiGenerate');
@@ -30,6 +41,7 @@ const btnAiFix = document.getElementById('btnAiFix');
 const aiChatWindow = document.getElementById('aiChatWindow');
 const aiInput = document.getElementById('aiInput');
 const aiSendBtn = document.getElementById('aiSendBtn');
+const aiStopBtn = document.getElementById('aiStopBtn');
 const changesIndicator = document.getElementById('changesIndicator');
 const applyChangesBtn = document.getElementById('applyChangesBtn');
 const keyWarningModal = document.getElementById('keyWarningModal');
@@ -43,6 +55,8 @@ const modalEndpointContainer = document.getElementById('modalEndpointContainer')
 const modalApiEndpoint = document.getElementById('modalApiEndpoint');
 const modalSaveBtn = document.getElementById('modalSaveBtn');
 const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+let currentAiAbortController = null;
 
 const PROVIDERS = {
     groq: { url: 'https://api.groq.com/openai/v1', hasKey: true, type: 'openai' },
@@ -140,6 +154,7 @@ if (actionBtn) {
 // Markdown support for copilot text
 marked.use({ breaks: true, gfm: true });
 
+// Initialize workspace with Git history
 function initWorkspace() {
     const saved = localStorage.getItem('ide_project_files');
     if (saved) {
@@ -151,6 +166,32 @@ function initWorkspace() {
     } else {
         projectFiles = { ...DEFAULT_FILES };
     }
+    
+    // Load git commits
+    const savedGit = localStorage.getItem('ide_git_commits');
+    if (savedGit) {
+        try {
+            gitCommits = JSON.parse(savedGit);
+        } catch (e) {
+            gitCommits = [];
+        }
+    }
+    
+    // Load selected files for AI
+    const savedSelected = localStorage.getItem('ide_selected_files_for_ai');
+    if (savedSelected) {
+        try {
+            selectedFilesForAI = JSON.parse(savedSelected);
+        } catch (e) {
+            selectedFilesForAI = {};
+        }
+    }
+    // By default, all files are selected
+    Object.keys(projectFiles).forEach(filename => {
+        if (!(filename in selectedFilesForAI)) {
+            selectedFilesForAI[filename] = true;
+        }
+    });
     
     // Fallback if index.html is missing
     if (!projectFiles["index.html"]) {
@@ -166,34 +207,54 @@ function initWorkspace() {
     }
 
     renderFileList();
+    renderGitHistory();
     selectFile(activeFileName);
     checkApiConfiguration();
 }
 
 function saveWorkspace() {
     // Save active file content first
-    if (activeFileName && projectFiles[activeFileName] !== undefined) {
-        projectFiles[activeFileName] = codeEditor.value;
+    if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
+        projectFiles[activeFileName] = codeEditor.getValue();
     }
     localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
     localStorage.setItem('ide_active_file', activeFileName);
 }
 
-// Render File List with conditional delete option
+// Render File List with conditional delete option & checkboxes for AI context
 function renderFileList() {
     fileList.innerHTML = '';
     Object.keys(projectFiles).sort().forEach(filename => {
         const isActive = filename === activeFileName;
+        const isSelectedForAI = selectedFilesForAI[filename] !== false; // Default to true
+        
         const div = document.createElement('div');
-        div.className = `group flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${
+        div.className = `group flex items-center justify-between p-2 rounded-lg transition ${
             isActive ? 'bg-violet-600/20 border border-violet-500/40 text-white' : 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'
         }`;
-        div.onclick = () => selectFile(filename);
 
+        // Checkbox for AI context selection
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = isSelectedForAI;
+        checkbox.className = 'w-3.5 h-3.5 mr-1.5 cursor-pointer rounded accent-violet-500';
+        checkbox.addEventListener('change', (e) => {
+            e.stopPropagation();
+            selectedFilesForAI[filename] = e.target.checked;
+            localStorage.setItem('ide_selected_files_for_ai', JSON.stringify(selectedFilesForAI));
+        });
+
+        // File name
         const nameSpan = document.createElement('span');
-        nameSpan.className = 'text-xs font-mono truncate flex-1';
+        nameSpan.className = 'text-xs font-mono truncate flex-1 cursor-pointer';
         nameSpan.textContent = filename;
+        nameSpan.style.marginLeft = '0.25rem';
+        nameSpan.onclick = (e) => {
+            e.stopPropagation();
+            selectFile(filename);
+        };
 
+        // Delete button
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-300 px-1 text-[11px] transition cursor-pointer';
         deleteBtn.textContent = '🗑️';
@@ -202,6 +263,7 @@ function renderFileList() {
             deleteFile(filename);
         };
 
+        div.appendChild(checkbox);
         div.appendChild(nameSpan);
         // Prevent deletion of index.html to maintain project sanity
         if (filename !== "index.html") {
@@ -212,20 +274,23 @@ function renderFileList() {
 }
 
 function selectFile(filename) {
-    if (activeFileName && projectFiles[activeFileName] !== undefined) {
-        projectFiles[activeFileName] = codeEditor.value;
+    if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
+        projectFiles[activeFileName] = codeEditor.getValue();
     }
 
     activeFileName = filename;
     activeFileNameSpan.textContent = filename;
-    codeEditor.value = projectFiles[filename] || "";
-    
-    // Save and re-render file list to update selection styling
     localStorage.setItem('ide_active_file', filename);
     renderFileList();
-    
-    // Update lines Counter
-    updateLineNumbers();
+
+    if (codeEditor) {
+        const fileContent = projectFiles[filename] || "";
+        codeEditor.setValue(fileContent);
+        const model = codeEditor.getModel();
+        if (model) {
+            monaco.editor.setModelLanguage(model, getLanguageForFile(filename));
+        }
+    }
 }
 
 function deleteFile(filename) {
@@ -260,26 +325,46 @@ addNewFileBtn.addEventListener('click', () => {
 });
 
 // Line numbers logic
-function updateLineNumbers() {
-    const lines = codeEditor.value.split('\n');
-    const totalLines = lines.length;
-    let numbersHtml = '';
-    for (let i = 1; i <= totalLines; i++) {
-        numbersHtml += `<div>${i}</div>`;
+function getLanguageForFile(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    switch (ext) {
+        case 'html': return 'html';
+        case 'css': return 'css';
+        case 'js': return 'javascript';
+        case 'json': return 'json';
+        case 'md': return 'markdown';
+        case 'ts': return 'typescript';
+        case 'py': return 'python';
+        default: return 'plaintext';
     }
-    lineCounter.innerHTML = numbersHtml;
 }
 
-codeEditor.addEventListener('input', () => {
-    updateLineNumbers();
-    // Auto save on type
-    projectFiles[activeFileName] = codeEditor.value;
-    localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
-});
+function initializeMonaco() {
+    if (!window.require || !codeEditorElement) return;
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+        codeEditor = monaco.editor.create(codeEditorElement, {
+            value: '',
+            language: getLanguageForFile(activeFileName),
+            theme: 'vs-dark',
+            automaticLayout: true,
+            fontSize: 13,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            formatOnType: true,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+        });
 
-codeEditor.addEventListener('scroll', () => {
-    lineCounter.scrollTop = codeEditor.scrollTop;
-});
+        codeEditor.onDidChangeModelContent(() => {
+            if (activeFileName && projectFiles[activeFileName] !== undefined) {
+                projectFiles[activeFileName] = codeEditor.getValue();
+                localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
+            }
+        });
+
+        selectFile(activeFileName);
+    });
+}
 
 // Assembly & Preview Logic
 function getPreviewHtml() {
@@ -316,6 +401,7 @@ function getPreviewHtml() {
 function runPreview() {
     const content = getPreviewHtml();
     projectIframe.srcdoc = content;
+    setupErrorListener(); // Initialize error detection for this preview
 }
 
 // Tab Switches
@@ -520,7 +606,7 @@ async function fetchActiveModels() {
 refreshModelsBtn.addEventListener('click', fetchActiveModels);
 
 // API Core Call Integration (Same as chat, optimized to 1 API Call)
-async function fetchCompletion(messages) {
+async function fetchCompletion(messages, signal) {
     const providerName = apiProvider.value;
     const provider = PROVIDERS[providerName] || PROVIDERS.openai;
     const hasKey = provider.hasKey;
@@ -563,7 +649,8 @@ async function fetchCompletion(messages) {
         const response = await fetch(`${endpoint}/messages`, {
             method: 'POST',
             headers,
-            body: JSON.stringify(anthropicPayload)
+            body: JSON.stringify(anthropicPayload),
+            signal
         });
 
         if (!response.ok) {
@@ -587,7 +674,8 @@ async function fetchCompletion(messages) {
     const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(bodyPayload)
+        body: JSON.stringify(bodyPayload),
+        signal
     });
 
     if (!response.ok) {
@@ -613,7 +701,7 @@ function extractAiResponse(response) {
 function setAiCallCount(count) {
     aiApiCallCount = count;
     if (callCountIndicator) {
-        callCountIndicator.textContent = `API Calls: ${count}/5`;
+        callCountIndicator.textContent = `API Calls: ${count}`;
     }
 }
 
@@ -625,10 +713,95 @@ function tryParseJson(value) {
     }
 }
 
+// Diff generation (for selective updates & token savings)
+function generateDiff(oldContent, newContent) {
+    const oldLines = oldContent.split('\n');
+    const newLines = newContent.split('\n');
+    const diff = [];
+    let oldIndex = 0, newIndex = 0;
+
+    // Simple line-by-line diff (not a full unified diff, but close enough)
+    const maxLines = Math.max(oldLines.length, newLines.length);
+    for (let i = 0; i < maxLines; i++) {
+        const oldLine = oldLines[i] || '';
+        const newLine = newLines[i] || '';
+        
+        if (oldLine !== newLine) {
+            if (oldLine) diff.push(`- ${oldLine}`);
+            if (newLine) diff.push(`+ ${newLine}`);
+        } else {
+            diff.push(`  ${oldLine}`);
+        }
+    }
+    return diff.join('\n');
+}
+
+// Apply diff to file content
+function applyDiff(oldContent, diffText) {
+    try {
+        const lines = diffText.split('\n');
+        const result = [];
+        
+        for (const line of lines) {
+            if (line.startsWith('- ')) {
+                // Remove line (skip it)
+                continue;
+            } else if (line.startsWith('+ ')) {
+                // Add line
+                result.push(line.substring(2));
+            } else if (line.startsWith('  ')) {
+                // Keep line
+                result.push(line.substring(2));
+            }
+        }
+        return result.join('\n');
+    } catch (e) {
+        console.error('Diff apply error:', e);
+        return oldContent; // Fallback to original
+    }
+}
+
+// Parse diff format: <<<DIFF_START: file>>>\n@@ ...diff... \n<<<DIFF_END>>>
+function parseDiffFiles(responseText) {
+    const diffRegex = /<<<DIFF_START:\s*(.*?)\s*>>>([\s\S]*?)<<<DIFF_END>>>/g;
+    let match;
+    const extractedDiffs = {};
+
+    while ((match = diffRegex.exec(responseText)) !== null) {
+        const filePath = match[1].trim();
+        let diffContent = match[2];
+        
+        if (diffContent.startsWith('\r\n')) diffContent = diffContent.substring(2);
+        else if (diffContent.startsWith('\n')) diffContent = diffContent.substring(1);
+        if (diffContent.endsWith('\r\n')) diffContent = diffContent.substring(0, diffContent.length - 2);
+        else if (diffContent.endsWith('\n')) diffContent = diffContent.substring(0, diffContent.length - 1);
+
+        extractedDiffs[filePath] = diffContent;
+    }
+    return extractedDiffs;
+}
+
+// Convert diffs to full file content
+function applyDiffsToFiles(diffsByFile) {
+    const resultFiles = {};
+    Object.entries(diffsByFile).forEach(([filepath, diffContent]) => {
+        if (projectFiles[filepath]) {
+            resultFiles[filepath] = applyDiff(projectFiles[filepath], diffContent);
+        } else {
+            // If file doesn't exist, treat diff lines starting with + as new content
+            const lines = diffContent.split('\n').filter(l => l.startsWith('+ ')).map(l => l.substring(2));
+            resultFiles[filepath] = lines.join('\n');
+        }
+    });
+    return resultFiles;
+}
+
 function stripFileMarkers(responseText) {
     return responseText
         .replace(/<<<FILE_START:\s*.*?\s*>>>([\s\S]*?)<<<FILE_END>>>/g, '')
+        .replace(/<<<DIFF_START:\s*.*?\s*>>>([\s\S]*?)<<<DIFF_END>>>/g, '')
         .replace(/```\w*\s*<<<FILE_START[\s\S]*?<<<FILE_END>>>\s*```/g, '')
+        .replace(/```\w*\s*<<<DIFF_START[\s\S]*?<<<DIFF_END>>>\s*```/g, '')
         .trim();
 }
 
@@ -721,6 +894,16 @@ function parseAndExtractFiles(responseText) {
         };
     }
 
+    // Try to parse diffs (new feature)
+    const diffTags = parseDiffFiles(responseText);
+    if (Object.keys(diffTags).length > 0) {
+        const appliedFiles = applyDiffsToFiles(diffTags);
+        return {
+            cleanText: stripFileMarkers(responseText),
+            files: appliedFiles
+        };
+    }
+
     const jsonFiles = parseJsonFileInstructions(responseText);
     if (Object.keys(jsonFiles).length > 0) {
         return {
@@ -752,12 +935,21 @@ function parseAndExtractFiles(responseText) {
 }
 
 async function runAiAgentRequest(userPromptText) {
-    const maxCalls = 5;
+    const maxCalls = 999;
     let attemptPrompt = userPromptText;
+    
+    // Get only selected files for AI context
+    const selectedFiles = {};
+    Object.entries(projectFiles).forEach(([filename, content]) => {
+        if (selectedFilesForAI[filename] !== false) {
+            selectedFiles[filename] = content;
+        }
+    });
+    
     const baseSystemPrompt = `You are Traliran AI operating in a browser IDE. You have full access to the workspace files and can modify or create files directly.
 
 Current workspace files:
-${Object.entries(projectFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
+${Object.entries(selectedFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
 
 Active file: ${activeFileName}
 
@@ -775,17 +967,22 @@ Do not include any extra text outside of the file output blocks unless you are p
             { role: 'user', content: attemptPrompt }
         ];
 
-        const response = await fetchCompletion(messages);
-        const rawText = extractAiResponse(response);
-        const parsed = parseAndExtractFiles(rawText);
+        try {
+            const response = await fetchCompletion(messages, currentAiAbortController.signal);
+            const rawText = extractAiResponse(response);
+            const parsed = parseAndExtractFiles(rawText);
 
-        lastResult = { cleanText: parsed.cleanText, files: parsed.files, rawText };
-        if (Object.keys(parsed.files).length > 0) {
-            return { ...lastResult, calls: attempt };
+            lastResult = { cleanText: parsed.cleanText, files: parsed.files, rawText };
+            if (Object.keys(parsed.files).length > 0) {
+                return { ...lastResult, calls: attempt };
+            }
+    } catch (e) {
+            if (e.name === 'AbortError') throw e;
+            // If one attempt fails, we might try the next one unless it's an abort
         }
 
         if (attempt < maxCalls) {
-            attemptPrompt = `The previous response did not contain any parseable file updates. Please resend the updated file contents using either the exact <<<FILE_START: filename>>>...<<<FILE_END>>> format or a valid JSON object with a top-level \"files\" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${rawText}`;
+            attemptPrompt = `The previous response did not contain any parseable file updates. Please resend the updated file contents using either the exact <<<FILE_START: filename>>>...<<<FILE_END>>> format or a valid JSON object with a top-level \"files\" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${lastResult.rawText}`;
         }
     }
     return { ...lastResult, calls: maxCalls };
@@ -795,7 +992,6 @@ Do not include any extra text outside of the file output blocks unless you are p
 function renderCopilotMessage(role, text) {
     const welcomeMsg = document.getElementById('ideWelcomeMessage');
     if (welcomeMsg) welcomeMsg.remove();
-
     const msgDiv = document.createElement('div');
     msgDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full space-y-1`;
 
@@ -826,7 +1022,6 @@ function renderCopilotMessage(role, text) {
             <div class="md-content leading-relaxed">${formattedContent}</div>
         </div>
     `;
-
     aiChatWindow.appendChild(msgDiv);
     aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
 }
@@ -850,13 +1045,17 @@ async function handleAiRequest(customPrompt = "") {
 
     renderCopilotMessage('user', userPromptText);
 
-    if (activeFileName && projectFiles[activeFileName] !== undefined) {
-        projectFiles[activeFileName] = codeEditor.value;
+    if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
+        projectFiles[activeFileName] = codeEditor.getValue();
         saveWorkspace();
     }
 
     aiInput.disabled = true;
     aiSendBtn.disabled = true;
+    aiSendBtn.classList.add('hidden');
+    aiStopBtn.classList.remove('hidden');
+
+    currentAiAbortController = new AbortController();
 
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'text-xs text-violet-400 italic px-1 animate-pulse';
@@ -889,13 +1088,20 @@ async function handleAiRequest(customPrompt = "") {
     } catch (e) {
         if (loadingDiv) loadingDiv.remove();
         console.error(e);
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-2.5 rounded-lg text-xs';
-        errorDiv.textContent = `AI error: ${e.message}`;
-        aiChatWindow.appendChild(errorDiv);
+        if (e.name === 'AbortError') {
+            // Для IDE: ничего не отображаем и игнорируем ответ
+        } else {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-2.5 rounded-lg text-xs';
+            errorDiv.textContent = `AI error: ${e.message}`;
+            aiChatWindow.appendChild(errorDiv);
+        }
     } finally {
         aiInput.disabled = false;
         aiSendBtn.disabled = false;
+        aiSendBtn.classList.remove('hidden');
+        aiStopBtn.classList.add('hidden');
+        currentAiAbortController = null;
         aiInput.focus();
     }
 }
@@ -911,9 +1117,8 @@ function applyProposedChanges() {
     renderFileList();
     
     // Refresh current selected file editor
-    if (projectFiles[activeFileName] !== undefined) {
-        codeEditor.value = projectFiles[activeFileName];
-        updateLineNumbers();
+if (projectFiles[activeFileName] !== undefined && codeEditor) {
+                codeEditor.setValue(projectFiles[activeFileName]);
     }
 
     proposedChanges = null;
@@ -933,6 +1138,145 @@ function applyProposedChanges() {
     // Switch to preview tab automatically so user can see live results!
     tabPreview.click();
 }
+
+// ============ GIT INTEGRATION ============
+
+function createGitCommit() {
+    const message = commitMessage.value.trim();
+    if (!message) {
+        alert('Please enter a commit message');
+        return;
+    }
+
+    // Create a snapshot of current files
+    const snapshot = {
+        timestamp: new Date().toISOString(),
+        message: message,
+        files: JSON.parse(JSON.stringify(projectFiles)) // Deep copy
+    };
+
+    gitCommits.unshift(snapshot); // Add to front
+    localStorage.setItem('ide_git_commits', JSON.stringify(gitCommits));
+    commitMessage.value = '';
+    renderGitHistory();
+
+    // Show feedback
+    const notify = document.createElement('div');
+    notify.className = 'bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-2 rounded-lg text-[11px] font-medium animate-pulse';
+    notify.textContent = `✓ Commit created: "${message}"`;
+    aiChatWindow.appendChild(notify);
+    setTimeout(() => notify.remove(), 3000);
+}
+
+function renderGitHistory() {
+    gitHistory.innerHTML = '';
+    
+    if (gitCommits.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-xs text-gray-500 p-2 text-center';
+        empty.textContent = 'No commits yet\nCreate a commit to save snapshots!';
+        gitHistory.appendChild(empty);
+        commitCount.textContent = '0';
+        return;
+    }
+
+    commitCount.textContent = gitCommits.length;
+
+    gitCommits.forEach((commit, index) => {
+        const item = document.createElement('div');
+        const date = new Date(commit.timestamp);
+        const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        
+        item.className = 'group p-2 rounded-lg bg-gray-800/30 hover:bg-gray-800/60 cursor-pointer border border-gray-800/50 hover:border-violet-600/40 transition text-xs space-y-1';
+        item.innerHTML = `
+            <div class="font-mono text-violet-400 text-[10px]">#${index}</div>
+            <div class="text-gray-300 font-medium truncate">${escapeHtml(commit.message)}</div>
+            <div class="text-gray-500 text-[11px]">${timeStr}</div>
+            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                <button class="flex-1 bg-blue-900/50 hover:bg-blue-800 text-blue-300 py-1 rounded text-[10px]">View</button>
+                <button class="flex-1 bg-rose-900/50 hover:bg-rose-800 text-rose-300 py-1 rounded text-[10px]">Restore</button>
+            </div>
+        `;
+
+        // View commit details
+        item.querySelector('button:nth-child(1)').addEventListener('click', (e) => {
+            e.stopPropagation();
+            showCommitDetails(index, commit);
+        });
+
+        // Restore commit
+        item.querySelector('button:nth-child(2)').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm(`Restore to commit "${commit.message}"?\nThis will overwrite current files.`)) {
+                projectFiles = JSON.parse(JSON.stringify(commit.files));
+                saveWorkspace();
+                renderFileList();
+                selectFile(activeFileName);
+                runPreview();
+                const notify = document.createElement('div');
+                notify.className = 'bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-2 rounded-lg text-[11px]';
+                notify.textContent = '✓ Restored to: ' + commit.message;
+                aiChatWindow.appendChild(notify);
+            }
+        });
+
+        gitHistory.appendChild(item);
+    });
+}
+
+function showCommitDetails(index, commit) {
+    let details = `Commit #${index}\n`;
+    details += `Message: ${commit.message}\n`;
+    details += `Date: ${new Date(commit.timestamp).toLocaleString()}\n`;
+    details += `Files:\n`;
+    Object.keys(commit.files).forEach(file => {
+        details += `  • ${file}\n`;
+    });
+    alert(details);
+}
+
+// Tab switching for Files/Git
+if (tabFiles && tabGit) {
+    tabFiles.addEventListener('click', () => {
+        tabFiles.className = 'flex-1 px-3 py-2 text-xs font-bold text-violet-400 bg-gray-950 border-b-2 border-violet-500 transition';
+        tabGit.className = 'flex-1 px-3 py-2 text-xs font-bold text-gray-500 hover:text-gray-300 transition border-b-2 border-transparent';
+        filesPanel.classList.remove('hidden');
+        gitPanel.classList.add('hidden');
+    });
+
+    tabGit.addEventListener('click', () => {
+        tabGit.className = 'flex-1 px-3 py-2 text-xs font-bold text-violet-400 bg-gray-950 border-b-2 border-violet-500 transition';
+        tabFiles.className = 'flex-1 px-3 py-2 text-xs font-bold text-gray-500 hover:text-gray-300 transition border-b-2 border-transparent';
+        filesPanel.classList.add('hidden');
+        gitPanel.classList.remove('hidden');
+    });
+}
+
+// Git button listeners
+if (createCommitBtn) {
+    createCommitBtn.addEventListener('click', createGitCommit);
+}
+
+if (commitMessage) {
+    commitMessage.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            createGitCommit();
+        }
+    });
+}
+
+if (clearGitBtn) {
+    clearGitBtn.addEventListener('click', () => {
+        if (confirm('Clear all commits? This cannot be undone.')) {
+            gitCommits = [];
+            localStorage.setItem('ide_git_commits', JSON.stringify(gitCommits));
+            renderGitHistory();
+        }
+    });
+}
+
+// ============ END GIT INTEGRATION ============
 
 // Attach listeners to AI Quick Actions
 btnAiGenerate.addEventListener('click', () => {
@@ -959,6 +1303,12 @@ aiInput.addEventListener('keydown', (e) => {
     }
 });
 
+aiStopBtn.addEventListener('click', () => {
+    if (currentAiAbortController) {
+        currentAiAbortController.abort();
+    }
+});
+
 applyChangesBtn.addEventListener('click', applyProposedChanges);
 
 aiInput.addEventListener('input', function() {
@@ -966,8 +1316,118 @@ aiInput.addEventListener('input', function() {
     this.style.height = this.scrollHeight + 'px';
 });
 
+// ============ AUTO-HEALING (Error Detection & Auto-Fix) ============
+
+let lastDetectedError = null;
+let autoFixInProgress = false;
+
+function setupErrorListener() {
+    // Hook into iframe console
+    projectIframe.onload = () => {
+        try {
+            const iframeDoc = projectIframe.contentDocument || projectIframe.contentWindow.document;
+            const iframeWindow = projectIframe.contentWindow;
+            
+            // Capture console errors
+            if (iframeWindow) {
+                const originalError = iframeWindow.console.error;
+                iframeWindow.console.error = function(...args) {
+                    originalError.apply(iframeWindow.console, args);
+                    
+                    const errorMsg = args.join(' ');
+                    if (!autoFixInProgress && errorMsg && errorMsg.length > 0) {
+                        detectAndFixError(errorMsg);
+                    }
+                };
+                
+                // Also capture window errors
+                iframeWindow.onerror = function(message, source, lineno, colno, error) {
+                    if (!autoFixInProgress) {
+                        const fullMsg = `${message} at line ${lineno}`;
+                        detectAndFixError(fullMsg);
+                    }
+                    return false;
+                };
+            }
+        } catch (e) {
+            // If we can't hook into iframe (security), that's OK
+        }
+    };
+}
+
+function detectAndFixError(errorMsg) {
+    lastDetectedError = errorMsg;
+    
+    // Don't auto-fix if no suitable file is active
+    const ext = activeFileName.split('.').pop().toLowerCase();
+    if (!['html', 'js', 'css'].includes(ext)) return;
+
+    // Show error notification with auto-fix option
+    const errorNotif = document.createElement('div');
+    errorNotif.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-2 rounded-lg text-[11px] font-medium flex items-center justify-between gap-2';
+    errorNotif.innerHTML = `
+        <span>🐛 Error detected: ${errorMsg.substring(0, 40)}...</span>
+        <button class="bg-rose-700 hover:bg-rose-600 px-2 py-1 rounded text-[10px]">Auto-Fix with AI</button>
+    `;
+    
+    errorNotif.querySelector('button').addEventListener('click', () => {
+        autoFixError(errorMsg);
+        errorNotif.remove();
+    });
+    
+    aiChatWindow.appendChild(errorNotif);
+    aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+    
+    // Auto-fix after 3 seconds if user doesn't click
+    setTimeout(() => {
+        if (lastDetectedError === errorMsg && !autoFixInProgress) {
+            autoFixError(errorMsg);
+            if (errorNotif.parentElement) {
+                errorNotif.remove();
+            }
+        }
+    }, 3000);
+}
+
+async function autoFixError(errorMsg) {
+    if (autoFixInProgress) return;
+    autoFixInProgress = true;
+
+    const fixPrompt = `I'm getting an error in my project:\n\n"${errorMsg}"\n\nPlease fix this error in the ${activeFileName} file. Analyze the code and provide the corrected version.`;
+    
+    try {
+        // Show loading state
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'text-xs text-amber-400 italic px-1 animate-pulse';
+        loadingDiv.textContent = '🔧 Analyzing error and generating fix...';
+        aiChatWindow.appendChild(loadingDiv);
+        aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+
+        // Make AI request
+        await handleAiRequest(fixPrompt);
+        
+        if (loadingDiv.parentElement) {
+            loadingDiv.remove();
+        }
+        
+        // Notify user
+        const successNotif = document.createElement('div');
+        successNotif.className = 'bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-2 rounded-lg text-[11px] font-medium';
+        successNotif.textContent = '✓ Auto-fix applied! Check the preview.';
+        aiChatWindow.appendChild(successNotif);
+        aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+    } catch (e) {
+        console.error('Auto-fix error:', e);
+    } finally {
+        autoFixInProgress = false;
+    }
+}
+
+// ============ END AUTO-HEALING ============
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     initWorkspace();
+    initializeMonaco();
 });
 

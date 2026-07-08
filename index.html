@@ -6,6 +6,7 @@
     <title>Traliran AI Hub</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.105/pdf.min.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
@@ -29,15 +30,15 @@
             
             <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
                 <!-- Кнопка Blog, ведущая на персональный сайт -->
-                <a href="https://traliran.github.io" target="_blank" id="blogBtn" class="bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1.5">
+                <a href="https://dev.to/traliran" target="_blank" id="blogBtn" class="flex bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1.5">
                     <span>📝</span> Blog
                 </a>
 
-                <button id="openGroupChatBtn" class="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                <button id="openGroupChatBtn" class="flex bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>👥</span> AI Group Debate
                 </button>
 
-                <button id="openStoreBtn" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                <button id="openStoreBtn" class="flex bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>🏪</span> Assistant Store
                 </button>
 
@@ -45,16 +46,16 @@
                     ❓ Help
                 </button>
                 
+                <button id="openNotesBtn" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                    <span>📝</span> Notes
+                </button>
+
                 <a href="ide.html" class="bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>⚡</span> AI IDE
                 </a>
 
-                <button id="toggleSandboxBtn" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
+                <button id="toggleSandboxBtn" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>💻</span> Sandbox
-                </button>
-
-                <button id="clearChat" class="bg-rose-600/80 hover:bg-rose-700 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition cursor-pointer shrink-0">
-                    Clear Chat
                 </button>
             </div>
         </div>
@@ -144,9 +145,20 @@
                     </div>
                 </div>
 
+                <div class="border-t border-gray-800 pt-3 mt-1 space-y-3">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Appearance</h3>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Theme Preset</label>
+                        <select id="themeSelector" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition">
+                            <option value="default">Default Dark</option>
+                            <option value="cyberpunk">Cyberpunk</option>
+                            <option value="matrix">Matrix</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div class="border-t border-gray-800 pt-3 space-y-3">
                     <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Parameters</h3>
-                    
                     <div>
                         <div class="flex justify-between text-xs text-gray-400 mb-1">
                             <span>Temperature:</span>
@@ -155,7 +167,6 @@
                         <input type="range" id="botTemperature" min="0" max="2" step="0.1" value="0.7" 
                             class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     </div>
-
                     <div>
                         <div class="flex justify-between text-xs text-gray-400 mb-1">
                             <span>Top P:</span>
@@ -164,7 +175,6 @@
                         <input type="range" id="botTopP" min="0" max="1" step="0.05" value="1.0" 
                             class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     </div>
-
                     <div>
                         <div class="flex justify-between text-xs text-gray-400 mb-1">
                             <span>Max Tokens:</span>
@@ -227,9 +237,9 @@
                         </div>
                         <button id="startIntroBtn" class="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-5 rounded-lg text-sm transition cursor-pointer">
                             Launch Interface Guide 🎓
-                        </button>
-                    </div>
-                </div>
+                </button>
+            </div>
+        </div>
 
                 <div class="p-4 bg-gray-900/40 border-t border-gray-900 flex flex-col gap-2">
                     <div id="fileIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs">
@@ -239,23 +249,33 @@
                         </div>
                         <button id="removeFileBtn" class="text-rose-400 hover:text-rose-300 cursor-pointer px-1 font-bold">✕</button>
                     </div>
+                    <div id="usageIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-900/80 border border-gray-800 px-3 py-2 rounded-lg text-xs text-gray-400">
+                        <span id="usageInfo">Tokens: 0</span>
+                        <span id="streamingStatus"></span>
+                    </div>
 
-                    <div class="max-w-4xl w-full mx-auto flex gap-2 items-end">
-                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text, image or video">
+                    <div class="max-w-4xl w-full mx-auto flex flex-col sm:flex-row gap-2 items-end">
+                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text, image, video or PDF">
                             <span>📎</span>
-                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,image/*,video/*">
+                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,.pdf,image/*,video/*">
                         </label>
 
                         <textarea id="userInput" rows="1" placeholder="Ask a question..." 
                             class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none max-h-32 chat-scroll min-h-[42px]"></textarea>
                         
-                        <button id="sendBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
-                            <span class="sm:inline hidden">Send</span>
-                            <span class="inline sm:hidden">➤</span>
-                        </button>
+                        <div class="flex gap-2 w-full sm:w-auto">
+                            <button id="sendBtn" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                                <span class="sm:inline hidden">Send</span>
+                                <span class="inline sm:hidden">➤</span>
+                            </button>
+                            <button id="stopBtn" class="hidden w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                                <span class="sm:inline hidden">Stop</span>
+                                <span class="inline sm:hidden">⏹</span>
+                            </button>
+                        </div>
                     </div>
-                </div>
-            </div>
+        </div>
+    </div>
 
             <div id="sandboxColumn" class="hidden w-full md:w-[45%] bg-gray-900 border-t md:border-t-0 md:border-l border-gray-800 flex flex-col h-full overflow-hidden absolute md:static inset-0 z-40">
                 <div class="p-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between">
@@ -436,6 +456,52 @@
         </div>
     </div>
 
+    <!-- Notes Page -->
+    <div id="notesPage" class="hidden fixed inset-0 bg-gray-950 text-gray-100 z-40 flex overflow-hidden">
+        <aside class="w-64 md:w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                <h2 class="font-bold text-emerald-400">My Notes</h2>
+                <button id="newNoteBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1 px-2 rounded transition cursor-pointer">
+                    + New
+                </button>
+            </div>
+            <div class="p-3">
+                <input type="text" id="notesSearch" placeholder="Search notes or #tags..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-500 transition">
+            </div>
+            <div id="notesList" class="flex-1 overflow-y-auto chat-scroll p-2 flex flex-col gap-2">
+                <!-- Notes entries -->
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col h-full relative bg-gray-950">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+                <input type="text" id="noteTitle" placeholder="Note Title..." class="bg-transparent text-xl font-bold text-gray-100 focus:outline-none w-full mr-4">
+                <div class="flex gap-2">
+                    <button id="toggleNotePreview" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer">👁️ Preview</button>
+                    <button id="deleteNoteBtn" class="text-xs bg-rose-900/30 hover:bg-rose-900/50 text-rose-400 px-3 py-1 rounded border border-rose-800/50 transition cursor-pointer">🗑️ Delete</button>
+                    <button id="closeNotesPage" class="text-gray-400 hover:text-white p-1 text-xl">✕</button>
+                </div>
+            </div>
+
+            <div class="flex-1 flex overflow-hidden">
+                <textarea id="noteContent" placeholder="Start writing in Markdown... Use #tags for automatic organization." class="flex-1 bg-transparent p-6 focus:outline-none resize-none font-mono text-sm leading-relaxed chat-scroll"></textarea>
+                <div id="notePreview" class="hidden flex-1 p-6 overflow-y-auto chat-scroll prose prose-invert max-w-none">
+                    <!-- MD Rendered content -->
+                </div>
+            </div>
+
+            <div id="noteTagsContainer" class="p-3 border-t border-gray-800 flex flex-wrap gap-2 bg-gray-900/30">
+                <!-- Auto-applied tags -->
+            </div>
+
+            <!-- AI Complement Button -->
+            <button id="aiComplementBtn" class="fixed bottom-8 right-8 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-lg flex items-center justify-center text-2xl transition-transform active:scale-90 z-50 cursor-pointer" title="AI Complement">
+                ✨
+            </button>
+        </main>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
+

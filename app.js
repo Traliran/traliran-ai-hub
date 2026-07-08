@@ -37,6 +37,7 @@ let attachedFileContent = null;
 let attachedFileName = "";
 let attachedFileType = "";
 let selectedMultiModels = [];
+let currentAbortController = null;
 
 const apiProvider = document.getElementById('apiProvider');
 const apiKeyValue = document.getElementById('apiKeyValue');
@@ -53,17 +54,29 @@ const topPInput = document.getElementById('botTopP');
 const topPValue = document.getElementById('topPValue');
 const tokensInput = document.getElementById('botMaxTokens');
 const tokensValue = document.getElementById('tokensValue');
-
+const themeSelector = document.getElementById('themeSelector');
 const helpModal = document.getElementById('helpModal');
 const openHelpBtn = document.getElementById('openHelpBtn');
 const closeHelpModal = document.getElementById('closeHelpModal');
 const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
 const startIntroBtn = document.getElementById('startIntroBtn');
+const openNotesBtn = document.getElementById('openNotesBtn');
+const notesPage = document.getElementById('notesPage');
+const closeNotesPage = document.getElementById('closeNotesPage');
+const newNoteBtn = document.getElementById('newNoteBtn');
+const notesList = document.getElementById('notesList');
+const notesSearch = document.getElementById('notesSearch');
+const noteTitle = document.getElementById('noteTitle');
+const noteContent = document.getElementById('noteContent');
+const notePreview = document.getElementById('notePreview');
+const toggleNotePreview = document.getElementById('toggleNotePreview');
+const deleteNoteBtn = document.getElementById('deleteNoteBtn');
+const noteTagsContainer = document.getElementById('noteTagsContainer');
+const aiComplementBtn = document.getElementById('aiComplementBtn');
 const storeModal = document.getElementById('storeModal');
 const openStoreBtn = document.getElementById('openStoreBtn');
 const closeStoreModal = document.getElementById('closeStoreModal');
 const paidBotsContainer = document.getElementById('paidBotsContainer');
-
 const openMultiModelBtn = document.getElementById('openMultiModelBtn');
 const multiModelModal = document.getElementById('multiModelModal');
 const closeMultiModelModal = document.getElementById('closeMultiModelModal');
@@ -71,13 +84,11 @@ const multiModelList = document.getElementById('multiModelList');
 const saveMultiModelsBtn = document.getElementById('saveMultiModels');
 const clearMultiModelsBtn = document.getElementById('clearMultiModels');
 const multiModelBadge = document.getElementById('multiModelBadge');
-
 const openGroupChatBtn = document.getElementById('openGroupChatBtn');
 const groupChatModal = document.getElementById('groupChatModal');
 const closeGroupChatModal = document.getElementById('closeGroupChatModal');
 const groupIdeaInput = document.getElementById('groupIdeaInput');
 const startGroupDebateBtn = document.getElementById('startGroupDebateBtn');
-
 const toggleSandboxBtn = document.getElementById('toggleSandboxBtn');
 const sandboxColumn = document.getElementById('sandboxColumn');
 const closeSandboxBtn = document.getElementById('closeSandboxBtn');
@@ -88,22 +99,24 @@ const sandboxPreviewContainer = document.getElementById('sandboxPreviewContainer
 const sandboxCode = document.getElementById('sandboxCode');
 const sandboxIframe = document.getElementById('sandboxIframe');
 const runCodeBtn = document.getElementById('runCodeBtn');
-
 const chatWindow = document.getElementById('chatWindow');
 const welcomeMessage = document.getElementById('welcomeMessage');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
-const clearChatBtn = document.getElementById('clearChat');
+const stopBtn = document.getElementById('stopBtn');
 const chatsList = document.getElementById('chatsList');
 const newChatBtn = document.getElementById('newChatBtn');
-
 const attachmentInput = document.getElementById('attachmentInput');
 const fileIndicator = document.getElementById('fileIndicator');
 const fileNameDisplay = document.getElementById('fileNameDisplay');
 const removeFileBtn = document.getElementById('removeFileBtn');
+const usageInfo = document.getElementById('usageInfo');
+const streamingStatus = document.getElementById('streamingStatus');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggleSidebar');
 const closeSidebarBtn = document.getElementById('closeSidebar');
+
+const TOKEN_COST_PER_1K = 0.03; // Approximate cost estimate for user-facing display
 const sidebarOverlay = document.getElementById('sidebarOverlay');
 const chatsPanel = document.getElementById('chatsPanel');
 const toggleChatsBtn = document.getElementById('toggleChats');
@@ -126,6 +139,9 @@ const PROVIDERS = {
     ollama: { url: 'http://localhost:11434/v1', hasKey: false, type: 'openai' },
     llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
 };
+
+let notes = [];
+let currentNoteId = null;
 
 function safeEncode(str) {
     if (!str) return '';
@@ -227,6 +243,10 @@ function loadApiSettings() {
     const savedTokens = localStorage.getItem('gem_tokens') || '2048';
     tokensInput.value = savedTokens; tokensValue.textContent = savedTokens;
 
+    const savedTheme = localStorage.getItem('gem_theme') || 'default';
+    themeSelector.value = savedTheme;
+    applyTheme(savedTheme);
+
     fetchActiveModels();
 }
 
@@ -242,6 +262,18 @@ function saveApiSettings() {
     localStorage.setItem('gem_tokens', tokensInput.value);
     updateStatusCard();
 }
+
+function applyTheme(theme) {
+    document.body.className = `bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden theme-${theme}`;
+    if (theme === 'default') {
+        document.body.classList.remove('theme-cyberpunk', 'theme-matrix', 'theme-light');
+    }
+    localStorage.setItem('gem_theme', theme);
+}
+
+themeSelector.addEventListener('change', (e) => {
+    applyTheme(e.target.value);
+});
 
 function handleProviderChange(provider) {
     const details = PROVIDERS[provider];
@@ -477,19 +509,19 @@ async function fetchActiveModels() {
 }
 
 function copyTextToClipboard(text, successMessage = 'Copied to clipboard!') {
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    textArea.style.position = 'fixed';
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
+    const textPlain = document.createElement('textarea');
+    textPlain.value = text;
+    textPlain.style.position = 'fixed';
+    document.body.appendChild(textPlain);
+    textPlain.focus();
+    textPlain.select();
     try {
         document.execCommand('copy');
         alert(successMessage);
     } catch (err) {
         console.error(err);
     }
-    document.body.removeChild(textArea);
+    document.body.removeChild(textPlain);
 }
 
 function runSandboxCode() {
@@ -568,6 +600,180 @@ function showIntroStep() {
 
 startIntroBtn.addEventListener('click', startIntro);
 
+function loadNotes() {
+    const saved = localStorage.getItem('gem_notes');
+    if (saved) {
+        try { notes = JSON.parse(saved); } catch (e) { notes = []; }
+    }
+    if (notes.length === 0) {
+        createNewNote();
+    }
+    renderNotesList();
+}
+
+function saveNotesToStorage() {
+    localStorage.setItem('gem_notes', JSON.stringify(notes));
+}
+function createNewNote() {
+    const id = 'note_' + Date.now();
+    const newNote = {
+        id,
+        title: '',
+        content: '',
+        tags: [],
+        updatedAt: Date.now()
+    };
+    notes.unshift(newNote);
+    currentNoteId = id;
+        saveNotesToStorage();
+        renderNotesList();
+    openNote(id);
+}
+
+function openNote(id) {
+    currentNoteId = id;
+    const note = notes.find(n => n.id === id);
+    if (note) {
+        noteTitle.value = note.title;
+        noteContent.value = note.content;
+        updateNoteTags();
+    }
+    renderNotesList();
+}
+
+function updateNoteContent() {
+    if (!currentNoteId) return;
+    const note = notes.find(n => n.id === currentNoteId);
+    if (note) {
+        note.title = noteTitle.value;
+        note.content = noteContent.value;
+        note.updatedAt = Date.now();
+
+        // Auto-tagging logic
+        const tagRegex = /#(\w+)/g;
+        const tags = [...note.content.matchAll(tagRegex)].map(match => match[1]);
+        note.tags = [...new Set(tags)];
+
+        saveNotesToStorage();
+        renderNotesList();
+        updateNoteTags();
+    }
+}
+
+function updateNoteTags() {
+    if (!currentNoteId) return;
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note) return;
+
+    noteTagsContainer.innerHTML = '';
+    note.tags.forEach(tag => {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'text-[10px] bg-emerald-900/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full';
+        tagEl.textContent = `#${tag}`;
+        noteTagsContainer.appendChild(tagEl);
+    });
+}
+
+function renderNotesList() {
+    const search = notesSearch.value.toLowerCase();
+    notesList.innerHTML = '';
+
+    const filtered = notes.filter(n =>
+        n.title.toLowerCase().includes(search) ||
+        n.content.toLowerCase().includes(search) ||
+        n.tags.some(t => t.toLowerCase().includes(search.replace('#', '')))
+    );
+
+    filtered.forEach(note => {
+        const isActive = note.id === currentNoteId;
+        const div = document.createElement('div');
+        div.className = `p-3 rounded-lg cursor-pointer transition flex flex-col gap-1 ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
+        div.onclick = () => openNote(note.id);
+
+        div.innerHTML = `
+            <span class="text-xs font-bold truncate">${note.title || 'Untitled Note'}</span>
+            <span class="text-[10px] text-gray-500 truncate">${note.content.slice(0, 30).replace(/\n/g, ' ')}...</span>
+        `;
+        notesList.appendChild(div);
+    });
+}
+
+// AI Complement functionality
+async function complementNote() {
+    console.log('AI Complement button clicked');
+    if (!currentNoteId) {
+        console.warn('No active note selected');
+        return;
+    }
+
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note || !note.content) {
+        console.warn('Note is empty, nothing to complement');
+        alert('Please write some text in the note first!');
+        return;
+    }
+
+    const providerName = apiProvider.value;
+    const hasKey = PROVIDERS[providerName].hasKey;
+    const apiKey = apiKeyValue.value.trim();
+    const endpoint = apiEndpoint.value.trim();
+    const model = botModelSelect.value;
+
+    console.log('AI Config:', { providerName, model, hasKey });
+
+    if (hasKey && !apiKey) {
+        alert('Please enter your API key first!');
+        openSidebarUniversal();
+        return;
+    }
+    if (!model) {
+        alert('Please select an AI model in settings first!');
+        openSidebarUniversal();
+        return;
+    }
+
+    const originalText = note.content;
+    // Visual feedback
+    const placeholder = '\n\n(AI is thinking...)';
+    noteContent.value += placeholder;
+    updateNoteContent();
+    try {
+        console.log('Calling AI API for complement...');
+        const systemPrompt = `You are a helpful note-completion assistant. Your task is to expand and complement the current note. Use Markdown formatting. Keep the tone consistent with the original text. Do not repeat the existing text, just add meaningful continuation or detailed expansion. Answer in the same language as the note content.`;
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Please complement and expand this note:\n\n${originalText}` }
+        ];
+
+        const response = await fetchSingleCompletion(endpoint, apiKey, hasKey, {
+            model,
+            messages,
+            temperature: 0.7,
+            max_tokens: 5000
+        }, providerName);
+
+        console.log('AI Response received:', response);
+
+        const resultData = extractAssistantContent(response, providerName);
+        const resultText = resultData.content;
+
+        if (!resultText) {
+            throw new Error('AI returned an empty response');
+        }
+
+        // Remove the "thinking" placeholder and add result
+        const textWithoutPlaceholder = noteContent.value.replace(placeholder, '');
+        noteContent.value = textWithoutPlaceholder + '\n\n' + resultText;
+        updateNoteContent();
+        console.log('Note successfully complemented');
+        } catch (error) {
+        console.error('AI Complement Error:', error);
+        alert('AI Complement failed: ' + error.message);
+        noteContent.value = noteContent.value.replace(placeholder, '');
+        updateNoteContent();
+        }
+}
+
 function renderMessageToDOM(role, content, botName, index) {
     welcomeMessage.classList.add('hidden');
     const messageDiv = document.createElement('div');
@@ -605,8 +811,8 @@ function renderMessageToDOM(role, content, botName, index) {
                         </div>
                     </details>
                 `;
-            }
         }
+}
 
         const customRenderer = new marked.Renderer();
         customRenderer.code = function(codeArg, language) {
@@ -679,6 +885,132 @@ function buildLanguageHint(sourceText = '') {
     return baseHint;
 }
 
+function estimateTokenCount(text) {
+    if (!text) return 0;
+    const normalized = String(text).trim();
+    return Math.max(1, Math.ceil(normalized.length / 4));
+}
+
+function formatUsd(value) {
+    return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+function updateUsageIndicator({ tokens = 0, cost = 0, streaming = false } = {}) {
+    if (!usageInfo || !streamingStatus) return;
+    const wrapper = usageInfo.parentElement;
+    if (tokens || streaming) {
+        usageInfo.textContent = `Tokens: ${tokens}`;
+        streamingStatus.textContent = streaming ? 'Streaming active' : 'Streaming inactive';
+        if (wrapper) wrapper.classList.remove('hidden');
+    } else {
+        if (wrapper) wrapper.classList.add('hidden');
+        streamingStatus.textContent = 'Streaming inactive';
+    }
+}
+
+function buildPromptText(messages) {
+    return messages.map(msg => {
+        if (typeof msg.content === 'string') return msg.content;
+        return normalizeContentToText(msg.content || '');
+    }).join('\n');
+}
+
+function createAssistantStreamingPlaceholder(botName) {
+    welcomeMessage.classList.add('hidden');
+    const placeholder = document.createElement('div');
+    placeholder.className = 'flex flex-col items-start w-full group/msg';
+    const senderName = document.createElement('span');
+    senderName.className = 'text-xs text-gray-500 mb-1 px-1';
+    senderName.textContent = botName;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words';
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'whitespace-pre-wrap break-words text-sm';
+    contentDiv.textContent = '';
+
+    bubble.appendChild(contentDiv);
+    placeholder.appendChild(senderName);
+    placeholder.appendChild(bubble);
+    chatWindow.appendChild(placeholder);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    return { placeholder, contentDiv };
+}
+
+function updateStreamingPlaceholder(placeholderData, text) {
+    if (!placeholderData?.contentDiv) return;
+    placeholderData.contentDiv.textContent = text;
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal, onDelta) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+    bodyPayload.stream = true;
+
+    const response = await fetch(`${endpoint}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyPayload),
+        signal
+    });
+
+    if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+        const result = await response.json();
+        return { content: result.choices?.[0]?.message?.content || '' };
+    }
+
+    const decoder = new TextDecoder();
+    let accumulated = '';
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (let line of lines) {
+            line = line.trim();
+            if (!line) continue;
+            if (line === 'data: [DONE]') {
+                continue;
+            }
+            if (line.startsWith('data:')) {
+                const payload = line.slice(5).trim();
+                if (!payload) continue;
+                try {
+                    const eventData = JSON.parse(payload);
+                    const delta = eventData.choices?.[0]?.delta?.content || '';
+                    accumulated += delta;
+                    if (delta) onDelta(delta);
+                } catch (error) {
+                    // ignore parse errors for partial chunks
+                }
+            }
+        }
+    }
+
+    return { content: accumulated };
+}
+
+function getEstimatedCostFromText(promptText, outputText) {
+    const promptTokens = estimateTokenCount(promptText);
+    const outputTokens = estimateTokenCount(outputText);
+    const totalTokens = promptTokens + outputTokens;
+    const estimatedCost = (totalTokens / 1000) * TOKEN_COST_PER_1K;
+    return { totalTokens, estimatedCost };
+}
+
 function convertContentForAnthropic(content) {
     if (typeof content === 'string') return content;
     if (!Array.isArray(content)) return normalizeContentToText(content);
@@ -702,7 +1034,7 @@ function convertContentForAnthropic(content) {
     }).filter(item => item && (item.text || item.type === 'image'));
 }
 
-async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName) {
+async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal) {
     const provider = PROVIDERS[providerName] || PROVIDERS.openai;
     if (provider.type === 'anthropic') {
         const headers = {
@@ -730,7 +1062,8 @@ async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, prov
         const response = await fetch(`${endpoint}/messages`, {
             method: 'POST',
             headers,
-            body: JSON.stringify(anthropicPayload)
+            body: JSON.stringify(anthropicPayload),
+            signal
         });
 
         if (!response.ok) {
@@ -746,7 +1079,8 @@ async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, prov
     const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(bodyPayload)
+        body: JSON.stringify(bodyPayload),
+        signal
     });
 
     if (!response.ok) {
@@ -780,6 +1114,10 @@ async function triggerAiResponse(session) {
 
     userInput.disabled = true;
     sendBtn.disabled = true;
+    sendBtn.classList.add('hidden');
+    stopBtn.classList.remove('hidden');
+
+    currentAbortController = new AbortController();
 
     let messagesToSend = [];
     if (session.systemPrompt) messagesToSend.push({ role: 'system', content: session.systemPrompt });
@@ -793,7 +1131,8 @@ async function triggerAiResponse(session) {
     chatWindow.scrollTop = chatWindow.scrollHeight;
 
     try {
-        const requests = activeModels.map(modelId => {
+        if (activeModels.length === 1) {
+            const modelId = activeModels[0];
             const payload = {
                 model: modelId,
                 messages: messagesToSend,
@@ -801,27 +1140,59 @@ async function triggerAiResponse(session) {
                 top_p: topP,
                 max_tokens: maxTokens
             };
-            return fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName)
-                .then(res => ({ success: true, model: modelId, data: res }))
-                .catch(err => ({ success: false, model: modelId, error: err.message }));
-        });
 
-        const results = await Promise.all(requests);
-        if (loadingDiv) loadingDiv.remove();
+            const promptText = buildPromptText(messagesToSend);
+            const placeholderData = createAssistantStreamingPlaceholder(session.botName);
+            updateUsageIndicator({ streaming: true });
 
-        if (results.length === 1) {
-            const res = results[0];
-            if (!res.success) throw new Error(res.error);
+            const streamResult = await fetchStreamingCompletion(
+                endpoint,
+                apiKey,
+                hasKey,
+                payload,
+                providerName,
+                currentAbortController.signal,
+                delta => {
+                    placeholderData.current = (placeholderData.current || '') + delta;
+                    updateStreamingPlaceholder(placeholderData, placeholderData.current);
+                }
+            );
 
-            const parsed = extractAssistantContent(res.data, providerName);
+            if (loadingDiv) loadingDiv.remove();
+
+            const parsed = extractAssistantContent({ choices: [{ message: { content: streamResult.content } }] }, providerName);
             let content = parsed.content || '';
             const thinking = parsed.reasoning_content || '';
             if (thinking) content = `<think>${thinking}</think>\n${content}`;
 
+            const usage = getEstimatedCostFromText(promptText, content);
+            updateUsageIndicator({ tokens: usage.totalTokens, cost: usage.estimatedCost, streaming: false });
+
             session.messages.push({ role: 'assistant', content });
             saveSessionsToStorage();
+            // Replace placeholder with final rendered rich content
+            placeholderData.placeholder.remove();
             renderMessageToDOM('assistant', content, session.botName, session.messages.length - 1);
         } else {
+            const requests = activeModels.map(modelId => {
+                const payload = {
+                    model: modelId,
+                    messages: messagesToSend,
+                    temperature,
+                    top_p: topP,
+                    max_tokens: maxTokens
+                };
+                return fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName, currentAbortController.signal)
+                    .then(res => ({ success: true, model: modelId, data: res }))
+                    .catch(err => {
+                        if (err.name === 'AbortError') throw err;
+                        return { success: false, model: modelId, error: err.message };
+                    });
+            });
+
+            const results = await Promise.all(requests);
+            if (loadingDiv) loadingDiv.remove();
+
             let multiMarkdown = '### 📊 Multi-Model Performance Comparison\n\n';
             results.forEach(res => {
                 multiMarkdown += `#### 🤖 Model: \`${res.model}\`\n`;
@@ -841,18 +1212,30 @@ async function triggerAiResponse(session) {
             session.messages.push({ role: 'assistant', content: multiMarkdown });
             saveSessionsToStorage();
             renderMessageToDOM('assistant', multiMarkdown, 'Hub Comparator', session.messages.length - 1);
+            updateUsageIndicator({ tokens: estimateTokenCount(buildPromptText(messagesToSend)), cost: (estimateTokenCount(buildPromptText(messagesToSend)) / 1000) * TOKEN_COST_PER_1K, streaming: false });
         }
         chatWindow.scrollTop = chatWindow.scrollHeight;
     } catch (error) {
         console.error(error);
         if (document.getElementById('apiLoading')) document.getElementById('apiLoading').remove();
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-lg text-xs max-w-xl';
-        errorDiv.innerText = `Execution Interrupted: ${error.message}`;
-        chatWindow.appendChild(errorDiv);
+
+        if (error.name === 'AbortError') {
+            const stopDiv = document.createElement('div');
+            stopDiv.className = 'text-xs text-gray-500 italic px-1';
+            stopDiv.innerText = 'Generation stopped by user.';
+            chatWindow.appendChild(stopDiv);
+        } else {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-lg text-xs max-w-xl';
+            errorDiv.innerText = `Execution Interrupted: ${error.message}`;
+            chatWindow.appendChild(errorDiv);
+        }
     } finally {
         userInput.disabled = false;
         sendBtn.disabled = false;
+        sendBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        currentAbortController = null;
         userInput.focus();
     }
 }
@@ -1018,14 +1401,6 @@ topPInput.addEventListener('input', (e) => { topPValue.textContent = e.target.va
 tokensInput.addEventListener('input', (e) => { tokensValue.textContent = e.target.value; saveApiSettings(); });
 
 refreshModelsBtn.addEventListener('click', fetchActiveModels);
-clearChatBtn.addEventListener('click', () => {
-    const session = sessions.find(s => s.id === currentSessionId);
-    if (session) {
-        session.messages = [];
-        saveSessionsToStorage();
-        loadActiveSessionChat();
-    }
-});
 newChatBtn.addEventListener('click', createNewSession);
 
 toggleChatsBtn.addEventListener('click', () => {
@@ -1070,19 +1445,37 @@ function closeSidebarUniversal() {
     }
 }
 
-attachmentInput.addEventListener('change', (e) => {
+attachmentInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     attachedFileName = file.name;
     attachedFileType = file.type || '';
 
+    fileNameDisplay.textContent = attachedFileName;
+    fileIndicator.classList.remove('hidden');
+    fileIndicator.classList.add('flex');
+
+    if (file.type === 'application/pdf' || attachedFileName.toLowerCase().endsWith('.pdf')) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let extractedText = '';
+            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
+                const page = await pdf.getPage(i);
+                const pageText = await page.getTextContent();
+                extractedText += pageText.items.map(item => item.str).join(' ') + '\n\n';
+            }
+            attachedFileContent = extractedText.trim();
+        } catch (error) {
+            attachedFileContent = `Unable to parse PDF file content. File name: ${attachedFileName}`;
+        }
+        return;
+    }
+
     if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
         const reader = new FileReader();
         reader.onload = function(event) {
             attachedFileContent = event.target.result;
-            fileNameDisplay.textContent = attachedFileName;
-            fileIndicator.classList.remove('hidden');
-            fileIndicator.classList.add('flex');
         };
         reader.readAsDataURL(file);
         return;
@@ -1091,9 +1484,6 @@ attachmentInput.addEventListener('change', (e) => {
     const reader = new FileReader();
     reader.onload = function(event) {
         attachedFileContent = event.target.result;
-        fileNameDisplay.textContent = attachedFileName;
-        fileIndicator.classList.remove('hidden');
-        fileIndicator.classList.add('flex');
     };
     reader.readAsText(file);
 });
@@ -1113,6 +1503,14 @@ userInput.addEventListener('input', function() {
     this.style.height = this.scrollHeight + 'px';
 });
 sendBtn.addEventListener('click', sendMessage);
+stopBtn.addEventListener('click', () => {
+    if (currentAbortController) {
+        currentAbortController.abort();
+    }
+});
+
+updateUsageIndicator({});
+
 userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
         e.preventDefault();
@@ -1123,6 +1521,46 @@ userInput.addEventListener('keydown', (e) => {
 openHelpBtn.addEventListener('click', () => { helpModal.classList.remove('hidden'); });
 closeHelpModal.addEventListener('click', () => { helpModal.classList.add('hidden'); });
 closeHelpModalBtn.addEventListener('click', () => { helpModal.classList.add('hidden'); });
+
+openNotesBtn.addEventListener('click', () => {
+    notesPage.classList.remove('hidden');
+    loadNotes();
+});
+closeNotesPage.addEventListener('click', () => notesPage.classList.add('hidden'));
+newNoteBtn.addEventListener('click', createNewNote);
+noteTitle.addEventListener('input', updateNoteContent);
+noteContent.addEventListener('input', updateNoteContent);
+notesSearch.addEventListener('input', renderNotesList);
+deleteNoteBtn.addEventListener('click', () => {
+    if (!currentNoteId) return;
+    if (confirm('Delete this note?')) {
+        notes = notes.filter(n => n.id !== currentNoteId);
+        saveNotesToStorage();
+        if (notes.length > 0) {
+            openNote(notes[0].id);
+        } else {
+            currentNoteId = null;
+            noteTitle.value = '';
+            noteContent.value = '';
+            updateNoteTags();
+        }
+        renderNotesList();
+    }
+});
+toggleNotePreview.addEventListener('click', () => {
+    const isPreview = !notePreview.classList.contains('hidden');
+    if (isPreview) {
+        notePreview.classList.add('hidden');
+        noteContent.classList.remove('hidden');
+        toggleNotePreview.textContent = '👁️ Preview';
+    } else {
+        notePreview.classList.remove('hidden');
+        noteContent.classList.add('hidden');
+        toggleNotePreview.textContent = 'Close Preview';
+        notePreview.innerHTML = marked.parse(noteContent.value);
+    }
+});
+aiComplementBtn.addEventListener('click', complementNote);
 
 exportJsonBtn.addEventListener('click', () => {
     const config = {
@@ -1189,4 +1627,6 @@ function updateStatusCard() {
 document.addEventListener('DOMContentLoaded', () => {
     loadApiSettings();
     loadSessions();
+    loadNotes();
 });
+
