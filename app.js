@@ -28,6 +28,21 @@ const PAID_ASSISTANTS_CONFIG = [
         name: "AI Knowledge Auditor - $6",
         description: "An advanced educational AI designed to battle information hoarding. Instead of just organizing notes, it audits the user's actual understanding of their saved materials through adaptive, Socratic-style testing and conceptual stress-tests.",
         link: "https://whop.com/joined/traliran-ai-huub/products/ai-knowledge-auditor/"
+    },
+    {
+        name: "fact only ai - $4",
+        description: "Fact-Only AI: Never hallucinates. Only verified facts, or an honest: I don’t know. No guesswork, no fiction. Truth you can trust.",
+        link: "https://whop.com/joined/traliran-ai-huub/products/fact-only-ai/"
+    },
+    {
+        name: "BrainSpark AI - $5",
+        description: "BrainSpark AI: Your interactive brainstorming partner. Asks deep questions, sorts ideas by originality & feasibility, and delivers structure from chaos—even with zero input.",
+        link: "https://whop.com/joined/traliran-ai-huub/products/brainspark-ai-48/"
+    },
+    {
+        name: "LearnMate AI - $5",
+        description: "LearnMate AI: a tutor that first tests your level, then builds a custom learning plan and guides you through it with interactive lessons, quizzes, and real-world examples—adapting as you progress.",
+        link: "https://whop.com/joined/traliran-ai-huub/products/learnmate-ai/"
     }
 ];
 
