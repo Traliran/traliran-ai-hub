@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traliran AI Playground - RAG</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-20 shadow-md">
+        <div class="max-w-[1600px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-4 justify-between w-full md:w-auto">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">📚</span>
+                    <h1 class="text-xl font-black text-emerald-400 tracking-wide">RAG Playground</h1>
+                </div>
+                <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-1.5 px-3 rounded-lg border border-gray-700 transition flex items-center gap-1">
+                    ◀ Back to Hub
+                </a>
+            </div>
+            
+            <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+                <div id="configStatus" class="text-xs text-gray-400 bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span id="activeModelDisplay">Loading Config...</span>
+                </div>
+                <button id="openSettingsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition border border-gray-700" title="Settings">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-[1600px] w-full mx-auto flex relative overflow-hidden">
+        
+        <!-- Left: Knowledge Base Manager -->
+        <section class="w-80 bg-gray-900 border-r border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto chat-scroll">
+            <div class="border-b border-gray-800 pb-2">
+                <h2 class="font-bold text-emerald-400 text-sm uppercase tracking-wider">Knowledge Base</h2>
+                <p class="text-[11px] text-gray-500 mt-1">Upload .md or .txt files to build your RAG context.</p>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <label class="w-full flex flex-col items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-3 px-4 rounded-xl transition cursor-pointer text-center shadow-lg shadow-emerald-900/20">
+                    <span>📎 Upload Documents</span>
+                    <input type="file" id="kbUpload" class="hidden" accept=".md,.txt" multiple>
+                </label>
+                
+                <button id="clearKbBtn" class="w-full bg-rose-900/20 hover:bg-rose-900/40 text-rose-400 border border-rose-900/50 text-xs py-2 rounded-lg transition">
+                    🗑️ Clear All Knowledge
+                </button>
+            </div>
+
+            <div class="flex-1 flex flex-col gap-2 mt-2">
+                <h3 class="text-[10px] font-bold text-gray-500 uppercase">Loaded Files</h3>
+                <div id="kbFileList" class="flex flex-col gap-2">
+                    <!-- Files will appear here -->
+                </div>
+            </div>
+
+            <div class="p-3 bg-gray-950 rounded-lg border border-gray-800 text-[11px] text-gray-400">
+                <span class="font-bold text-emerald-400 block mb-1">RAG Mode:</span>
+                Current knowledge is injected into the system prompt and persists across the session.
+            </div>
+        </section>
+
+        <!-- Right: Chat Interface -->
+        <section class="flex-1 flex flex-col h-full bg-gray-950 overflow-hidden relative">
+            <div id="chatWindow" class="flex-1 p-4 overflow-y-auto space-y-4 chat-scroll">
+                <div id="welcomeMessage" class="bg-gray-900 border border-gray-800 p-6 rounded-xl max-w-2xl mx-auto text-center mt-8 space-y-4">
+                    <span class="text-4xl">🧠</span>
+                    <h3 class="font-bold text-xl text-emerald-400">RAG Playground Active</h3>
+                    <p class="text-sm text-gray-300 leading-relaxed">
+                        Upload your knowledge base on the left. The AI will use these documents as a source of truth to answer your questions accurately.
+                    </p>
+                </div>
+            </div>
+
+            <div class="p-4 bg-gray-900/40 border-t border-gray-900 flex flex-col gap-2">
+                <div id="usageIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-900/80 border border-gray-800 px-3 py-2 rounded-lg text-xs text-gray-400">
+                    <span id="usageInfo">Tokens: 0</span>
+                    <span id="streamingStatus"></span>
+                </div>
+
+                <div class="max-w-4xl w-full mx-auto flex gap-2 items-end">
+                    <textarea id="userInput" rows="1" placeholder="Ask about your knowledge base..." 
+                        class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none max-h-32 chat-scroll min-h-[42px]"></textarea>
+                    
+                    <div class="flex gap-2 w-full sm:w-auto">
+                        <button id="sendBtn" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                            <span class="sm:inline hidden">Send</span>
+                            <span class="inline sm:hidden">➤</span>
+                        </button>
+                        <button id="stopBtn" class="hidden w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                            <span class="sm:inline hidden">Stop</span>
+                            <span class="inline sm:hidden">⏹</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Settings Modal (Minimal) -->
+    <div id="settingsModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button id="closeSettingsBtn" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <h2 class="text-xl font-bold text-emerald-400">Sync Settings</h2>
+            <p class="text-xs text-gray-400">This playground uses the configuration from the main AI Hub. You can change it there or check the current active profile.</p>
+            <div id="currentConfigDisplay" class="p-3 bg-gray-950 rounded-lg border border-gray-800 text-xs font-mono text-gray-300 space-y-1">
+                <!-- Config details -->
+            </div>
+            <button id="refreshConfigBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg text-sm transition">
+                Refresh from Hub
+            </button>
+        </div>
+    </div>
+
+    <script src="playground.js"></script>
+</body>
+</html>
