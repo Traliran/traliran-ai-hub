@@ -6,6 +6,18 @@ let aiApiCallCount = 0;
 let selectedFilesForAI = {}; // Track which files to send to AI
 let gitCommits = []; // Git history
 
+// Bot Store State
+let customBots = [];
+let activeBotId = null;
+
+const OFFICIAL_BOTS = [
+    {
+        name: "Example paid IDE bot",
+        description: "this is example bot",
+        link: "https://example.com/example-paid-bot"
+    }
+];
+        
 // DOM Elements
 const apiProvider = document.getElementById('apiProvider');
 const callCountIndicator = document.getElementById('callCountIndicator');
@@ -45,6 +57,26 @@ const aiStopBtn = document.getElementById('aiStopBtn');
 const changesIndicator = document.getElementById('changesIndicator');
 const applyChangesBtn = document.getElementById('applyChangesBtn');
 const keyWarningModal = document.getElementById('keyWarningModal');
+
+// Bot Store DOM Elements
+const openBotStoreBtn = document.getElementById('openBotStoreBtn');
+const botStoreModal = document.getElementById('botStoreModal');
+const closeBotStoreModal = document.getElementById('closeBotStoreModal');
+const botStoreGrid = document.getElementById('botStoreGrid');
+const createNewBotBtn = document.getElementById('createNewBotBtn');
+const exportBotsBtn = document.getElementById('exportBotsBtn');
+const importBotsInput = document.getElementById('importBotsInput');
+const botEditorModal = document.getElementById('botEditorModal');
+const closeBotEditorModal = document.getElementById('closeBotEditorModal');
+const botEditorTitle = document.getElementById('botEditorTitle');
+const editBotName = document.getElementById('editBotName');
+const editBotPrompt = document.getElementById('editBotPrompt');
+const editBotModel = document.getElementById('editBotModel');
+const editBotTemp = document.getElementById('editBotTemp');
+const saveBotBtn = document.getElementById('saveBotBtn');
+const deleteBotBtn = document.getElementById('deleteBotBtn');
+
+let editingBotId = null;
 
 // Modal Elements for API Configuration
 const ideApiSettingsBtn = document.getElementById('ideApiSettingsBtn');
@@ -165,8 +197,8 @@ function initWorkspace() {
         }
     } else {
         projectFiles = { ...DEFAULT_FILES };
-    }
-    
+}
+
     // Load git commits
     const savedGit = localStorage.getItem('ide_git_commits');
     if (savedGit) {
@@ -206,6 +238,18 @@ function initWorkspace() {
         activeFileName = Object.keys(projectFiles)[0] || "index.html";
     }
 
+    // Load Custom Bots
+    const savedBots = localStorage.getItem('ide_custom_bots');
+    if (savedBots) {
+        try {
+            customBots = JSON.parse(savedBots);
+    } catch (e) {
+            customBots = [];
+    }
+}
+
+    const savedActiveBot = localStorage.getItem('ide_active_bot_id');
+    activeBotId = savedActiveBot;
     renderFileList();
     renderGitHistory();
     selectFile(activeFileName);
@@ -227,7 +271,6 @@ function renderFileList() {
     Object.keys(projectFiles).sort().forEach(filename => {
         const isActive = filename === activeFileName;
         const isSelectedForAI = selectedFilesForAI[filename] !== false; // Default to true
-        
         const div = document.createElement('div');
         div.className = `group flex items-center justify-between p-2 rounded-lg transition ${
             isActive ? 'bg-violet-600/20 border border-violet-500/40 text-white' : 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'
@@ -252,8 +295,8 @@ function renderFileList() {
         nameSpan.onclick = (e) => {
             e.stopPropagation();
             selectFile(filename);
-        };
-
+                };
+                
         // Delete button
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-300 px-1 text-[11px] transition cursor-pointer';
@@ -450,6 +493,221 @@ resetProjectBtn.addEventListener('click', () => {
     }
 });
 
+// Bot Store Logic
+function renderBotStore() {
+    botStoreGrid.innerHTML = '';
+
+    // 1. OFFICIAL / PAID BOTS SECTION
+    const officialSection = document.createElement('div');
+    officialSection.className = "col-span-full space-y-3 mb-6";
+    officialSection.innerHTML = `
+        <h3 class="text-xs font-bold uppercase text-amber-500 tracking-widest border-b border-amber-500/30 pb-1">💎 Premium Presets</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            ${OFFICIAL_BOTS.map(bot => `
+                <div class="bg-gray-950 border border-amber-900/50 rounded-xl p-4 flex flex-col justify-between h-40 relative group transition hover:border-amber-500/50 overflow-hidden">
+                    <div class="absolute top-0 right-0 bg-amber-500 text-black text-[9px] font-black px-2 py-0.5 rounded-bl-lg">PREMIUM</div>
+                    <div>
+                        <h4 class="font-bold text-amber-400 text-sm">${escapeHtml(bot.name)}</h4>
+                        <p class="text-xs text-gray-400 mt-1.5 line-clamp-3">${escapeHtml(bot.description)}</p>
+                    </div>
+                    <div class="flex justify-end mt-2">
+                        <a href="${bot.link}" target="_blank" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition cursor-pointer shadow-lg shadow-amber-900/20">
+                            Get Access 🔓
+                        </a>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    botStoreGrid.appendChild(officialSection);
+
+    // 2. CUSTOM BOTS SECTION
+    const customSection = document.createElement('div');
+    customSection.className = "col-span-full space-y-3";
+    customSection.innerHTML = `<h3 class="text-xs font-bold uppercase text-gray-500 tracking-widest border-b border-gray-800 pb-1">🛠️ My Custom Assistants</h3>`;
+
+    const customGrid = document.createElement('div');
+    customGrid.className = "grid grid-cols-1 sm:grid-cols-2 gap-4";
+
+    if (customBots.length === 0) {
+        customGrid.innerHTML = `
+            <div class="col-span-full flex flex-col items-center justify-center p-12 text-center space-y-3 border-2 border-dashed border-gray-800 rounded-2xl">
+                <span class="text-4xl">🏪</span>
+                <p class="text-gray-400 text-sm">Your custom store is empty.<br>Create your first assistant or import a preset!</p>
+            </div>
+        `;
+    } else {
+        customBots.forEach(bot => {
+            const isActive = bot.id === activeBotId;
+            const div = document.createElement('div');
+            div.className = `bg-gray-950 border ${isActive ? 'border-amber-500 ring-1 ring-amber-500/50' : 'border-gray-800'} rounded-xl p-4 flex flex-col justify-between h-40 relative group transition hover:border-gray-700`;
+
+            div.innerHTML = `
+                <div>
+                    <div class="flex justify-between items-start">
+                        <h4 class="font-bold text-amber-400 text-sm">${escapeHtml(bot.name)}</h4>
+                        ${isActive ? '<span class="text-[10px] bg-amber-500 text-black font-bold px-1.5 py-0.5 rounded">ACTIVE</span>' : ''}
+                    </div>
+                    <p class="text-xs text-gray-400 mt-1.5 line-clamp-3">${escapeHtml(bot.prompt)}</p>
+                </div>
+                <div class="flex justify-end gap-2 mt-2">
+                    <button class="edit-bot-btn bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold px-3 py-1 rounded-lg transition cursor-pointer">Edit</button>
+                    <button class="use-bot-btn ${isActive ? 'bg-gray-700 text-gray-400 cursor-default' : 'bg-amber-600 hover:bg-amber-500 text-white'} text-xs font-bold px-3 py-1 rounded-lg transition cursor-pointer">
+                        ${isActive ? 'Using' : 'Use'}
+                    </button>
+                </div>
+            `;
+
+            div.querySelector('.edit-bot-btn').onclick = () => openBotEditor(bot.id);
+            div.querySelector('.use-bot-btn').onclick = () => useBot(bot.id);
+
+            customGrid.appendChild(div);
+        });
+    }
+
+    customSection.appendChild(customGrid);
+    botStoreGrid.appendChild(customSection);
+}
+    
+function openBotEditor(botId = null) {
+    editingBotId = botId;
+    if (botId) {
+        const bot = customBots.find(b => b.id === botId);
+        if (bot) {
+            botEditorTitle.textContent = "Edit Assistant";
+            editBotName.value = bot.name;
+            editBotPrompt.value = bot.prompt;
+            editBotModel.value = bot.model || '';
+            editBotTemp.value = bot.temp || 0.7;
+        }
+    } else {
+        botEditorTitle.textContent = "Create New Assistant";
+        editBotName.value = '';
+        editBotPrompt.value = '';
+        editBotModel.value = '';
+        editBotTemp.value = 0.7;
+    }
+
+    // Populate model dropdown from current providers list
+    editBotModel.innerHTML = '';
+    // Just a few common defaults if we don't have a full list,
+    // but ideally we'd use the models from the current provider.
+    // Since we don't have an easy way to get all models across all providers,
+    // we'll just copy what's currently in the botModelSelect.
+    Array.from(botModelSelect.options).forEach(opt => {
+        editBotModel.add(new Option(opt.text, opt.value));
+    });
+
+    botEditorModal.classList.remove('hidden');
+}
+
+function useBot(botId) {
+    activeBotId = botId;
+    localStorage.setItem('ide_active_bot_id', botId);
+    renderBotStore();
+
+    // Optional: notify in AI chat
+    const bot = customBots.find(b => b.id === botId);
+    if (bot) {
+        const notify = document.createElement('div');
+        notify.className = 'bg-amber-950/40 border border-amber-900 text-amber-300 p-2 rounded-lg text-[11px] font-medium text-center animate-pulse';
+        notify.textContent = `✨ Active Assistant switched to: ${bot.name}`;
+        aiChatWindow.appendChild(notify);
+    aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+        setTimeout(() => notify.remove(), 3000);
+    }
+}
+    
+function saveBot() {
+    const name = editBotName.value.trim();
+    const prompt = editBotPrompt.value.trim();
+    const model = editBotModel.value;
+    const temp = parseFloat(editBotTemp.value) || 0.7;
+
+    if (!name || !prompt) {
+        alert("Please provide both a name and a system prompt.");
+        return;
+    }
+
+    if (editingBotId) {
+        const index = customBots.findIndex(b => b.id === editingBotId);
+        if (index !== -1) {
+            customBots[index] = { ...customBots[index], name, prompt, model, temp };
+        }
+    } else {
+        const newBot = {
+            id: 'bot_' + Date.now(),
+            name, prompt, model, temp
+        };
+        customBots.push(newBot);
+    }
+
+    localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+    botEditorModal.classList.add('hidden');
+    renderBotStore();
+}
+
+function deleteBot() {
+    if (!editingBotId) return;
+    if (confirm("Delete this assistant?")) {
+        customBots = customBots.filter(b => b.id !== editingBotId);
+        if (activeBotId === editingBotId) {
+            activeBotId = null;
+            localStorage.removeItem('ide_active_bot_id');
+        }
+        localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+        botEditorModal.classList.add('hidden');
+        renderBotStore();
+    }
+}
+
+function exportBots() {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(customBots, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', dataStr);
+    dlAnchor.setAttribute('download', 'traliran-ide-bots.json');
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+}
+
+function importBots(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+    try {
+            const imported = JSON.parse(e.target.result);
+            if (Array.isArray(imported)) {
+                customBots = [...customBots, ...imported];
+                // Deduplicate by ID if necessary, but usually we just append
+                localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+                renderBotStore();
+                alert("Bots imported successfully!");
+            } else {
+                throw new Error("Invalid format: expected an array of bots.");
+            }
+        } catch (err) {
+            alert("Error importing bots: " + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// Bot Store Listeners
+if (openBotStoreBtn) openBotStoreBtn.onclick = () => {
+    renderBotStore();
+    botStoreModal.classList.remove('hidden');
+};
+if (closeBotStoreModal) closeBotStoreModal.onclick = () => botStoreModal.classList.add('hidden');
+if (createNewBotBtn) createNewBotBtn.onclick = () => openBotEditor();
+if (saveBotBtn) saveBotBtn.onclick = saveBot;
+if (deleteBotBtn) deleteBotBtn.onclick = deleteBot;
+if (closeBotEditorModal) closeBotEditorModal.onclick = () => botEditorModal.classList.add('hidden');
+if (exportBotsBtn) exportBotsBtn.onclick = exportBots;
+if (importBotsInput) importBotsInput.onchange = importBots;
+
 // API Settings Alignment with Main page
 function checkApiConfiguration() {
     const provider = localStorage.getItem('gem_provider') || 'groq';
@@ -511,7 +769,6 @@ if (modalSaveBtn) {
         localStorage.setItem('gem_provider', provider);
         localStorage.setItem(`gem_key_${provider}`, key);
         localStorage.setItem(`gem_endpoint_${provider}`, endpoint);
-
         // Sync header select
         apiProvider.value = provider;
 
@@ -923,7 +1180,7 @@ function parseAndExtractFiles(responseText) {
     const fallbackFiles = parseFallbackActiveFile(responseText);
     if (Object.keys(fallbackFiles).length > 0) {
         return {
-            cleanText: stripFileMarkers(responseText),
+            cleanText: responseText.trim(),
             files: fallbackFiles
         };
     }
@@ -945,8 +1202,12 @@ async function runAiAgentRequest(userPromptText) {
             selectedFiles[filename] = content;
         }
     });
-    
-    const baseSystemPrompt = `You are Traliran AI operating in a browser IDE. You have full access to the workspace files and can modify or create files directly.
+
+    // Check if an active bot is selected, otherwise use default
+    const activeBot = customBots.find(b => b.id === activeBotId);
+    const systemPrompt = activeBot ? activeBot.prompt : `You are Traliran AI operating in a browser IDE. You have full access to the workspace files and can modify or create files directly.`;
+
+    const baseSystemPrompt = `${systemPrompt}
 
 Current workspace files:
 ${Object.entries(selectedFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
@@ -962,6 +1223,21 @@ Do not include any extra text outside of the file output blocks unless you are p
     let lastResult = { cleanText: '', files: {}, rawText: '' };
     for (let attempt = 1; attempt <= maxCalls; attempt++) {
         setAiCallCount(attempt);
+
+        // Use active bot's model and temperature if specified, otherwise use the global ones
+        const modelToUse = (activeBot && activeBot.model) ? activeBot.model : botModelSelect.value;
+        const tempToUse = (activeBot && activeBot.temp !== undefined) ? activeBot.temp : parseFloat(localStorage.getItem('gem_temp') || '0.7');
+
+        // We need to pass these to fetchCompletion, but fetchCompletion currently reads from global state.
+        // Let's override global state temporarily or modify fetchCompletion.
+        // Easiest way: temporarily set the global value or update fetchCompletion signature.
+
+        const originalModel = botModelSelect.value;
+        const originalTemp = localStorage.getItem('gem_temp');
+
+        if (modelToUse) botModelSelect.value = modelToUse;
+        localStorage.setItem('gem_temp', tempToUse.toString());
+
         const messages = [
             { role: 'system', content: baseSystemPrompt },
             { role: 'user', content: attemptPrompt }
@@ -969,6 +1245,12 @@ Do not include any extra text outside of the file output blocks unless you are p
 
         try {
             const response = await fetchCompletion(messages, currentAiAbortController.signal);
+
+            // Restore original state
+            botModelSelect.value = originalModel;
+            if (originalTemp) localStorage.setItem('gem_temp', originalTemp);
+            else localStorage.removeItem('gem_temp');
+
             const rawText = extractAiResponse(response);
             const parsed = parseAndExtractFiles(rawText);
 
@@ -977,6 +1259,11 @@ Do not include any extra text outside of the file output blocks unless you are p
                 return { ...lastResult, calls: attempt };
             }
     } catch (e) {
+            // Restore state on error too
+            botModelSelect.value = originalModel;
+            if (originalTemp) localStorage.setItem('gem_temp', originalTemp);
+            else localStorage.removeItem('gem_temp');
+
             if (e.name === 'AbortError') throw e;
             // If one attempt fails, we might try the next one unless it's an abort
         }
@@ -1112,13 +1399,12 @@ function applyProposedChanges() {
     Object.entries(proposedChanges).forEach(([filepath, content]) => {
         projectFiles[filepath] = content;
     });
-
     saveWorkspace();
     renderFileList();
     
     // Refresh current selected file editor
-if (projectFiles[activeFileName] !== undefined && codeEditor) {
-                codeEditor.setValue(projectFiles[activeFileName]);
+    if (projectFiles[activeFileName] !== undefined && codeEditor) {
+        codeEditor.setValue(projectFiles[activeFileName]);
     }
 
     proposedChanges = null;
