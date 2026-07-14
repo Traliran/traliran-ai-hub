@@ -23,9 +23,14 @@
                     <span class="text-2xl">⚡</span>
                     <h1 class="text-xl font-black text-violet-400 tracking-wide">Traliran AI IDE</h1>
                 </div>
-                <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-1.5 px-3 rounded-lg border border-gray-700 transition flex items-center gap-1">
-                    ◀ Back to Hub
-                </a>
+                <div class="flex gap-2">
+                    <button id="openBotStoreBtn" class="flex bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs transition cursor-pointer font-medium flex items-center gap-1">
+                        <span>🏪</span> Assistant Store
+                    </button>
+                    <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-1.5 px-3 rounded-lg border border-gray-700 transition flex items-center gap-1">
+                        ◀ Back to Hub
+                    </a>
+                </div>
             </div>
 
             <!-- API Selection in Header for easy status tracking -->
@@ -285,6 +290,79 @@
                         Close
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bot Store Modal -->
+    <div id="botStoreModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative flex flex-col max-h-[90vh]">
+            <button id="closeBotStoreModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+
+            <div class="flex justify-between items-start">
+                <div>
+                    <h2 class="text-2xl font-black text-amber-400 tracking-wide">🏪 Assistant Store</h2>
+                    <p class="text-xs text-gray-400 mt-1">Manage your custom AI personas and specialized prompts.</p>
+                </div>
+                <div class="flex gap-2">
+                    <label class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-1.5 px-3 rounded-lg border border-gray-700 transition cursor-pointer flex items-center gap-1">
+                        <span>📥</span> Import
+                        <input type="file" id="importBotsInput" accept=".json" class="hidden">
+                    </label>
+                    <button id="exportBotsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-1.5 px-3 rounded-lg border border-gray-700 transition cursor-pointer flex items-center gap-1">
+                        <span>📤</span> Export
+                    </button>
+                </div>
+            </div>
+
+            <div id="botStoreGrid" class="flex-1 overflow-y-auto chat-scroll grid grid-cols-1 sm:grid-cols-2 gap-4 pr-2">
+                <!-- Bots populated by JS -->
+            </div>
+
+            <div class="pt-4 border-t border-gray-800 flex justify-center">
+                <button id="createNewBotBtn" class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-6 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-lg shadow-amber-950/20">
+                    <span>➕</span> Create New Assistant
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bot Editor Modal -->
+    <div id="botEditorModal" class="hidden fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative">
+            <button id="closeBotEditorModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+            <h2 id="botEditorTitle" class="text-xl font-bold text-amber-400">Edit Assistant</h2>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">Assistant Name</label>
+                    <input type="text" id="editBotName" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-gray-100">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">System Prompt</label>
+                    <textarea id="editBotPrompt" rows="6" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 resize-none text-gray-100"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Preferred Model</label>
+                        <select id="editBotModel" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-gray-200">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Temperature</label>
+                        <input type="number" id="editBotTemp" step="0.1" min="0" max="2" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-gray-100">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center pt-4 border-t border-gray-800">
+                <button id="deleteBotBtn" class="bg-rose-900/30 hover:bg-rose-900/50 text-rose-400 text-xs font-semibold py-2 px-4 rounded-lg transition cursor-pointer border border-rose-900/50">
+                    🗑️ Delete Bot
+                </button>
+                <button id="saveBotBtn" class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-6 rounded-lg transition cursor-pointer">
+                    Save Assistant
+                </button>
             </div>
         </div>
     </div>
