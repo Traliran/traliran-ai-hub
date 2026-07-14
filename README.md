@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-A lightweight, serverless, and privacy-first AI web client & playground with a built-in code execution sandbox and multi-model parallel benchmarking. Connect directly to Groq, Gemini, OpenAI, OpenRouter, and local backends (Ollama / Llama.cpp) straight from your browser.
+A lightweight, serverless, and privacy-first AI web client & playground with a built-in code execution sandbox, a dedicated AI-powered Integrated Development Environment (IDE), and multi-model parallel benchmarking. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) straight from your browser.
 
 ## ✨ Live Web App & Premium Store
 👉 **[Launch Traliran AI Hub on GitHub Pages](https://traliran.github.io/traliran-ai-hub/)**
@@ -23,12 +23,19 @@ Inside, you can unlock exclusive, highly-optimized Premium Bots (advanced custom
 
 ## 🚀 Key Features
 
-* **Multi-Provider Support:** Seamlessly switch between top cloud APIs (Groq, Gemini, OpenAI, OpenRouter) and local LLMs (Ollama, Llama.cpp).
-* **⚡ Multi-Model Setup & Compare:** Select multiple models simultaneously. The app triggers parallel API requests and renders side-by-side comparative cards for instant benchmarking.
-* **💡 Model Thinking Support:** Native rendering for reasoning models (like DeepSeek-R1 or Gemini Thinking). Structural thoughts are captured and organized into a clean, collapsible hidden dropdown block.
-* **👥 AI Group Debate Mode:** Turn your raw ideas into fully analyzed concepts. Run a multi-agent discussion loop where specialized personas (Optimist and Critic) cross-examine your thesis over multiple rounds.
-* **💻 Built-in Sandbox Interpreter:** Execute, preview, and test generated HTML/JS/CSS code snippets securely in an isolated iframe without leaving the workspace.
-* **⚙️ Advanced Parameters Control:** Fine-tune system behaviors with on-the-fly adjustable sliders for Temperature, Top P, and Max Tokens configuration.
+*   **Multi-Provider Support:** Seamlessly switch between top cloud APIs (Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude) and local LLMs (Ollama, Llama.cpp).
+*   **⚡ Multi-Model Setup & Compare:** Select multiple models simultaneously. The app triggers parallel API requests and renders side-by-side comparative cards for instant benchmarking.
+*   **💡 Model Thinking Support:** Native rendering for reasoning models (like DeepSeek-R1). Structural thoughts are captured and organized into a clean, collapsible hidden dropdown block.
+*   **👥 AI Group Debate Mode:** Turn your raw ideas into fully analyzed concepts. Run a multi-agent discussion loop where specialized personas (Optimist, Critic, and Technologist) cross-examine your thesis over multiple rounds.
+*   **⚡ AI IDE - Integrated Development Environment:** A full-fledged in-browser IDE for code generation, editing, and project management, powered by your chosen AI model.
+    *   **File Explorer:** Manage multiple project files (HTML, CSS, JS, etc.).
+    *   **Code Editor:** Edit files with a monospaced code editor.
+    *   **Live Preview:** Instantly preview HTML/JS/CSS code changes in an isolated iframe.
+    *   **AI:** Utilize AI for quick actions like `Create Layout`, `Optimize / Clean`, `Explain Code`, and `Debug & Fix` based on your active file or prompt.
+    *   **Project Management:** Download your entire workspace as a `.zip` or reset it.
+*   **💻 Built-in Sandbox Interpreter:** Execute, preview, and test generated HTML/JS/CSS code snippets securely in an isolated iframe without leaving the main chat workspace.
+*   **🏪 Assistant Store:** Access a marketplace of free and premium, highly-optimized AI assistant presets and custom prompts for various tasks (e.g., Polyglot Translator, Code & Text Editor, Ideation Generator).
+*   **⚙️ Advanced Parameters Control:** Fine-tune system behaviors with on-the-fly adjustable sliders for Temperature, Top P, and Max Tokens configuration.
 
 ---
 
@@ -37,8 +44,8 @@ Inside, you can unlock exclusive, highly-optimized Premium Bots (advanced custom
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**.
 
 ### What this means for forks and deployments:
-1. **Keep it Open:** If you modify this software and run it on a server to make it accessible to other users over a network (as a SaaS or public website), you **MUST** make your modified source code available to the public under the same AGPLv3 license.
-2. **Attribution:** You must retain original copyright notices, links to this repository, and clearly state any changes made to the source code.
-3. **No Hidden Commercialization:** You cannot close the source code or hide integrated core features (like the built-in store or author credits) in your public deployments.
+1.  **Keep it Open:** If you modify this software and run it on a server to make it accessible to other users over a network (as a SaaS or public website), you **MUST** make your modified source code available to the public under the same AGPLv3 license.
+2.  **Attribution:** You must retain original copyright notices, links to this repository, and clearly state any changes made to the source code.
+3.  **No Hidden Commercialization:** You cannot close the source code or hide integrated core features (like the built-in store or author credits) in your public deployments.
 
-*For custom commercial licensing or private white-label partnerships without AGPLv3 restrictions, please contact the repository maintainer.*tnerships without AGPLv3 restrictions, please contact the repository maintainer.*
+*For custom commercial licensing or private white-label partnerships without AGPLv3 restrictions, please contact the repository maintainer.*
