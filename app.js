@@ -43,6 +43,26 @@ const PAID_ASSISTANTS_CONFIG = [
         name: "LearnMate AI - $5",
         description: "LearnMate AI: a tutor that first tests your level, then builds a custom learning plan and guides you through it with interactive lessons, quizzes, and real-world examples—adapting as you progress.",
         link: "https://whop.com/joined/traliran-ai-huub/products/learnmate-ai/"
+    },
+    {
+        name: "ResumeVerity AI - $5",
+        description: "ResumeVerity AI compares a candidate’s resume with their interview transcript to expose lies, exaggerations, and inconsistencies. Paste two texts — get a detailed integrity report.",
+        link: "https://whop.com/traliran-ai-huub/resumeverity-ai-the-candidate-honesty-detector/"
+    },
+    {
+        name: "MindEase AI - $5",
+        description: "MindEase AI is an empathetic conversational partner that listens without judgment, helps reframe negative thoughts, and offers evidence-based coping tools. Not a therapist, but a supportive ear.",
+        link: "https://whop.com/traliran-ai-huub/mindease-ai-your-compassionate-conversational-companion/"
+    },
+    {
+        name: "HireMap AI - $5",
+        description: "HireMap AI gives expert hiring advice and builds a personalized, interactive recruitment action map on demand. Step‑by‑step guidance from job description to signed contract.",
+        link: "https://whop.com/traliran-ai-huub/hiremap-ai-the-recruitment-strategist-interactive-action-planner/"
+    },
+    {
+        name: "MarketViz AI  - $5",
+        description: "MarketViz AI gives high‑level marketing advice and instantly generates clean text‑based charts right in the chat. Strategy, analysis, and visual data – all in one place.",
+        link: "https://whop.com/traliran-ai-huub/marketviz-ai-the-marketing-strategist-with-built-in-data-visualization/"
     }
 ];
 
