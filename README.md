@@ -4,6 +4,17 @@
 
 A lightweight, serverless, and privacy-first AI web client & playground with a built-in code execution sandbox, a dedicated AI-powered Integrated Development Environment (IDE), and multi-model parallel benchmarking. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) straight from your browser.
 
+<img width="1270" height="672" alt="изображение" src="https://github.com/user-attachments/assets/e325f997-3eb3-4d93-a391-27e7c177a62b" />
+
+<img width="563" height="596" alt="изображение" src="https://github.com/user-attachments/assets/8e1663e1-aecd-4d4e-939d-fab04290c14a" />
+
+<img width="1264" height="653" alt="изображение" src="https://github.com/user-attachments/assets/2a112fc5-48f2-475f-89ea-4107b223e111" />
+
+<img width="1271" height="674" alt="изображение" src="https://github.com/user-attachments/assets/8a1c4da3-8e98-48cd-947a-11259a906c45" />
+
+<img width="1272" height="670" alt="изображение" src="https://github.com/user-attachments/assets/287f0807-6a48-4417-8a2c-730a276a3e18" />
+
+
 ## ✨ Live Web App & Premium Store
 👉 **[Launch Traliran AI Hub on GitHub Pages](https://traliran.github.io/traliran-ai-hub/)**
 
