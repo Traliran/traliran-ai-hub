@@ -132,7 +132,11 @@
                 <div class="p-3 border-t border-gray-800 bg-gray-900/50">
                     <div class="text-[11px] text-gray-400 space-y-1">
                         <div>Commits: <span id="commitCount" class="text-violet-400 font-bold">0</span></div>
-                        <button id="clearGitBtn" class="mt-2 w-full bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/40 text-rose-300 text-xs py-1 rounded transition">
+                        <input type="file" id="restoreFileInput" accept=".json" class="hidden">
+                        <button id="restoreFromFileBtn" class="w-full bg-blue-900/30 hover:bg-blue-900/50 border border-blue-800/40 text-blue-300 text-xs py-1.5 rounded transition mt-2">
+                            📂 Restore from Backup
+                        </button>
+                        <button id="clearGitBtn" class="w-full bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/40 text-rose-300 text-xs py-1 rounded transition mt-1">
                             Clear History
                         </button>
                     </div>
@@ -175,9 +179,6 @@
                 <div class="flex items-center gap-2">
                     <span class="text-lg">🤖</span>
                     <h2 class="text-xs font-black text-violet-400 uppercase tracking-wider">AI Architect</h2>
-                </div>
-                <div class="flex gap-2 items-center">
-                    <span id="callCountIndicator" class="text-[10px] bg-violet-950 text-violet-300 border border-violet-800/50 px-2 py-0.5 rounded font-mono">API Calls: ∞</span>
                 </div>
             </div>
 

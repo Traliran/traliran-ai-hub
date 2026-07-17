@@ -2,7 +2,6 @@
 let projectFiles = {};
 let activeFileName = "index.html";
 let proposedChanges = null;
-let aiApiCallCount = 0;
 let selectedFilesForAI = {}; // Track which files to send to AI
 let gitCommits = []; // Git history
 
@@ -20,7 +19,6 @@ const OFFICIAL_BOTS = [
         
 // DOM Elements
 const apiProvider = document.getElementById('apiProvider');
-const callCountIndicator = document.getElementById('callCountIndicator');
 const botModelSelect = document.getElementById('botModel');
 const refreshModelsBtn = document.getElementById('refreshModelsBtn');
 const runCodeBtn = document.getElementById('runCodeBtn');
@@ -40,6 +38,8 @@ const createCommitBtn = document.getElementById('createCommitBtn');
 const gitHistory = document.getElementById('gitHistory');
 const commitCount = document.getElementById('commitCount');
 const clearGitBtn = document.getElementById('clearGitBtn');
+const restoreFileInput = document.getElementById('restoreFileInput');
+const restoreFromFileBtn = document.getElementById('restoreFromFileBtn');
 const editorContainer = document.getElementById('editorContainer');
 const previewContainer = document.getElementById('previewContainer');
 const codeEditorElement = document.getElementById('codeEditor');
@@ -308,10 +308,7 @@ function renderFileList() {
 
         div.appendChild(checkbox);
         div.appendChild(nameSpan);
-        // Prevent deletion of index.html to maintain project sanity
-        if (filename !== "index.html") {
-            div.appendChild(deleteBtn);
-        }
+        div.appendChild(deleteBtn);
         fileList.appendChild(div);
     });
 }
@@ -337,11 +334,11 @@ function selectFile(filename) {
 }
 
 function deleteFile(filename) {
-    if (filename === "index.html") return;
     if (confirm(`Are you sure you want to delete ${filename}?`)) {
         delete projectFiles[filename];
         if (activeFileName === filename) {
-            activeFileName = "index.html";
+            const remaining = Object.keys(projectFiles);
+            activeFileName = remaining.length > 0 ? remaining[0] : "index.html";
         }
         saveWorkspace();
         renderFileList();
@@ -955,13 +952,6 @@ function extractAiResponse(response) {
 
 // Parsing AI response files
 // Format: <<<FILE_START: path/to/file>>>file contents<<<FILE_END>>>
-function setAiCallCount(count) {
-    aiApiCallCount = count;
-    if (callCountIndicator) {
-        callCountIndicator.textContent = `API Calls: ${count}`;
-    }
-}
-
 function tryParseJson(value) {
     try {
         return JSON.parse(value);
@@ -1222,7 +1212,6 @@ Do not include any extra text outside of the file output blocks unless you are p
 
     let lastResult = { cleanText: '', files: {}, rawText: '' };
     for (let attempt = 1; attempt <= maxCalls; attempt++) {
-        setAiCallCount(attempt);
 
         // Use active bot's model and temperature if specified, otherwise use the global ones
         const modelToUse = (activeBot && activeBot.model) ? activeBot.model : botModelSelect.value;
@@ -1357,9 +1346,8 @@ async function handleAiRequest(customPrompt = "") {
 
         const parsed = { cleanText: result.cleanText, files: result.files };
         const responseSummary = result.cleanText || `Received ${Object.keys(parsed.files).length} file updates.`;
-        const callInfo = ` (API calls used: ${result.calls})`;
 
-        renderCopilotMessage('assistant', responseSummary + callInfo);
+        renderCopilotMessage('assistant', responseSummary);
 
         const extractedFilesCount = Object.keys(parsed.files).length;
         if (extractedFilesCount > 0) {
@@ -1434,6 +1422,11 @@ function createGitCommit() {
         return;
     }
 
+    // Save current editor content before creating snapshot
+    if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
+        projectFiles[activeFileName] = codeEditor.getValue();
+    }
+
     // Create a snapshot of current files
     const snapshot = {
         timestamp: new Date().toISOString(),
@@ -1452,6 +1445,20 @@ function createGitCommit() {
     notify.textContent = `✓ Commit created: "${message}"`;
     aiChatWindow.appendChild(notify);
     setTimeout(() => notify.remove(), 3000);
+
+    // Download commit as JSON backup
+    downloadCommitJson(snapshot);
+}
+
+function downloadCommitJson(commit) {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(commit, null, 2));
+    const anchor = document.createElement('a');
+    const filename = `commit-${commit.message.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30)}-${new Date(commit.timestamp).toISOString().slice(0, 10)}.json`;
+    anchor.setAttribute('href', dataStr);
+    anchor.setAttribute('download', filename);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
 }
 
 function renderGitHistory() {
@@ -1460,7 +1467,7 @@ function renderGitHistory() {
     if (gitCommits.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'text-xs text-gray-500 p-2 text-center';
-        empty.textContent = 'No commits yet\nCreate a commit to save snapshots!';
+        empty.innerHTML = 'No commits yet<br>Create a commit to save snapshots!';
         gitHistory.appendChild(empty);
         commitCount.textContent = '0';
         return;
@@ -1480,7 +1487,7 @@ function renderGitHistory() {
             <div class="text-gray-500 text-[11px]">${timeStr}</div>
             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition">
                 <button class="flex-1 bg-blue-900/50 hover:bg-blue-800 text-blue-300 py-1 rounded text-[10px]">View</button>
-                <button class="flex-1 bg-rose-900/50 hover:bg-rose-800 text-rose-300 py-1 rounded text-[10px]">Restore</button>
+                <button class="flex-1 bg-emerald-900/50 hover:bg-emerald-800 text-emerald-300 py-1 rounded text-[10px]">Download</button>
             </div>
         `;
 
@@ -1490,20 +1497,10 @@ function renderGitHistory() {
             showCommitDetails(index, commit);
         });
 
-        // Restore commit
+        // Download commit JSON
         item.querySelector('button:nth-child(2)').addEventListener('click', (e) => {
             e.stopPropagation();
-            if (confirm(`Restore to commit "${commit.message}"?\nThis will overwrite current files.`)) {
-                projectFiles = JSON.parse(JSON.stringify(commit.files));
-                saveWorkspace();
-                renderFileList();
-                selectFile(activeFileName);
-                runPreview();
-                const notify = document.createElement('div');
-                notify.className = 'bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-2 rounded-lg text-[11px]';
-                notify.textContent = '✓ Restored to: ' + commit.message;
-                aiChatWindow.appendChild(notify);
-            }
+            downloadCommitJson(commit);
         });
 
         gitHistory.appendChild(item);
@@ -1559,6 +1556,51 @@ if (clearGitBtn) {
             localStorage.setItem('ide_git_commits', JSON.stringify(gitCommits));
             renderGitHistory();
         }
+    });
+}
+
+function restoreFromJson(file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            const commit = JSON.parse(e.target.result);
+            if (!commit.files || typeof commit.files !== 'object') {
+                alert('Invalid backup file: missing "files" field.');
+                return;
+            }
+            if (confirm(`Restore from backup "${commit.message || 'unknown'}"?\nThis will overwrite current files.`)) {
+                if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
+                    projectFiles[activeFileName] = codeEditor.getValue();
+                }
+                projectFiles = JSON.parse(JSON.stringify(commit.files));
+                saveWorkspace();
+                renderFileList();
+                selectFile(activeFileName);
+                runPreview();
+                const notify = document.createElement('div');
+                notify.className = 'bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-2 rounded-lg text-[11px]';
+                notify.textContent = '✓ Restored from backup: ' + (commit.message || 'unknown');
+                aiChatWindow.appendChild(notify);
+                setTimeout(() => notify.remove(), 3000);
+            }
+        } catch (err) {
+            alert('Invalid JSON backup file: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+if (restoreFileInput) {
+    restoreFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) restoreFromJson(file);
+        e.target.value = '';
+    });
+}
+
+if (restoreFromFileBtn) {
+    restoreFromFileBtn.addEventListener('click', () => {
+        restoreFileInput.click();
     });
 }
 

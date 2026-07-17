@@ -1564,7 +1564,11 @@ openNotesBtn.addEventListener('click', () => {
 closeNotesPage.addEventListener('click', () => notesPage.classList.add('hidden'));
 newNoteBtn.addEventListener('click', createNewNote);
 noteTitle.addEventListener('input', updateNoteContent);
-noteContent.addEventListener('input', updateNoteContent);
+noteContent.addEventListener('input', () => {
+    updateNoteContent();
+    const isPreviewVisible = !notePreview.classList.contains('hidden');
+    if (isPreviewVisible) renderNotePreview();
+});
 notesSearch.addEventListener('input', renderNotesList);
 deleteNoteBtn.addEventListener('click', () => {
     if (!currentNoteId) return;
@@ -1582,6 +1586,10 @@ deleteNoteBtn.addEventListener('click', () => {
         renderNotesList();
     }
 });
+function renderNotePreview() {
+    notePreview.innerHTML = `<div class="md-content">${marked.parse(noteContent.value)}</div>`;
+}
+
 toggleNotePreview.addEventListener('click', () => {
     const isPreview = !notePreview.classList.contains('hidden');
     if (isPreview) {
@@ -1592,7 +1600,7 @@ toggleNotePreview.addEventListener('click', () => {
         notePreview.classList.remove('hidden');
         noteContent.classList.add('hidden');
         toggleNotePreview.textContent = 'Close Preview';
-        notePreview.innerHTML = marked.parse(noteContent.value);
+        renderNotePreview();
     }
 });
 aiComplementBtn.addEventListener('click', complementNote);
