@@ -4,7 +4,7 @@
 
 A lightweight, serverless, and privacy-first AI web client & playground with a built-in code execution sandbox, a dedicated AI-powered Integrated Development Environment (IDE), and multi-model parallel benchmarking. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) straight from your browser.
 
-<img width="1270" height="672" alt="изображение" src="https://github.com/user-attachments/assets/e325f997-3eb3-4d93-a391-27e7c177a62b" />
+<img width="1863" height="987" alt="изображение" src="https://github.com/user-attachments/assets/628fff3b-88ca-4d3d-a253-247358c11d11" />
 
 <img width="563" height="596" alt="изображение" src="https://github.com/user-attachments/assets/8e1663e1-aecd-4d4e-939d-fab04290c14a" />
 
