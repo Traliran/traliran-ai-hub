@@ -316,8 +316,32 @@ refreshConfigBtn.addEventListener('click', () => {
     openSettingsBtn.click();
 });
 
+saveKnowledgeBase = SYNC_MANAGER.wrapStorageSave(saveKnowledgeBase, 'rag_knowledge');
+
+function setupPlaygroundSync() {
+    const loginIndicator = document.createElement('div');
+    loginIndicator.className = 'text-[10px] text-gray-500 ml-2 cursor-pointer hover:text-emerald-400 transition';
+    loginIndicator.id = 'playgroundSyncStatus';
+    loginIndicator.textContent = '';
+
+    const configStatus = document.getElementById('configStatus');
+    if (configStatus) configStatus.appendChild(loginIndicator);
+
+    SYNC_MANAGER.setStatusCallback((text, isError) => {
+        loginIndicator.textContent = text || '';
+        loginIndicator.style.color = isError ? '#f87171' : '#34d399';
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadConfig();
     loadKnowledgeBase();
+    setupPlaygroundSync();
+
+    if (SYNC_MANAGER.isLoggedIn()) {
+        SYNC_MANAGER.pullFromCloud('rag_knowledge').then(() => {
+            loadKnowledgeBase();
+        }).catch(e => console.error('Initial RAG sync error:', e));
+    }
 });
 

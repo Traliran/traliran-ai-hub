@@ -1753,9 +1753,137 @@ async function autoFixError(errorMsg) {
 
 // ============ END AUTO-HEALING ============
 
+// Auth / Sync integration
+function updateLoginButton() {
+    const btn = document.getElementById('loginBtn');
+    const text = document.getElementById('loginBtnText');
+    if (!btn || !text) return;
+    if (SYNC_MANAGER.isLoggedIn()) {
+        text.textContent = SYNC_MANAGER.getUserEmail() || 'Logged in';
+        btn.title = 'Logged in - click to manage';
+    } else {
+        text.textContent = 'Login';
+        btn.title = 'Login / Cloud Sync';
+    }
+}
+
+saveWorkspace = SYNC_MANAGER.wrapStorageSave(saveWorkspace, 'ide_files');
+
+const _origCreateGitCommit = createGitCommit;
+createGitCommit = function () {
+    _origCreateGitCommit.apply(this, arguments);
+    SYNC_MANAGER.pushToCloud('ide_commits');
+};
+
+const _origSaveBot = saveBot;
+saveBot = function () {
+    _origSaveBot.apply(this, arguments);
+    SYNC_MANAGER.pushToCloud('ide_bots');
+};
+
+function setupIdeSyncUI() {
+    const loginBtn = document.getElementById('loginBtn');
+    const authModal = document.getElementById('authModal');
+    const closeAuthModal = document.getElementById('closeAuthModal');
+    const authTabLogin = document.getElementById('authTabLogin');
+    const authTabRegister = document.getElementById('authTabRegister');
+    const authDbUrl = document.getElementById('authDbUrl');
+    const authDbKey = document.getElementById('authDbKey');
+    const authEmail = document.getElementById('authEmail');
+    const authPassword = document.getElementById('authPassword');
+    const authSubmitBtn = document.getElementById('authSubmitBtn');
+    const authError = document.getElementById('authError');
+
+    if (!loginBtn || !authModal) return;
+
+    let authMode = 'login';
+
+    if (closeAuthModal) closeAuthModal.addEventListener('click', () => authModal.classList.add('hidden'));
+
+    if (authTabLogin) {
+        authTabLogin.addEventListener('click', () => {
+            authMode = 'login';
+            authTabLogin.className = 'flex-1 py-2 text-sm font-bold text-violet-400 border-b-2 border-violet-500 transition';
+            authTabRegister.className = 'flex-1 py-2 text-sm font-bold text-gray-500 border-b-2 border-transparent transition';
+            authSubmitBtn.textContent = 'Login';
+            authError.classList.add('hidden');
+        });
+    }
+
+    if (authTabRegister) {
+        authTabRegister.addEventListener('click', () => {
+            authMode = 'register';
+            authTabRegister.className = 'flex-1 py-2 text-sm font-bold text-violet-400 border-b-2 border-violet-500 transition';
+            authTabLogin.className = 'flex-1 py-2 text-sm font-bold text-gray-500 border-b-2 border-transparent transition';
+            authSubmitBtn.textContent = 'Register';
+            authError.classList.add('hidden');
+        });
+    }
+
+    if (authSubmitBtn) {
+        authSubmitBtn.addEventListener('click', async () => {
+            const url = authDbUrl.value.trim();
+            const key = authDbKey.value.trim();
+            const email = authEmail.value.trim();
+            const password = authPassword.value;
+
+            if (!email || !password) {
+                authError.textContent = 'Email and password are required';
+                authError.classList.remove('hidden');
+                return;
+            }
+
+            DB_CONNECTOR.configureFromUI(url, key);
+            authSubmitBtn.disabled = true;
+            authSubmitBtn.textContent = 'Processing...';
+            authError.classList.add('hidden');
+
+            try {
+                if (authMode === 'login') {
+                    await SYNC_MANAGER.loginAndSync(email, password);
+                } else {
+                    await SYNC_MANAGER.registerAndSync(email, password);
+                }
+                authModal.classList.add('hidden');
+                updateLoginButton();
+                authPassword.value = '';
+            } catch (e) {
+                authError.textContent = e.message || 'Authentication failed';
+                authError.classList.remove('hidden');
+            } finally {
+                authSubmitBtn.disabled = false;
+                authSubmitBtn.textContent = authMode === 'login' ? 'Login' : 'Register';
+            }
+        });
+    }
+
+    loginBtn.addEventListener('click', () => {
+        if (SYNC_MANAGER.isLoggedIn()) {
+            if (confirm('Logout from cloud sync?')) {
+                SYNC_MANAGER.logout().then(() => updateLoginButton());
+            }
+        } else {
+            authModal.classList.remove('hidden');
+        }
+    });
+}
+
+updateLoginButton();
+setupIdeSyncUI();
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     initWorkspace();
     initializeMonaco();
+
+    if (SYNC_MANAGER.isLoggedIn()) {
+        SYNC_MANAGER.pullAndMerge().then(() => {
+            initWorkspace();
+            if (codeEditor && activeFileName) {
+                selectFile(activeFileName);
+            }
+            runPreview();
+        }).catch(e => console.error('Initial IDE sync error:', e));
+    }
 });
 
