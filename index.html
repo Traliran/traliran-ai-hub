@@ -41,6 +41,10 @@
                     <span>🏪</span> Assistant Store
                 </button>
 
+                <button id="loginBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition cursor-pointer text-sm font-medium" title="Login / Cloud Sync">
+                    🔑 <span id="loginBtnText" class="hidden sm:inline">Login</span>
+                </button>
+
                 <button id="openHelpBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition cursor-pointer text-sm font-medium" title="Instructions">
                     ❓ Help
                 </button>
@@ -80,6 +84,27 @@
         <div id="chatsOverlay" class="hidden absolute inset-0 bg-black/60 z-25 md:hidden"></div>
 
         <section id="sidebar" class="absolute inset-y-0 right-0 w-80 bg-gray-900 border-l lg:border-l-0 lg:border-r border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto chat-scroll transition-transform duration-300 translate-x-full lg:translate-x-0 lg:static lg:w-80 z-30">
+            <div class="border-b border-gray-800 pb-3 space-y-3">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-semibold text-emerald-400 text-sm">Cloud Sync</h2>
+                    <span id="syncStatusIndicator" class="text-[10px] text-gray-500">Not connected</span>
+                </div>
+                <div class="space-y-2">
+                    <input type="text" id="dbUrl" placeholder="DB URL (Firebase/Supabase/PocketBase)..."
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-500 transition font-mono">
+                    <input type="text" id="dbKey" placeholder="API Key / Project ID..."
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-500 transition font-mono">
+                    <div class="flex gap-2">
+                        <button id="dbConnectBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-1.5 rounded-lg transition cursor-pointer">
+                            Connect
+                        </button>
+                        <button id="dbDisconnectBtn" class="hidden flex-1 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold py-1.5 rounded-lg transition cursor-pointer">
+                            Disconnect
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div class="border-b border-gray-800 pb-2 flex justify-between items-center">
                 <div>
                     <h2 class="font-semibold text-emerald-400 text-base">API Configuration</h2>
@@ -488,9 +513,7 @@
 
             <div class="flex-1 flex overflow-hidden">
                 <textarea id="noteContent" placeholder="Start writing in Markdown... Use #tags for automatic organization." class="flex-1 bg-transparent p-6 focus:outline-none resize-none font-mono text-sm leading-relaxed chat-scroll"></textarea>
-                <div id="notePreview" class="hidden flex-1 p-6 overflow-y-auto chat-scroll prose prose-invert max-w-none">
-                    <!-- MD Rendered content -->
-                </div>
+                <div id="notePreview" class="hidden flex-1 p-6 overflow-y-auto chat-scroll md-content"></div>
             </div>
 
             <div id="noteTagsContainer" class="p-3 border-t border-gray-800 flex flex-wrap gap-2 bg-gray-900/30">
@@ -504,6 +527,53 @@
         </main>
     </div>
 
+    <!-- Auth Modal -->
+    <div id="authModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button id="closeAuthModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <div>
+                <h2 class="text-xl font-bold text-emerald-400">🔑 Cloud Sync Login</h2>
+                <p class="text-xs text-gray-400 mt-1">Sign in to sync your data across devices.</p>
+            </div>
+
+            <div class="flex border-b border-gray-800">
+                <button id="authTabLogin" class="flex-1 py-2 text-sm font-bold text-emerald-400 border-b-2 border-emerald-500 transition">Login</button>
+                <button id="authTabRegister" class="flex-1 py-2 text-sm font-bold text-gray-500 border-b-2 border-transparent transition">Register</button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 mb-1">Database URL</label>
+                    <input type="text" id="authDbUrl" placeholder="https://your-project.firebaseio.com or project-id"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 mb-1">API Key (if required)</label>
+                    <input type="text" id="authDbKey" placeholder="Firebase API key / Supabase anon key"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 mb-1">Email</label>
+                    <input type="email" id="authEmail" placeholder="your@email.com"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 mb-1">Password</label>
+                    <input type="password" id="authPassword" placeholder="Enter password"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition">
+                </div>
+            </div>
+
+            <button id="authSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm transition cursor-pointer">
+                Login
+            </button>
+
+            <div id="authError" class="hidden text-xs text-rose-400 text-center"></div>
+        </div>
+    </div>
+
+    <script src="db-connector.js"></script>
+    <script src="sync-manager.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

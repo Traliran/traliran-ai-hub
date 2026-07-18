@@ -1564,7 +1564,11 @@ openNotesBtn.addEventListener('click', () => {
 closeNotesPage.addEventListener('click', () => notesPage.classList.add('hidden'));
 newNoteBtn.addEventListener('click', createNewNote);
 noteTitle.addEventListener('input', updateNoteContent);
-noteContent.addEventListener('input', updateNoteContent);
+noteContent.addEventListener('input', () => {
+    updateNoteContent();
+    const isPreviewVisible = !notePreview.classList.contains('hidden');
+    if (isPreviewVisible) renderNotePreview();
+});
 notesSearch.addEventListener('input', renderNotesList);
 deleteNoteBtn.addEventListener('click', () => {
     if (!currentNoteId) return;
@@ -1582,6 +1586,10 @@ deleteNoteBtn.addEventListener('click', () => {
         renderNotesList();
     }
 });
+function renderNotePreview() {
+    notePreview.innerHTML = `<div class="md-content">${marked.parse(noteContent.value)}</div>`;
+}
+
 toggleNotePreview.addEventListener('click', () => {
     const isPreview = !notePreview.classList.contains('hidden');
     if (isPreview) {
@@ -1592,7 +1600,7 @@ toggleNotePreview.addEventListener('click', () => {
         notePreview.classList.remove('hidden');
         noteContent.classList.add('hidden');
         toggleNotePreview.textContent = 'Close Preview';
-        notePreview.innerHTML = marked.parse(noteContent.value);
+        renderNotePreview();
     }
 });
 aiComplementBtn.addEventListener('click', complementNote);
@@ -1659,9 +1667,188 @@ function updateStatusCard() {
     }
 }
 
+function updateLoginButton() {
+    const btn = document.getElementById('loginBtn');
+    const text = document.getElementById('loginBtnText');
+    if (!btn || !text) return;
+    if (SYNC_MANAGER.isLoggedIn()) {
+        text.textContent = SYNC_MANAGER.getUserEmail() || 'Logged in';
+        btn.title = 'Logged in - click to manage';
+    } else {
+        text.textContent = 'Login';
+        btn.title = 'Login / Cloud Sync';
+    }
+}
+
+function updateSyncStatus(text, isError) {
+    const indicator = document.getElementById('syncStatusIndicator');
+    const dbUrl = document.getElementById('dbUrl');
+    const dbKey = document.getElementById('dbKey');
+    const connectBtn = document.getElementById('dbConnectBtn');
+    const disconnectBtn = document.getElementById('dbDisconnectBtn');
+    if (!indicator) return;
+    indicator.textContent = text || 'Not connected';
+    indicator.style.color = isError ? '#f87171' : (SYNC_MANAGER.isLoggedIn() ? '#34d399' : '#6b7280');
+
+    if (dbUrl) dbUrl.value = localStorage.getItem('gem_db_url') || '';
+    if (dbKey) dbKey.value = localStorage.getItem('gem_db_key') || '';
+    if (connectBtn && disconnectBtn) {
+        if (SYNC_MANAGER.isLoggedIn()) {
+            connectBtn.classList.add('hidden');
+            disconnectBtn.classList.remove('hidden');
+        } else {
+            connectBtn.classList.remove('hidden');
+            disconnectBtn.classList.add('hidden');
+        }
+    }
+}
+
+saveSessionsToStorage = SYNC_MANAGER.wrapStorageSave(saveSessionsToStorage, 'hub_sessions');
+saveNotesToStorage = SYNC_MANAGER.wrapStorageSave(saveNotesToStorage, 'hub_notes');
+
+const _origSaveApiSettings = saveApiSettings;
+saveApiSettings = function () {
+    _origSaveApiSettings.apply(this, arguments);
+    SYNC_MANAGER.pushToCloud('hub_settings');
+};
+
+// Auth modal
+const authModal = document.getElementById('authModal');
+const closeAuthModal = document.getElementById('closeAuthModal');
+const authTabLogin = document.getElementById('authTabLogin');
+const authTabRegister = document.getElementById('authTabRegister');
+const authDbUrl = document.getElementById('authDbUrl');
+const authDbKey = document.getElementById('authDbKey');
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const authError = document.getElementById('authError');
+
+let authMode = 'login';
+
+if (closeAuthModal) {
+    closeAuthModal.addEventListener('click', () => authModal.classList.add('hidden'));
+}
+
+if (authTabLogin) {
+    authTabLogin.addEventListener('click', () => {
+        authMode = 'login';
+        authTabLogin.className = 'flex-1 py-2 text-sm font-bold text-emerald-400 border-b-2 border-emerald-500 transition';
+        authTabRegister.className = 'flex-1 py-2 text-sm font-bold text-gray-500 border-b-2 border-transparent transition';
+        authSubmitBtn.textContent = 'Login';
+        authError.classList.add('hidden');
+    });
+}
+
+if (authTabRegister) {
+    authTabRegister.addEventListener('click', () => {
+        authMode = 'register';
+        authTabRegister.className = 'flex-1 py-2 text-sm font-bold text-emerald-400 border-b-2 border-emerald-500 transition';
+        authTabLogin.className = 'flex-1 py-2 text-sm font-bold text-gray-500 border-b-2 border-transparent transition';
+        authSubmitBtn.textContent = 'Register';
+        authError.classList.add('hidden');
+    });
+}
+
+if (authSubmitBtn) {
+    authSubmitBtn.addEventListener('click', async () => {
+        const url = authDbUrl.value.trim();
+        const key = authDbKey.value.trim();
+        const email = authEmail.value.trim();
+        const password = authPassword.value;
+
+        if (!email || !password) {
+            authError.textContent = 'Email and password are required';
+            authError.classList.remove('hidden');
+            return;
+        }
+
+        DB_CONNECTOR.configureFromUI(url, key);
+        authSubmitBtn.disabled = true;
+        authSubmitBtn.textContent = 'Processing...';
+        authError.classList.add('hidden');
+
+        try {
+            if (authMode === 'login') {
+                await SYNC_MANAGER.loginAndSync(email, password);
+            } else {
+                await SYNC_MANAGER.registerAndSync(email, password);
+            }
+            authModal.classList.add('hidden');
+            updateLoginButton();
+            updateSyncStatus();
+            authPassword.value = '';
+        } catch (e) {
+            authError.textContent = e.message || 'Authentication failed';
+            authError.classList.remove('hidden');
+        } finally {
+            authSubmitBtn.disabled = false;
+            authSubmitBtn.textContent = authMode === 'login' ? 'Login' : 'Register';
+        }
+    });
+}
+
+// Login button in header
+const loginBtn = document.getElementById('loginBtn');
+if (loginBtn) {
+    loginBtn.addEventListener('click', () => {
+        if (SYNC_MANAGER.isLoggedIn()) {
+            if (confirm('Logout from cloud sync?')) {
+                SYNC_MANAGER.logout().then(() => {
+                    updateLoginButton();
+                    updateSyncStatus();
+                });
+            }
+        } else {
+            authModal.classList.remove('hidden');
+        }
+    });
+}
+
+// Sidebar DB connect/disconnect
+const dbUrlInput = document.getElementById('dbUrl');
+const dbKeyInput = document.getElementById('dbKey');
+const dbConnectBtn = document.getElementById('dbConnectBtn');
+const dbDisconnectBtn = document.getElementById('dbDisconnectBtn');
+
+if (dbConnectBtn) {
+    dbConnectBtn.addEventListener('click', () => {
+        const url = dbUrlInput.value.trim();
+        const key = dbKeyInput.value.trim();
+        DB_CONNECTOR.configureFromUI(url, key);
+        if (url) {
+            authModal.classList.remove('hidden');
+            if (authDbUrl) authDbUrl.value = url;
+            if (authDbKey) authDbKey.value = key;
+        }
+    });
+}
+
+if (dbDisconnectBtn) {
+    dbDisconnectBtn.addEventListener('click', async () => {
+        if (confirm('Disconnect from cloud? Your local data will be preserved.')) {
+            await SYNC_MANAGER.logout();
+            updateLoginButton();
+            updateSyncStatus();
+        }
+    });
+}
+
+SYNC_MANAGER.setStatusCallback(updateSyncStatus);
+updateLoginButton();
+updateSyncStatus();
+
 document.addEventListener('DOMContentLoaded', () => {
     loadApiSettings();
     loadSessions();
     loadNotes();
+
+    if (SYNC_MANAGER.isLoggedIn()) {
+        SYNC_MANAGER.pullAndMerge().then(() => {
+            loadSessions();
+            loadNotes();
+            loadApiSettings();
+        }).catch(e => console.error('Initial sync error:', e));
+    }
 });
 
