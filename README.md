@@ -10,7 +10,7 @@ A lightweight, serverless, and privacy-first AI web client & playground with a b
 
 <img width="1264" height="653" alt="изображение" src="https://github.com/user-attachments/assets/2a112fc5-48f2-475f-89ea-4107b223e111" />
 
-<img width="1271" height="674" alt="изображение" src="https://github.com/user-attachments/assets/8a1c4da3-8e98-48cd-947a-11259a906c45" />
+<img width="1860" height="992" alt="изображение" src="https://github.com/user-attachments/assets/66d619b5-a125-47ef-add2-4d3bafceeefd" />
 
 <img width="1272" height="670" alt="изображение" src="https://github.com/user-attachments/assets/287f0807-6a48-4417-8a2c-730a276a3e18" />
 
