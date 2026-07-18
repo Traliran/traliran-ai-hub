@@ -11,9 +11,9 @@ let activeBotId = null;
 
 const OFFICIAL_BOTS = [
     {
-        name: "Example paid IDE bot",
-        description: "this is example bot",
-        link: "https://example.com/example-paid-bot"
+        name: "UX Forge AI",
+        description: "UX Forge AI analyzes your code inside the IDE and suggests bold, non‑template, high‑impact UX and product improvements. No generic tips – only truly creative, useful ideas.",
+        link: "https://whop.com/traliran-ai-huub/ux-forge-ai"
     }
 ];
         
