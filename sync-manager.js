@@ -13,6 +13,7 @@ const SYNC_MANAGER = {
     ide_commits: { key: 'ide_git_commits' },
     ide_bots: { key: 'ide_custom_bots' },
     rag_knowledge: { key: 'gem_rag_kb' },
+    hub_personal: { key: 'gem_personal_info' },
   },
 
   init() {

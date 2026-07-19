@@ -83,6 +83,7 @@ const botModelSelect = document.getElementById('botModel');
 const refreshModelsBtn = document.getElementById('refreshModelsBtn');
 const botNameInput = document.getElementById('botName');
 const botPromptInput = document.getElementById('botPrompt');
+const personalInfoInput = document.getElementById('personalInfo');
 const tempInput = document.getElementById('botTemperature');
 const tempValue = document.getElementById('tempValue');
 const topPInput = document.getElementById('botTopP');
@@ -268,6 +269,7 @@ function loadApiSettings() {
     apiEndpoint.value = localStorage.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url;
     botNameInput.value = localStorage.getItem('gem_bot_name') || 'System AI';
     botPromptInput.value = localStorage.getItem('gem_system_prompt') || '';
+    personalInfoInput.value = localStorage.getItem('gem_personal_info') || '';
 
     const savedTemp = localStorage.getItem('gem_temp') || '0.7';
     tempInput.value = savedTemp; tempValue.textContent = savedTemp;
@@ -292,6 +294,7 @@ function saveApiSettings() {
     localStorage.setItem(`gem_endpoint_${provider}`, apiEndpoint.value.trim());
     localStorage.setItem('gem_bot_name', botNameInput.value.trim());
     localStorage.setItem('gem_system_prompt', botPromptInput.value.trim());
+    localStorage.setItem('gem_personal_info', personalInfoInput.value.trim());
     localStorage.setItem('gem_temp', tempInput.value);
     localStorage.setItem('gem_topp', topPInput.value);
     localStorage.setItem('gem_tokens', tokensInput.value);
@@ -1310,9 +1313,17 @@ async function sendMessage() {
     }
 
     const baseSystemPrompt = botPromptInput.value.trim();
+    const personalInfo = personalInfoInput.value.trim();
     const userLanguageHint = buildLanguageHint(typeof fullUserContent === 'string' ? fullUserContent : text);
-    session.systemPrompt = baseSystemPrompt
-        ? `${baseSystemPrompt}\n\n${userLanguageHint}`
+
+    let fullSystemPrompt = baseSystemPrompt || '';
+    if (personalInfo) {
+        fullSystemPrompt = fullSystemPrompt
+            ? `${fullSystemPrompt}\n\n[About the user]:\n${personalInfo}`
+            : `[About the user]:\n${personalInfo}`;
+    }
+    session.systemPrompt = fullSystemPrompt
+        ? `${fullSystemPrompt}\n\n${userLanguageHint}`
         : userLanguageHint;
     session.botName = botNameInput.value.trim() || 'Default AI';
 
@@ -1426,6 +1437,7 @@ apiEndpoint.addEventListener('input', () => { saveApiSettings(); });
 apiEndpoint.addEventListener('change', () => { fetchActiveModels(); });
 botNameInput.addEventListener('input', saveApiSettings);
 botPromptInput.addEventListener('input', saveApiSettings);
+personalInfoInput.addEventListener('input', saveApiSettings);
 botModelSelect.addEventListener('change', () => {
     localStorage.setItem(`gem_selected_model_${apiProvider.value}`, botModelSelect.value);
     updateStatusCard();
@@ -1612,6 +1624,7 @@ exportJsonBtn.addEventListener('click', () => {
         endpoint: apiEndpoint.value.trim(),
         botName: botNameInput.value.trim(),
         systemPrompt: botPromptInput.value.trim(),
+        personalInfo: personalInfoInput.value.trim(),
         selectedModel: botModelSelect.value,
         temperature: parseFloat(tempInput.value),
         topP: parseFloat(topPInput.value),
@@ -1639,6 +1652,7 @@ importJsonInput.addEventListener('change', (e) => {
             if (config.endpoint) apiEndpoint.value = config.endpoint;
             if (config.botName) botNameInput.value = config.botName;
             if (config.systemPrompt) botPromptInput.value = config.systemPrompt;
+            if (config.personalInfo !== undefined) personalInfoInput.value = config.personalInfo;
             if (config.temperature !== undefined) { tempInput.value = config.temperature; tempValue.textContent = config.temperature; }
             if (config.topP !== undefined) { topPInput.value = config.topP; topPValue.textContent = config.topP; }
             if (config.maxTokens !== undefined) { tokensInput.value = config.maxTokens; tokensValue.textContent = config.maxTokens; }
@@ -1710,6 +1724,7 @@ const _origSaveApiSettings = saveApiSettings;
 saveApiSettings = function () {
     _origSaveApiSettings.apply(this, arguments);
     SYNC_MANAGER.pushToCloud('hub_settings');
+    SYNC_MANAGER.pushToCloud('hub_personal');
 };
 
 // Auth modal

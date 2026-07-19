@@ -49,7 +49,8 @@ function loadConfig() {
         botName,
         apiKey: localStorage.getItem(`gem_key_${provider}`) || '',
         endpoint: localStorage.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url,
-        systemPrompt: localStorage.getItem('gem_system_prompt') || 'You are a knowledgeable AI assistant.'
+        systemPrompt: localStorage.getItem('gem_system_prompt') || 'You are a knowledgeable AI assistant.',
+        personalInfo: localStorage.getItem('gem_personal_info') || ''
     };
 }
 
@@ -205,9 +206,10 @@ async function sendMessage() {
     currentSessionMessages.push({ role: 'user', content: text });
 
     // Build RAG System Prompt
+    const personalContext = config.personalInfo ? `[About the user]:\n${config.personalInfo}\n\n` : '';
     const kbContext = knowledgeBase.map(f => `File: ${f.name}\nContent:\n${f.content}`).join('\n\n---\n\n');
     const ragSystemPrompt = `
-${config.systemPrompt}
+${personalContext}${config.systemPrompt}
 
 You are now operating in RAG (Retrieval Augmented Generation) mode. 
 Below is the provided knowledge base. Use it as your primary source of truth. 
