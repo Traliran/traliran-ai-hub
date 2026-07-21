@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -24,19 +25,13 @@
                     <button id="toggleSidebar" class="bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded transition cursor-pointer" title="API Settings">
                         ⚙️ <span class="hidden sm:inline">Settings</span>
                     </button>
+                    <button id="summarizeChatBtn" class="hidden bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded transition cursor-pointer" title="Summarize conversation to Personal AI">
+                        📝 <span class="hidden sm:inline">Summarize</span>
+                    </button>
                 </div>
             </div>
             
             <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                <!-- Кнопка Blog, ведущая на персональный сайт -->
-                <a href="https://dev.to/traliran" target="_blank" id="blogBtn" class="flex bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1.5">
-                    <span>📝</span> Blog
-                </a>
-
-                <button id="openGroupChatBtn" class="flex bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
-                    <span>👥</span> AI Group Debate
-                </button>
-
                 <button id="openStoreBtn" class="flex bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
                     <span>🏪</span> Assistant Store
                 </button>
@@ -45,25 +40,33 @@
                     🔑 <span id="loginBtnText" class="hidden sm:inline">Login</span>
                 </button>
 
-                <button id="openHelpBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition cursor-pointer text-sm font-medium" title="Instructions">
-                    ❓ Help
-                </button>
-                
-                <button id="openNotesBtn" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
-                    <span>📝</span> Notes
+                <button id="expandHeaderBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition cursor-pointer text-sm font-medium" title="More buttons">
+                    ☰ <span class="hidden sm:inline">More</span>
                 </button>
 
-                <a href="playground.html" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
-                    <span>📚</span> RAG Playground
-                </a>
-
-                <a href="ide.html" class="bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
-                    <span>⚡</span> AI IDE
-                </a>
-
-                <button id="toggleSandboxBtn" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
-                    <span>💻</span> Sandbox
-                </button>
+                <div id="collapsedButtons" class="hidden absolute top-full right-0 mt-2 bg-gray-900 border border-gray-800 rounded-xl p-2 flex-col gap-1 shadow-2xl z-50 min-w-[200px]">
+                    <a href="https://dev.to/traliran" target="_blank" id="blogBtn" class="flex bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1.5 w-full">
+                        <span>📝</span> Blog
+                    </a>
+                    <button id="openGroupChatBtn" class="flex bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
+                        <span>👥</span> AI Group Debate
+                    </button>
+                    <button id="openHelpBtn" class="flex bg-gray-800 hover:bg-gray-700 text-gray-300 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
+                        ❓ Help
+                    </button>
+                    <button id="openNotesBtn" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
+                        <span>📝</span> Notes
+                    </button>
+                    <a href="playground.html" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
+                        <span>📚</span> RAG Playground
+                    </a>
+                    <a href="ide.html" class="flex bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
+                        <span>⚡</span> AI IDE
+                    </a>
+                    <button id="toggleSandboxBtn" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
+                        <span>💻</span> Sandbox
+                    </button>
+                </div>
             </div>
         </div>
     </header>

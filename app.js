@@ -84,6 +84,7 @@ const refreshModelsBtn = document.getElementById('refreshModelsBtn');
 const botNameInput = document.getElementById('botName');
 const botPromptInput = document.getElementById('botPrompt');
 const personalInfoInput = document.getElementById('personalInfo');
+const summarizeChatBtn = document.getElementById('summarizeChatBtn');
 const tempInput = document.getElementById('botTemperature');
 const tempValue = document.getElementById('tempValue');
 const topPInput = document.getElementById('botTopP');
@@ -160,6 +161,103 @@ const chatsOverlay = document.getElementById('chatsOverlay');
 const exportJsonBtn = document.getElementById('exportJson');
 const importJsonInput = document.getElementById('importJson');
 const activeStatusText = document.getElementById('activeStatusText');
+
+function countAssistantMessages() {
+    const session = sessions.find(s => s.id === currentSessionId);
+    if (!session) return 0;
+    return session.messages.filter(m => m.role === 'assistant').length;
+}
+
+function updateSummarizeButtonVisibility() {
+    const count = countAssistantMessages();
+    summarizeChatBtn.classList.toggle('hidden', count < 2);
+}
+
+summarizeChatBtn.addEventListener('click', async () => {
+    const session = sessions.find(s => s.id === currentSessionId);
+    if (!session) return;
+    
+    if (countAssistantMessages() < 2) {
+        alert('Need at least 2 AI responses to summarize.');
+        return;
+    }
+    
+    const providerName = apiProvider.value;
+    const hasKey = PROVIDERS[providerName].hasKey;
+    const apiKey = apiKeyValue.value.trim();
+    const endpoint = apiEndpoint.value.trim();
+    const topP = parseFloat(topPInput.value);
+    
+    if (hasKey && !apiKey) {
+        alert('Please enter your API key!');
+        openSidebarUniversal();
+        return;
+    }
+    
+    const modelId = botModelSelect.value;
+    if (!modelId) {
+        alert('Please select an AI model!');
+        openSidebarUniversal();
+        return;
+    }
+    
+    const conversationMessages = session.messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+        }));
+    
+    const summarizationPrompt = {
+        role: 'system',
+        content: 'You are a conversation summarizer. Create a concise but comprehensive summary of this conversation. Focus on: 1) Key topics discussed, 2) Important decisions or conclusions, 3) User preferences and goals revealed. Format as structured text suitable for a "Personal AI" context field.'
+    };
+    
+    const messagesToSend = [summarizationPrompt, ...conversationMessages];
+    
+    summarizeChatBtn.disabled = true;
+    summarizeChatBtn.innerHTML = '⏳ <span class="hidden sm:inline">Summarizing...</span>';
+    
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 60000);
+    
+    try {
+        const payload = {
+            model: modelId,
+            messages: messagesToSend,
+            temperature: 0.3,
+            top_p: topP,
+            max_tokens: 500
+        };
+        
+        const { content: summary } = await fetchStreamingCompletion(endpoint, apiKey, hasKey, payload, providerName, abortController.signal, () => {});
+        
+        if (summary) {
+            const currentInfo = personalInfoInput.value.trim();
+            const newInfo = currentInfo
+                ? `${currentInfo}\n\n--- Conversation Summary ---\n${summary}`
+                : `--- Conversation Summary ---\n${summary}`;
+            
+            personalInfoInput.value = newInfo;
+            localStorage.setItem('gem_personal_info', newInfo);
+            
+            summarizeChatBtn.innerHTML = '✅ <span class="hidden sm:inline">Done!</span>';
+            setTimeout(() => {
+                summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+            }, 2000);
+        } else {
+            summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+        }
+    } catch (error) {
+        console.error('Summarization error:', error);
+        const message = error.name === 'AbortError' ? 'Request timed out after 60s' : error.message;
+        alert('Failed to summarize conversation: ' + message);
+        summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+    } finally {
+        clearTimeout(timeoutId);
+        summarizeChatBtn.disabled = false;
+    }
+});
 
 marked.use({ breaks: true, gfm: true });
 
@@ -413,6 +511,7 @@ function selectSession(id) {
     renderSessionsList();
     chatsPanel.classList.add('-translate-x-full');
     chatsOverlay.classList.add('hidden');
+    updateSummarizeButtonVisibility();
 }
 
 function deleteSession(id, event) {
@@ -592,6 +691,27 @@ tabPreview.addEventListener('click', () => {
 runCodeBtn.addEventListener('click', () => tabPreview.click());
 toggleSandboxBtn.addEventListener('click', () => sandboxColumn.classList.toggle('hidden'));
 closeSandboxBtn.addEventListener('click', () => sandboxColumn.classList.add('hidden'));
+
+const expandHeaderBtn = document.getElementById('expandHeaderBtn');
+const collapsedButtons = document.getElementById('collapsedButtons');
+
+if (expandHeaderBtn && collapsedButtons) {
+    expandHeaderBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        collapsedButtons.classList.toggle('hidden');
+        collapsedButtons.classList.toggle('flex');
+    });
+
+    document.addEventListener('click', () => {
+        collapsedButtons.classList.add('hidden');
+        collapsedButtons.classList.remove('flex');
+    });
+
+    collapsedButtons.addEventListener('click', () => {
+        collapsedButtons.classList.add('hidden');
+        collapsedButtons.classList.remove('flex');
+    });
+}
 
 window.sendToSandbox = function(encodedCode) {
     sandboxCode.value = decodeURIComponent(encodedCode);
@@ -1211,6 +1331,7 @@ async function triggerAiResponse(session) {
             // Replace placeholder with final rendered rich content
             placeholderData.placeholder.remove();
             renderMessageToDOM('assistant', content, session.botName, session.messages.length - 1);
+            updateSummarizeButtonVisibility();
         } else {
             const requests = activeModels.map(modelId => {
                 const payload = {
@@ -1251,6 +1372,7 @@ async function triggerAiResponse(session) {
             saveSessionsToStorage();
             renderMessageToDOM('assistant', multiMarkdown, 'Hub Comparator', session.messages.length - 1);
             updateUsageIndicator({ tokens: estimateTokenCount(buildPromptText(messagesToSend)), cost: (estimateTokenCount(buildPromptText(messagesToSend)) / 1000) * TOKEN_COST_PER_1K, streaming: false });
+            updateSummarizeButtonVisibility();
         }
         chatWindow.scrollTop = chatWindow.scrollHeight;
     } catch (error) {
