@@ -1197,7 +1197,10 @@ async function runAiAgentRequest(userPromptText) {
     const activeBot = customBots.find(b => b.id === activeBotId);
     const systemPrompt = activeBot ? activeBot.prompt : `You are Traliran AI operating in a browser IDE. You have full access to the workspace files and can modify or create files directly.`;
 
-    const baseSystemPrompt = `${systemPrompt}
+    const personalInfo = localStorage.getItem('gem_personal_info') || '';
+    const personalContext = personalInfo ? `[About the user]:\n${personalInfo}\n\n` : '';
+
+    const baseSystemPrompt = `${personalContext}${systemPrompt}
 
 Current workspace files:
 ${Object.entries(selectedFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
