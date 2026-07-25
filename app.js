@@ -108,6 +108,9 @@ const noteContent = document.getElementById('noteContent');
 const notePreview = document.getElementById('notePreview');
 const toggleNotePreview = document.getElementById('toggleNotePreview');
 const deleteNoteBtn = document.getElementById('deleteNoteBtn');
+const importNoteBtn = document.getElementById('importNoteBtn');
+const exportNoteBtn = document.getElementById('exportNoteBtn');
+const noteFileInput = document.getElementById('noteFileInput');
 const noteTagsContainer = document.getElementById('noteTagsContainer');
 const aiComplementBtn = document.getElementById('aiComplementBtn');
 const storeModal = document.getElementById('storeModal');
@@ -932,6 +935,42 @@ async function complementNote() {
         }
 }
 
+function importNoteFromMD() {
+    noteFileInput.click();
+}
+
+noteFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const content = await file.text();
+    const title = file.name.replace(/\.md$/i, '');
+    const id = 'note_' + Date.now();
+    const newNote = { id, title, content, tags: [], updatedAt: Date.now() };
+    notes.unshift(newNote);
+    currentNoteId = id;
+    saveNotesToStorage();
+    renderNotesList();
+    openNote(id);
+    noteFileInput.value = '';
+});
+
+function exportNoteToMD() {
+    if (!currentNoteId) return;
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note) return;
+    const title = note.title || 'untitled-note';
+    const content = `# ${note.title}\n\n${note.content}`;
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 function renderMessageToDOM(role, content, botName, index) {
     welcomeMessage.classList.add('hidden');
     const messageDiv = document.createElement('div');
@@ -1738,6 +1777,8 @@ toggleNotePreview.addEventListener('click', () => {
     }
 });
 aiComplementBtn.addEventListener('click', complementNote);
+importNoteBtn.addEventListener('click', importNoteFromMD);
+exportNoteBtn.addEventListener('click', exportNoteToMD);
 
 exportJsonBtn.addEventListener('click', () => {
     const config = {
