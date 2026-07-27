@@ -518,6 +518,9 @@
             <div class="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
                 <input type="text" id="noteTitle" placeholder="Note Title..." class="bg-transparent text-xl font-bold text-gray-100 focus:outline-none w-full mr-4">
                 <div class="flex gap-2">
+                    <button id="importNoteBtn" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer" title="Import MD file">📥 Import</button>
+                    <button id="exportNoteBtn" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer" title="Export as MD file">📤 Export</button>
+                    <input type="file" id="noteFileInput" accept=".md" class="hidden">
                     <button id="toggleNotePreview" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer">👁️ Preview</button>
                     <button id="deleteNoteBtn" class="text-xs bg-rose-900/30 hover:bg-rose-900/50 text-rose-400 px-3 py-1 rounded border border-rose-800/50 transition cursor-pointer">🗑️ Delete</button>
                     <button id="closeNotesPage" class="text-gray-400 hover:text-white p-1 text-xl">✕</button>
