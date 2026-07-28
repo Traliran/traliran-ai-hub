@@ -1340,8 +1340,27 @@ function parseAndExtractFiles(responseText) {
     };
 }
 
+// Multi-turn AI Agent Workflow State
+let aiWorkflowState = {
+    isActive: false,
+    iteration: 0,
+    maxIterations: 10,
+    userPrompt: '',
+    lastResult: null,
+    abortController: null
+};
+
 async function runAiAgentRequest(userPromptText) {
-    const maxCalls = 999;
+    // Initialize workflow state
+    aiWorkflowState = {
+        isActive: true,
+        iteration: 0,
+        maxIterations: 10,
+        userPrompt: userPromptText,
+        lastResult: null,
+        abortController: currentAiAbortController
+    };
+    
     let attemptPrompt = userPromptText;
     
     // Get only selected files for AI context
@@ -1359,7 +1378,7 @@ async function runAiAgentRequest(userPromptText) {
     const personalInfo = localStorage.getItem('gem_personal_info') || '';
     const personalContext = personalInfo ? `[About the user]:\n${personalInfo}\n\n` : '';
 
-const baseSystemPrompt = `${personalContext}${systemPrompt}
+    const baseSystemPrompt = `${personalContext}${systemPrompt}
  
 Current workspace files:
  ${Object.entries(selectedFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
@@ -1386,15 +1405,17 @@ IMPORTANT RULES:
 Do not include any extra text outside of the file output blocks unless you are providing a short explanation. If you need to retry, respond with file outputs only.`;
 
     let lastResult = { cleanText: '', files: {}, rawText: '' };
-    for (let attempt = 1; attempt <= maxCalls; attempt++) {
+    
+    // Multi-turn workflow loop
+    while (aiWorkflowState.isActive && aiWorkflowState.iteration < aiWorkflowState.maxIterations) {
+        aiWorkflowState.iteration++;
+        
+        // Show iteration status
+        renderIterationStatus(aiWorkflowState.iteration);
 
         // Use active bot's model and temperature if specified, otherwise use the global ones
         const modelToUse = (activeBot && activeBot.model) ? activeBot.model : botModelSelect.value;
         const tempToUse = (activeBot && activeBot.temp !== undefined) ? activeBot.temp : parseFloat(localStorage.getItem('gem_temp') || '0.7');
-
-        // We need to pass these to fetchCompletion, but fetchCompletion currently reads from global state.
-        // Let's override global state temporarily or modify fetchCompletion.
-        // Easiest way: temporarily set the global value or update fetchCompletion signature.
 
         const originalModel = botModelSelect.value;
         const originalTemp = localStorage.getItem('gem_temp');
@@ -1408,7 +1429,7 @@ Do not include any extra text outside of the file output blocks unless you are p
         ];
 
         try {
-            const response = await fetchCompletion(messages, currentAiAbortController.signal);
+            const response = await fetchCompletion(messages, aiWorkflowState.abortController.signal);
 
             // Restore original state
             botModelSelect.value = originalModel;
@@ -1419,24 +1440,95 @@ Do not include any extra text outside of the file output blocks unless you are p
             const parsed = parseAndExtractFiles(rawText);
 
             lastResult = { cleanText: parsed.cleanText, files: parsed.files, rawText };
+            
+            // If we got valid file updates, apply them and continue workflow
             if (Object.keys(parsed.files).length > 0) {
-                return { ...lastResult, calls: attempt };
+                // Apply changes immediately
+                proposedChanges = parsed.files;
+                applyProposedChanges();
+                
+                // After applying, send feedback to AI for next iteration
+                const feedbackMessage = buildWorkflowFeedback(parsed.files);
+                attemptPrompt = feedbackMessage;
+                
+                // Small delay before next iteration
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Continue to next iteration if AI wants to do more
+                continue;
+            } else {
+                // No files extracted, ask AI to retry with better format
+                attemptPrompt = `The previous response does not contain any parseable file updates. Please resend the updated file contents using one of these formats:\n- <<<FILE_START: filename>>>\n...file contents...\n<<<FILE_END>>>\n- <<<PATCH_START: filename>>>\n<<<SEARCH>>>\nold code\n====\nnew code\n<<<PATCH_END>>>\nOr a valid JSON object with a top-level "files" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${lastResult.rawText}`;
+                
+                // Continue to next iteration
+                await new Promise(resolve => setTimeout(resolve, 300));
+                continue;
             }
-    } catch (e) {
-            // Restore state on error too
+        } catch (e) {
+            // Restore state on error
             botModelSelect.value = originalModel;
             if (originalTemp) localStorage.setItem('gem_temp', originalTemp);
             else localStorage.removeItem('gem_temp');
 
-            if (e.name === 'AbortError') throw e;
-            // If one attempt fails, we might try the next one unless it's an abort
-        }
-
-        if (attempt < maxCalls) {
-            attemptPrompt = `The previous response did not contain any parseable file updates. Please resend the updated file contents using one of these formats:\n- <<<FILE_START: filename>>>\n...file contents...\n<<<FILE_END>>>\n- <<<PATCH_START: filename>>>\n<<<SEARCH>>>\nold code\n====\nnew code\n<<<PATCH_END>>>\nOr a valid JSON object with a top-level \"files\" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${lastResult.rawText}`;
+            if (e.name === 'AbortError') {
+                aiWorkflowState.isActive = false;
+                throw e;
+            }
+            
+            // Error occurred, ask AI to retry
+            attemptPrompt = `An error occurred while processing your response: ${e.message}. Please try again with properly formatted file updates.`;
+            await new Promise(resolve => setTimeout(resolve, 300));
+            continue;
         }
     }
-    return { ...lastResult, calls: maxCalls };
+    
+    // Workflow completed
+    aiWorkflowState.isActive = false;
+    renderWorkflowComplete(aiWorkflowState.iteration);
+    
+    return { ...lastResult, calls: aiWorkflowState.iteration };
+}
+
+function renderIterationStatus(iteration) {
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'bg-violet-950/40 border border-violet-900 text-violet-300 p-2 rounded-lg text-[11px] font-medium flex items-center gap-2';
+    statusDiv.innerHTML = `
+        <span class="animate-spin">⟳</span>
+        <span>Iteration ${iteration} - Processing...</span>
+    `;
+    aiChatWindow.appendChild(statusDiv);
+    aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+    statusDiv.id = 'workflowIterationStatus';
+}
+
+function updateIterationStatus(message) {
+    const statusDiv = document.getElementById('workflowIterationStatus');
+    if (statusDiv) {
+        statusDiv.innerHTML = message;
+        statusDiv.className = 'bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-2 rounded-lg text-[11px] font-medium';
+    }
+}
+
+function buildWorkflowFeedback(appliedFiles) {
+    const fileNames = Object.keys(appliedFiles).join(', ');
+    return `✓ Successfully applied changes to: ${fileNames}.\n\nProject state has been updated. Preview refreshed.\n\nWould you like to:\n- Make additional improvements?\n- Fix any issues?\n- Add more features?\n\nIf you're done, please confirm completion. Otherwise, proceed with the next set of changes using the same file tag format.`;
+}
+
+function renderWorkflowComplete(totalIterations) {
+    const completeDiv = document.createElement('div');
+    completeDiv.className = 'bg-gradient-to-r from-violet-950/60 to-fuchsia-950/60 border border-violet-800/60 text-violet-200 p-3 rounded-xl text-xs font-medium shadow-lg';
+    completeDiv.innerHTML = `
+        <div class="flex items-center gap-2 mb-1">
+            <span class="text-lg">✨</span>
+            <span class="font-bold">Workflow Complete</span>
+        </div>
+        <div class="text-[11px] opacity-90">
+            Completed ${totalIterations} iteration${totalIterations > 1 ? 's' : ''}. 
+            All changes have been applied to the project.
+        </div>
+    `;
+    aiChatWindow.appendChild(completeDiv);
+    aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
 }
 
 // UI Message rendering
