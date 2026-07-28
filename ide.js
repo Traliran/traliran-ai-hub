@@ -328,10 +328,19 @@ function selectFile(filename) {
 
     if (codeEditor) {
         const fileContent = projectFiles[filename] || "";
-        codeEditor.setValue(fileContent);
+        // Use executeEdits for more reliable update
         const model = codeEditor.getModel();
         if (model) {
             monaco.editor.setModelLanguage(model, getLanguageForFile(filename));
+            const currentValue = codeEditor.getValue();
+            if (currentValue !== fileContent) {
+                codeEditor.executeEdits('file-switch', [{
+                    range: model.getFullModelRange(),
+                    text: fileContent
+                }]);
+            }
+        } else {
+            codeEditor.setValue(fileContent);
         }
     }
 }
@@ -398,14 +407,26 @@ function initializeMonaco() {
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
         });
 
-codeEditor.onDidChangeModelContent(() => {
-    if (applyingProposedChanges) return;
-    if (activeFileName && projectFiles[activeFileName] !== undefined) {
-        projectFiles[activeFileName] = codeEditor.getValue();
-        localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
-    }
-});
+        codeEditor.onDidChangeModelContent(() => {
+            if (applyingProposedChanges) return;
+            if (activeFileName && projectFiles[activeFileName] !== undefined) {
+                projectFiles[activeFileName] = codeEditor.getValue();
+                localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
+            }
+        });
 
+        // Initial file load with executeEdits for reliability
+        const initialContent = projectFiles[activeFileName] || "";
+        const model = codeEditor.getModel();
+        if (model) {
+            codeEditor.executeEdits('init', [{
+                range: model.getFullModelRange(),
+                text: initialContent
+            }]);
+        } else {
+            codeEditor.setValue(initialContent);
+        }
+        
         selectFile(activeFileName);
     });
 }
@@ -1423,8 +1444,35 @@ Do not include any extra text outside of the file output blocks unless you are p
         if (modelToUse) botModelSelect.value = modelToUse;
         localStorage.setItem('gem_temp', tempToUse.toString());
 
+        // Re-build system prompt with current file state on each iteration
+        const currentSystemPrompt = `${personalContext}${systemPrompt}
+ 
+Current workspace files (UPDATED):
+ ${Object.entries(selectedFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
+ 
+Active file: ${activeFileName}
+ 
+Write updates using one of these formats only:
+ 1) Full file rewrite: <<<FILE_START: path>>>
+...entire file content...
+<<<FILE_END>>>
+ 2) Line-based patch: <<<PATCH_START: path>>>
+<<<SEARCH>>>
+exact old code fragment
+====
+new code fragment
+<<<PATCH_END>>>
+ 
+IMPORTANT RULES:
+- You MUST use the <<<FILE_START>>> or <<<PATCH_START>>> tags to output file changes.
+- Do NOT wrap these special tags inside markdown code fences (e.g. do not write \`\`\`html <<<FILE_START: ...\`\`\` or \`\`\` <<<PATCH_START: ...\`\`\`).
+- The tags must appear as plain text in the response, not inside fenced code blocks.
+- Only provide file output blocks in your response, or a short explanation followed immediately by the tags.
+ 
+Do not include any extra text outside of the file output blocks unless you are providing a short explanation. If you need to retry, respond with file outputs only.`;
+
         const messages = [
-            { role: 'system', content: baseSystemPrompt },
+            { role: 'system', content: currentSystemPrompt },
             { role: 'user', content: attemptPrompt }
         ];
 
@@ -1446,6 +1494,20 @@ Do not include any extra text outside of the file output blocks unless you are p
                 // Apply changes immediately
                 proposedChanges = parsed.files;
                 applyProposedChanges();
+                
+                // Update selectedFiles with new content for next iteration
+                Object.entries(parsed.files).forEach(([filepath, contentOrPatch]) => {
+                    let newContent;
+                    if (typeof contentOrPatch === 'string') {
+                        newContent = contentOrPatch;
+                    } else if (contentOrPatch && typeof contentOrPatch === 'object' && contentOrPatch.searchLines && contentOrPatch.replaceLines) {
+                        // For patches, use the already-updated projectFiles
+                        newContent = projectFiles[filepath];
+                    } else {
+                        return;
+                    }
+                    selectedFiles[filepath] = newContent;
+                });
                 
                 // After applying, send feedback to AI for next iteration
                 const feedbackMessage = buildWorkflowFeedback(parsed.files);
@@ -1728,6 +1790,42 @@ function applyProposedChanges() {
      proposedChanges = null;
      changesIndicator.classList.add('hidden');
      changesIndicator.classList.remove('flex');
+     
+     // Force refresh Monaco Editor for ALL updated files, not just active one
+     if (codeEditor) {
+         const model = codeEditor.getModel();
+         if (model && appliedFiles.includes(activeFileName)) {
+             const savedPosition = codeEditor.getPosition();
+             const savedScrollTop = codeEditor.getScrollTop();
+             const savedScrollLeft = codeEditor.getScrollLeft();
+             
+             // Use executeEdits for smoother update
+             const currentValue = codeEditor.getValue();
+             const newValue = projectFiles[activeFileName];
+             
+             if (currentValue !== newValue) {
+                 codeEditor.executeEdits('ai-update', [{
+                     range: model.getFullModelRange(),
+                     text: newValue
+                 }]);
+                 
+                 // Restore position
+                 if (savedPosition) {
+                     const maxLine = model.getLineCount();
+                     const maxColumn = model.getLineMaxColumn(savedPosition.lineNumber);
+                     const restoredPosition = {
+                         column: Math.min(savedPosition.column, maxColumn),
+                         lineNumber: Math.min(savedPosition.lineNumber, maxLine)
+                     };
+                     codeEditor.setPosition(restoredPosition);
+                 }
+                 
+                 if (savedScrollTop !== undefined) codeEditor.setScrollTop(savedScrollTop);
+                 if (savedScrollLeft !== undefined) codeEditor.setScrollLeft(savedScrollLeft);
+             }
+         }
+     }
+     
      runPreview();
  }
 
