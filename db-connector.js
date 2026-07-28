@@ -54,8 +54,11 @@ class ProjectDB {
 
             const req = store.put(record);
             req.onsuccess = () => {
+                // [VFS WRITE] logging
+                console.log(`[VFS WRITE]: ${path} (${content.length} bytes)`);
+                
                 // Dispatch custom event for UI updates
-                window.dispatchEvent(new CustomEvent('file-updated', { 
+                window.dispatchEvent(new CustomEvent('vfs:updated', { 
                     detail: { path, content, language } 
                 }));
                 resolve(record);
@@ -71,7 +74,12 @@ class ProjectDB {
             const store = tx.objectStore('files');
             const req = store.get(path);
 
-            req.onsuccess = () => resolve(req.result ? req.result.content : null);
+            req.onsuccess = () => {
+                const result = req.result ? req.result.content : null;
+                // [VFS READ] logging
+                console.log(`[VFS READ]: ${path} (${result ? result.length : 0} bytes)`);
+                resolve(result);
+            };
             req.onerror = () => reject(req.error);
         });
     }
