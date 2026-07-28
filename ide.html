@@ -224,9 +224,14 @@
                 <!-- Proposed changes or quick preview/apply -->
                 <div id="changesIndicator" class="hidden items-center justify-between bg-violet-950/30 border border-violet-900/40 p-2 rounded-lg text-xs">
                     <span class="text-violet-300 truncate">📦 Extracted 1+ file updates!</span>
-                    <button id="applyChangesBtn" class="bg-violet-600 hover:bg-violet-500 text-white font-bold px-2.5 py-1 rounded text-[10px] transition cursor-pointer">
-                        Apply Changes
-                    </button>
+                    <div class="flex gap-2">
+                        <button id="undoChangesBtn" class="bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold px-2 py-1 rounded text-[10px] transition cursor-pointer" title="Undo last AI changes">
+                            ↩ Undo
+                        </button>
+                        <button id="applyChangesBtn" class="bg-violet-600 hover:bg-violet-500 text-white font-bold px-2.5 py-1 rounded text-[10px] transition cursor-pointer">
+                            Apply Changes
+                        </button>
+                    </div>
                 </div>
 
                 <div class="flex gap-2 items-end">

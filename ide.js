@@ -4,6 +4,7 @@ let activeFileName = "index.html";
 let proposedChanges = null;
 let selectedFilesForAI = {}; // Track which files to send to AI
 let gitCommits = []; // Git history
+let fileHistory = {}; // Per-file undo/backup stack: { filepath: [previousContent, ...] }
 
 // Bot Store State
 let customBots = [];
@@ -44,6 +45,7 @@ const editorContainer = document.getElementById('editorContainer');
 const previewContainer = document.getElementById('previewContainer');
 const codeEditorElement = document.getElementById('codeEditor');
 let codeEditor = null;
+let applyingProposedChanges = false;
 const projectIframe = document.getElementById('projectIframe');
 
 const btnAiGenerate = document.getElementById('btnAiGenerate');
@@ -56,6 +58,7 @@ const aiSendBtn = document.getElementById('aiSendBtn');
 const aiStopBtn = document.getElementById('aiStopBtn');
 const changesIndicator = document.getElementById('changesIndicator');
 const applyChangesBtn = document.getElementById('applyChangesBtn');
+const undoChangesBtn = document.getElementById('undoChangesBtn');
 const keyWarningModal = document.getElementById('keyWarningModal');
 
 // Bot Store DOM Elements
@@ -395,12 +398,13 @@ function initializeMonaco() {
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
         });
 
-        codeEditor.onDidChangeModelContent(() => {
-            if (activeFileName && projectFiles[activeFileName] !== undefined) {
-                projectFiles[activeFileName] = codeEditor.getValue();
-                localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
-            }
-        });
+codeEditor.onDidChangeModelContent(() => {
+    if (applyingProposedChanges) return;
+    if (activeFileName && projectFiles[activeFileName] !== undefined) {
+        projectFiles[activeFileName] = codeEditor.getValue();
+        localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
+    }
+});
 
         selectFile(activeFileName);
     });
@@ -1040,38 +1044,185 @@ function applyDiffsToFiles(diffsByFile) {
             resultFiles[filepath] = lines.join('\n');
         }
     });
-    return resultFiles;
-}
-
-function stripFileMarkers(responseText) {
-    return responseText
-        .replace(/<<<FILE_START:\s*.*?\s*>>>([\s\S]*?)<<<FILE_END>>>/g, '')
-        .replace(/<<<DIFF_START:\s*.*?\s*>>>([\s\S]*?)<<<DIFF_END>>>/g, '')
-        .replace(/```\w*\s*<<<FILE_START[\s\S]*?<<<FILE_END>>>\s*```/g, '')
-        .replace(/```\w*\s*<<<DIFF_START[\s\S]*?<<<DIFF_END>>>\s*```/g, '')
-        .trim();
-}
-
-function parseFileTags(responseText) {
-    const fileRegex = /<<<FILE_START:\s*(.*?)\s*>>>([\s\S]*?)<<<FILE_END>>>/g;
-    let match;
-    const extractedFiles = {};
-
-    while ((match = fileRegex.exec(responseText)) !== null) {
-        const filePath = match[1].trim();
-        let fileContent = match[2];
-
-        if (fileContent.startsWith('\r\n')) fileContent = fileContent.substring(2);
-        else if (fileContent.startsWith('\n')) fileContent = fileContent.substring(1);
-        if (fileContent.endsWith('\r\n')) fileContent = fileContent.substring(0, fileContent.length - 2);
-        else if (fileContent.endsWith('\n')) fileContent = fileContent.substring(0, fileContent.length - 1);
-
-        extractedFiles[filePath] = fileContent;
+        return resultFiles;
     }
-    return extractedFiles;
-}
 
-function parseJsonFileInstructions(responseText) {
+    // Save current file content to history stack for undo/rollback
+    function pushFileToHistory(filepath) {
+        if (!fileHistory[filepath]) {
+            fileHistory[filepath] = [];
+        }
+        const currentContent = projectFiles[filepath] || '';
+        // Only push if different from the last saved entry
+        const history = fileHistory[filepath];
+        if (history.length === 0 || history[history.length - 1] !== currentContent) {
+            history.push(currentContent);
+            // Keep only last 50 states to avoid memory bloat
+            if (history.length > 50) history.shift();
+        }
+    }
+
+    // Restore the most recent previous state of a file from history
+    function undoFileChange(filepath) {
+        const history = fileHistory[filepath];
+        if (!history || history.length === 0) {
+            console.warn(`[undoFileChange] No history for "${filepath}".`);
+            return false;
+        }
+        const previousContent = history.pop();
+        projectFiles[filepath] = previousContent;
+        return true;
+    }
+
+    // Apply a patch (search/replace) to a file's content with fuzzy matching and normalization
+    // Returns { success: boolean, message: string, oldContent: string, newContent: string }
+    function applyPatchToFile(filepath, { searchLines, replaceLines }) {
+        if (!projectFiles[filepath]) {
+            // If file doesn't exist yet, just create it from the replace content
+            return { success: true, message: `File "${filepath}" did not exist; created from patch.`, oldContent: '', newContent: replaceLines.join('\n') };
+        }
+
+        const oldContent = projectFiles[filepath];
+        const oldContentNormalized = oldContent.replace(/\r\n/g, '\n');
+        const oldLines = oldContentNormalized.split('\n');
+
+        // Normalize search lines: trim each one
+        const normalizedSearch = searchLines.map(l => l.trim());
+
+        // Find the starting index of the first search line in the file
+        let startIdx = -1;
+        for (let i = 0; i < oldLines.length; i++) {
+            if (oldLines[i].trim() === normalizedSearch[0]) {
+                // Check if all subsequent search lines match consecutively
+                let allMatch = true;
+                for (let j = 1; j < normalizedSearch.length; j++) {
+                    if (i + j >= oldLines.length || oldLines[i + j].trim() !== normalizedSearch[j]) {
+                        allMatch = false;
+                        break;
+                    }
+                }
+                if (allMatch) {
+                    startIdx = i;
+                    break;
+                }
+            }
+        }
+
+        // Fuzzy fallback: try matching with flexible leading/trailing whitespace
+        if (startIdx === -1) {
+            for (let i = 0; i < oldLines.length; i++) {
+                if (oldLines[i].trimEnd().endsWith(normalizedSearch[0].trimStart()) ||
+                    normalizedSearch[0].trimEnd().endsWith(oldLines[i].trimStart())) {
+                    let allMatch = true;
+                    for (let j = 1; j < normalizedSearch.length; j++) {
+                        if (i + j >= oldLines.length) { allMatch = false; break; }
+                        const a = oldLines[i + j].trim();
+                        const b = normalizedSearch[j].trim();
+                        if (a !== b && !a.includes(b) && !b.includes(a)) {
+                            allMatch = false;
+                            break;
+                        }
+                    }
+                    if (allMatch) { startIdx = i; break; }
+                }
+            }
+        }
+
+        if (startIdx === -1) {
+            return { success: false, message: `Patch for "${filepath}" could not be applied: SEARCH block not found in file content.`, oldContent, newContent: oldContent };
+        }
+
+        // Build the new content: lines before start + replace lines + lines after search block
+        const searchLength = normalizedSearch.length;
+        const newLines = [
+            ...oldLines.slice(0, startIdx),
+            ...replaceLines.map(l => l.trim()),
+            ...oldLines.slice(startIdx + searchLength)
+        ];
+        const newContent = newLines.join('\n');
+
+        return { success: true, message: `Patch applied to "${filepath}" successfully.`, oldContent, newContent };
+    }
+
+ function stripFileMarkers(responseText) {
+     let cleaned = responseText;
+     // Remove markdown fences that accidentally wrap special tags (e.g. ```html <<<FILE_START ... <<<FILE_END>>> ```)
+     cleaned = cleaned.replace(/```\w*\s*<<<FILE_START[\s\S]*?<<<FILE_END>>>\s*```/g, '');
+     cleaned = cleaned.replace(/```\w*\s*<<<PATCH_START[\s\S]*?<<<PATCH_END>>>\s*```/g, '');
+     cleaned = cleaned.replace(/```\w*\s*<<<DIFF_START[\s\S]*?<<<DIFF_END>>>\s*```/g, '');
+     // Remove the actual tag blocks
+     cleaned = cleaned.replace(/<<<FILE_START:\s*.*?\s*>>>([\s\S]*?)<<<FILE_END>>>/g, '');
+     cleaned = cleaned.replace(/<<<PATCH_START:\s*.*?\s*>>>([\s\S]*?)<<<PATCH_END>>>/g, '');
+     cleaned = cleaned.replace(/<<<DIFF_START:\s*.*?\s*>>>([\s\S]*?)<<<DIFF_END>>>/g, '');
+     return cleaned.trim();
+ }
+
+// Remove markdown code fences that accidentally wrap special AI tags (e.g. ```html <<<FILE_START ... <<<FILE_END>>> ```)
+ function unwrapMarkdownFenceTags(text) {
+     // Match any ``` fence block that contains <<<FILE_START or <<<PATCH_START and unwrap it
+     return text.replace(/```\w*\n?(<<<FILE_START[\s\S]*?<<<FILE_END>>>)\n?```/g, '$1')
+                .replace(/```\w*\n?(<<<PATCH_START[\s\S]*?<<<PATCH_END>>>)\n?```/g, '$1')
+                .replace(/```\w*\n?(<<<DIFF_START[\s\S]*?<<<DIFF_END>>>)\n?```/g, '$1');
+ }
+
+ function parseFileTags(responseText) {
+     const cleaned = unwrapMarkdownFenceTags(responseText);
+     const fileRegex = /<<<FILE_START:\s*(.*?)\s*>>>([\s\S]*?)<<<FILE_END>>>/g;
+     let match;
+     const extractedFiles = {};
+
+     while ((match = fileRegex.exec(cleaned)) !== null) {
+         const filePath = match[1].trim();
+         let fileContent = match[2];
+
+         if (fileContent.startsWith('\r\n')) fileContent = fileContent.substring(2);
+         else if (fileContent.startsWith('\n')) fileContent = fileContent.substring(1);
+         if (fileContent.endsWith('\r\n')) fileContent = fileContent.substring(0, fileContent.length - 2);
+         else if (fileContent.endsWith('\n')) fileContent = fileContent.substring(0, fileContent.length - 1);
+
+         extractedFiles[filePath] = fileContent;
+     }
+     return extractedFiles;
+ }
+
+ // Parse patch tags: <<<PATCH_START: path>>> ... <<<SEARCH>>> ... ==== ... new content ... <<<PATCH_END>>>
+ // Supports normalization (trim lines, \r\n -> \n) and fuzzy matching (lines with extra leading/trailing whitespace)
+ function parsePatchTags(responseText) {
+     const cleaned = unwrapMarkdownFenceTags(responseText);
+     const patchRegex = /<<<PATCH_START:\s*(.*?)\s*>>>([\s\S]*?)<<<PATCH_END>>>/g;
+     let match;
+     const extractedPatches = {};
+
+     while ((match = patchRegex.exec(cleaned)) !== null) {
+         const filePath = match[1].trim();
+         let patchBody = match[2];
+
+         // Normalize line endings
+         patchBody = patchBody.replace(/\r\n/g, '\n');
+
+         // Split into SEARCH and REPLACE sections delimited by ====
+         const separatorIdx = patchBody.indexOf('====');
+         if (separatorIdx === -1) {
+             console.warn(`[parsePatchTags] Patch for "${filePath}" missing ==== separator; skipping.`);
+             continue;
+         }
+
+         let searchBlock = patchBody.substring(0, separatorIdx);
+         let replaceBlock = patchBody.substring(separatorIdx + 4); // skip '===='
+
+         // Remove <<<SEARCH>>> marker if present inside the body
+         searchBlock = searchBlock.replace(/<<<SEARCH>>>\s*/g, '');
+
+         // Trim each line and filter out blank lines from search block (fuzzy normalization)
+         const searchLines = searchBlock.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+         const replaceLines = replaceBlock.split('\n').map(l => l.trim());
+
+         extractedPatches[filePath] = { searchLines, replaceLines };
+     }
+     return extractedPatches;
+ }
+
+ function parseJsonFileInstructions(responseText) {
     let jsonText = responseText.trim();
     let parsed = null;
 
@@ -1141,6 +1292,15 @@ function parseAndExtractFiles(responseText) {
         };
     }
 
+    // Try to parse patches (<<<PATCH_START>>> format)
+    const patchTags = parsePatchTags(responseText);
+    if (Object.keys(patchTags).length > 0) {
+        return {
+            cleanText: stripFileMarkers(responseText),
+            files: patchTags
+        };
+    }
+
     // Try to parse diffs (new feature)
     const diffTags = parseDiffFiles(responseText);
     if (Object.keys(diffTags).length > 0) {
@@ -1200,17 +1360,30 @@ async function runAiAgentRequest(userPromptText) {
     const personalInfo = localStorage.getItem('gem_personal_info') || '';
     const personalContext = personalInfo ? `[About the user]:\n${personalInfo}\n\n` : '';
 
-    const baseSystemPrompt = `${personalContext}${systemPrompt}
-
+const baseSystemPrompt = `${personalContext}${systemPrompt}
+ 
 Current workspace files:
-${Object.entries(selectedFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
-
+ ${Object.entries(selectedFiles).map(([filename, content]) => `--- FILE: ${filename} ---\n${content}`).join('\n\n')}
+ 
 Active file: ${activeFileName}
-
+ 
 Write updates using one of these formats only:
-1) <<<FILE_START: filename>>>\n...file contents...\n<<<FILE_END>>>
-2) JSON object with a top-level \"files\" field mapping filenames to content.
-
+ 1) Full file rewrite: <<<FILE_START: path>>>
+...entire file content...
+<<<FILE_END>>>
+ 2) Line-based patch: <<<PATCH_START: path>>>
+<<<SEARCH>>>
+exact old code fragment
+====
+new code fragment
+<<<PATCH_END>>>
+ 
+IMPORTANT RULES:
+- You MUST use the <<<FILE_START>>> or <<<PATCH_START>>> tags to output file changes.
+- Do NOT wrap these special tags inside markdown code fences (e.g. do not write \`\`\`html <<<FILE_START: ...\`\`\` or \`\`\` <<<PATCH_START: ...\`\`\`).
+- The tags must appear as plain text in the response, not inside fenced code blocks.
+- Only provide file output blocks in your response, or a short explanation followed immediately by the tags.
+ 
 Do not include any extra text outside of the file output blocks unless you are providing a short explanation. If you need to retry, respond with file outputs only.`;
 
     let lastResult = { cleanText: '', files: {}, rawText: '' };
@@ -1261,7 +1434,7 @@ Do not include any extra text outside of the file output blocks unless you are p
         }
 
         if (attempt < maxCalls) {
-            attemptPrompt = `The previous response did not contain any parseable file updates. Please resend the updated file contents using either the exact <<<FILE_START: filename>>>...<<<FILE_END>>> format or a valid JSON object with a top-level \"files\" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${lastResult.rawText}`;
+            attemptPrompt = `The previous response did not contain any parseable file updates. Please resend the updated file contents using one of these formats:\n- <<<FILE_START: filename>>>\n...file contents...\n<<<FILE_END>>>\n- <<<PATCH_START: filename>>>\n<<<SEARCH>>>\nold code\n====\nnew code\n<<<PATCH_END>>>\nOr a valid JSON object with a top-level \"files\" mapping. Do not provide extra commentary.\n\nPrevious AI response:\n${lastResult.rawText}`;
         }
     }
     return { ...lastResult, calls: maxCalls };
@@ -1385,36 +1558,87 @@ async function handleAiRequest(customPrompt = "") {
 }
 
 function applyProposedChanges() {
-    if (!proposedChanges) return;
+     if (!proposedChanges) return;
 
-    Object.entries(proposedChanges).forEach(([filepath, content]) => {
-        projectFiles[filepath] = content;
-    });
-    saveWorkspace();
-    renderFileList();
-    
-    // Refresh current selected file editor
-    if (projectFiles[activeFileName] !== undefined && codeEditor) {
-        codeEditor.setValue(projectFiles[activeFileName]);
-    }
+     const appliedFiles = [];
+     const failedFiles = [];
 
-    proposedChanges = null;
-    changesIndicator.classList.add('hidden');
-    changesIndicator.classList.remove('flex');
+     // 1. Save previous states to history (undo/rollback support) then apply patches or full rewrites
+     Object.entries(proposedChanges).forEach(([filepath, contentOrPatch]) => {
+         pushFileToHistory(filepath);
 
-    // Display mini status indicator
-    const notifyDiv = document.createElement('div');
-    notifyDiv.className = 'bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-2 rounded-lg text-[11px] font-medium animate-pulse';
-    notifyDiv.textContent = '✓ Workspace files updated! Running preview...';
-    aiChatWindow.appendChild(notifyDiv);
-    aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+         if (typeof contentOrPatch === 'string') {
+             projectFiles[filepath] = contentOrPatch;
+             appliedFiles.push(filepath);
+         } else if (contentOrPatch && typeof contentOrPatch === 'object' && contentOrPatch.searchLines && contentOrPatch.replaceLines) {
+             const result = applyPatchToFile(filepath, contentOrPatch);
+             if (result.success) {
+                 projectFiles[filepath] = result.newContent;
+                 appliedFiles.push(filepath);
+             } else {
+                 failedFiles.push({ filepath, message: result.message });
+             }
+         } else {
+             failedFiles.push({ filepath, message: 'Unknown change format.' });
+         }
+     });
 
-    // Trigger preview update
-    runPreview();
-    
-    // Switch to preview tab automatically so user can see live results!
-    tabPreview.click();
-}
+     // 2. Persist workspace state
+     saveWorkspace();
+     renderFileList();
+
+     // 3. Update Monaco Editor if the active file was changed, preserving cursor/scroll position
+     if (codeEditor && projectFiles[activeFileName] !== undefined && appliedFiles.includes(activeFileName)) {
+         const savedPosition = codeEditor.getPosition();
+         const savedScrollTop = codeEditor.getScrollTop();
+         const savedScrollLeft = codeEditor.getScrollLeft();
+
+         codeEditor.setValue(projectFiles[activeFileName]);
+
+         if (savedPosition) {
+             const model = codeEditor.getModel();
+             if (model) {
+                 const maxLine = model.getLineCount();
+                 const maxColumn = model.getLineMaxColumn(savedPosition.lineNumber);
+                 const restoredPosition = {
+                     column: Math.min(savedPosition.column, maxColumn),
+                     lineNumber: Math.min(savedPosition.lineNumber, maxLine)
+                 };
+                 codeEditor.setPosition(restoredPosition);
+                 codeEditor.revealPositionInCenter(restoredPosition);
+             }
+         }
+
+         if (savedScrollTop !== undefined) codeEditor.setScrollTop(savedScrollTop);
+         if (savedScrollLeft !== undefined) codeEditor.setScrollLeft(savedScrollLeft);
+     }
+
+     // 4. Show notification in chat
+     let notifyMessage = '';
+     if (appliedFiles.length > 0 && failedFiles.length === 0) {
+         notifyMessage = `✓ ${appliedFiles.length} file(s) updated successfully.`;
+     } else if (appliedFiles.length > 0 && failedFiles.length > 0) {
+         notifyMessage = `✓ ${appliedFiles.length} file(s) updated. ⚠ ${failedFiles.length} file(s) had issues (see console).`;
+     } else {
+         notifyMessage = '⚠ No files could be updated from the AI response.';
+     }
+
+     const notifyDiv = document.createElement('div');
+     notifyDiv.className = 'bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-2 rounded-lg text-[11px] font-medium animate-pulse';
+     notifyDiv.textContent = notifyMessage;
+     aiChatWindow.appendChild(notifyDiv);
+     aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+
+     failedFiles.forEach(f => {
+         console.warn(`[applyProposedChanges] "${f.filepath}": ${f.message}`);
+     });
+
+     // 5. Reset state and trigger preview
+     proposedChanges = null;
+     changesIndicator.classList.add('hidden');
+     changesIndicator.classList.remove('flex');
+     runPreview();
+ }
 
 // ============ GIT INTEGRATION ============
 
@@ -1641,6 +1865,71 @@ aiStopBtn.addEventListener('click', () => {
 });
 
 applyChangesBtn.addEventListener('click', applyProposedChanges);
+
+if (undoChangesBtn) {
+    undoChangesBtn.addEventListener('click', () => {
+        // Rollback all files that were modified in the last proposedChanges batch
+        if (!proposedChanges) {
+            // No current proposed changes to undo; try to restore from fileHistory
+            // Look for the most recently modified files in the history and restore them
+            const restored = [];
+            Object.keys(fileHistory).forEach(filepath => {
+                const history = fileHistory[filepath];
+                if (history && history.length > 0) {
+                    projectFiles[filepath] = history.pop();
+                    restored.push(filepath);
+                }
+            });
+            if (restored.length > 0) {
+                saveWorkspace();
+                renderFileList();
+                if (codeEditor && projectFiles[activeFileName] !== undefined) {
+         applyingProposedChanges = true;
+         codeEditor.setValue(projectFiles[activeFileName]);
+         applyingProposedChanges = false;
+                }
+                runPreview();
+                const notifyDiv = document.createElement('div');
+                notifyDiv.className = 'bg-blue-950/40 border border-blue-900 text-blue-300 p-2 rounded-lg text-[11px] font-medium animate-pulse';
+                notifyDiv.textContent = `↩ Rolled back ${restored.length} file(s) to previous state.`;
+                aiChatWindow.appendChild(notifyDiv);
+                aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+            }
+            return;
+        }
+        // Rollback the current proposed changes using fileHistory
+        const rolledBack = [];
+        Object.keys(proposedChanges).forEach(filepath => {
+            if (undoFileChange(filepath)) {
+                rolledBack.push(filepath);
+            }
+        });
+            if (rolledBack.length > 0) {
+                saveWorkspace();
+                renderFileList();
+                if (codeEditor && projectFiles[activeFileName] !== undefined) {
+                    applyingProposedChanges = true;
+                    codeEditor.setValue(projectFiles[activeFileName]);
+                    applyingProposedChanges = false;
+                }
+                runPreview();
+            const notifyDiv = document.createElement('div');
+            notifyDiv.className = 'bg-blue-950/40 border border-blue-900 text-blue-300 p-2 rounded-lg text-[11px] font-medium animate-pulse';
+            notifyDiv.textContent = `↩ Rolled back ${rolledBack.length} file(s) to previous state.`;
+            aiChatWindow.appendChild(notifyDiv);
+            aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+        } else {
+            const notifyDiv = document.createElement('div');
+            notifyDiv.className = 'bg-gray-800/40 border border-gray-700 text-gray-400 p-2 rounded-lg text-[11px] font-medium';
+            notifyDiv.textContent = '⚠ Nothing to undo.';
+            aiChatWindow.appendChild(notifyDiv);
+            aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+        }
+        proposedChanges = null;
+        changesIndicator.classList.add('hidden');
+        changesIndicator.classList.remove('flex');
+    });
+}
 
 aiInput.addEventListener('input', function() {
     this.style.height = 'auto';
