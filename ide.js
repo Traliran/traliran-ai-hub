@@ -435,10 +435,15 @@ function initializeMonaco() {
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
         });
 
+        // Flag to prevent circular updates from Monaco -> VFS -> Monaco
+        let isUpdatingFromVFS = false;
+
         // Debounced save to VFS on Monaco changes
         let saveTimeout = null;
         codeEditor.onDidChangeModelContent(() => {
             if (applyingProposedChanges) return;
+            if (isUpdatingFromVFS) return; // Ignore changes caused by VFS update
+            
             if (activeFileName && projectFiles[activeFileName] !== undefined) {
                 projectFiles[activeFileName] = codeEditor.getValue();
                 localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
@@ -1700,6 +1705,9 @@ function buildWorkflowFeedback(appliedFiles) {
     return `✓ Successfully applied changes to: ${fileNames}.\n\nProject state has been updated. Preview refreshed.\n\nWould you like to:\n- Make additional improvements?\n- Fix any issues?\n- Add more features?\n\nIf you're done, please confirm completion. Otherwise, proceed with the next set of changes using the same file tag format.`;
 }
 
+// Prevent multiple rapid calls to applyProposedChanges
+let isApplyingChanges = false;
+
 function renderWorkflowComplete(totalIterations) {
     const completeDiv = document.createElement('div');
     completeDiv.className = 'bg-gradient-to-r from-violet-950/60 to-fuchsia-950/60 border border-violet-800/60 text-violet-200 p-3 rounded-xl text-xs font-medium shadow-lg';
@@ -1835,7 +1843,15 @@ async function handleAiRequest(customPrompt = "") {
 }
 
 async function applyProposedChanges() {
+     // Prevent recursive calls
+     if (isApplyingChanges) {
+         console.warn('[APPLY CHANGES]: Already applying changes, skipping duplicate call');
+         return;
+     }
+     
      if (!proposedChanges) return;
+     
+     isApplyingChanges = true;
 
      const appliedFiles = [];
      const failedFiles = [];
@@ -1964,6 +1980,11 @@ async function applyProposedChanges() {
      }
      
      runPreview();
+    
+    // Reset the applying flag
+    isApplyingChanges = false;
+    
+    runPreview();
  }
 
 // ============ GIT INTEGRATION ============
@@ -2505,6 +2526,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     initWorkspace();
     initializeMonaco();
 
+    // Debounce for preview updates to prevent excessive re-rendering
+    let previewTimeout = null;
+    
     // Listen for VFS updates and react (Monaco + Preview)
     window.addEventListener('vfs:updated', (event) => {
         const { path, content, language } = event.detail;
@@ -2526,6 +2550,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const position = codeEditor.getPosition();
                 const scrollTop = codeEditor.getScrollTop();
                 
+                // Set flag to prevent triggering another save
+                isUpdatingFromVFS = true;
+                
                 // Update content using executeEdits for reliability
                 codeEditor.executeEdits('vfs-update', [{
                     range: model.getFullModelRange(),
@@ -2535,6 +2562,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Restore cursor position and scroll
                 codeEditor.setPosition(position);
                 codeEditor.setScrollTop(scrollTop);
+                
+                // Reset flag after a short delay
+                setTimeout(() => { isUpdatingFromVFS = false; }, 50);
             } else {
                 codeEditor.setValue(content);
             }
@@ -2545,8 +2575,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Re-render file list to show changes
         renderFileList();
         
-        // Update preview
-        runPreview();
+        // Debounced preview update (300ms)
+        clearTimeout(previewTimeout);
+        previewTimeout = setTimeout(() => {
+            runPreview();
+        }, 300);
     });
 
     if (SYNC_MANAGER.isLoggedIn()) {
