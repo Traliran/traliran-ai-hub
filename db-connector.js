@@ -1,127 +1,4 @@
-/**
- * IndexedDB Wrapper for Project Storage
- * Replaces ephemeral file system with persistent browser storage
- */
-class ProjectDB {
-    constructor(dbName = 'WebIdeDB', version = 1) {
-        this.dbName = dbName;
-        this.version = version;
-        this.db = null;
-        this.initPromise = this.init();
-    }
-
-    async init() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, this.version);
-
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                // Store for files: key = filePath, value = { content, language, lastModified }
-                if (!db.objectStoreNames.contains('files')) {
-                    db.createObjectStore('files', { keyPath: 'path' });
-                }
-                // Store for settings/metadata
-                if (!db.objectStoreNames.contains('meta')) {
-                    db.createObjectStore('meta', { keyPath: 'key' });
-                }
-            };
-
-            request.onsuccess = (event) => {
-                this.db = event.target.result;
-                console.log('✅ IndexedDB initialized');
-                resolve(this.db);
-            };
-
-            request.onerror = (event) => {
-                console.error('❌ IndexedDB error:', event.target.error);
-                reject(event.target.error);
-            };
-        });
-    }
-
-    async saveFile(path, content, language = 'javascript') {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readwrite');
-            const store = tx.objectStore('files');
-            
-            const record = {
-                path,
-                content,
-                language,
-                lastModified: Date.now()
-            };
-
-            const req = store.put(record);
-            req.onsuccess = () => {
-                // Dispatch custom event for UI updates
-                window.dispatchEvent(new CustomEvent('file-updated', { 
-                    detail: { path, content, language } 
-                }));
-                resolve(record);
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async getFile(path) {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readonly');
-            const store = tx.objectStore('files');
-            const req = store.get(path);
-
-            req.onsuccess = () => resolve(req.result ? req.result.content : null);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async getAllFiles() {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readonly');
-            const store = tx.objectStore('files');
-            const req = store.getAll();
-
-            req.onsuccess = () => {
-                const files = {};
-                req.result.forEach(f => files[f.path] = f.content);
-                resolve(files);
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async deleteFile(path) {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readwrite');
-            const store = tx.objectStore('files');
-            const req = store.delete(path);
-
-            req.onsuccess = () => {
-                window.dispatchEvent(new CustomEvent('file-deleted', { detail: { path } }));
-                resolve(true);
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
-    
-    async clearAll() {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readwrite');
-            const store = tx.objectStore('files');
-            const req = store.clear();
-            req.onsuccess = () => resolve(true);
-            req.onerror = () => reject(req.error);
-        });
-    }
-}
-
-// Global instance
-window.projectDB = new ProjectDB();
-
+--- db-connector.js (原始)
 const DB_CONNECTOR = {
   _config: null,
 
@@ -493,3 +370,180 @@ const DB_CONNECTOR = {
     await this.logout();
   }
 };
+
++++ db-connector.js (修改后)
+/**
+ * db-connector.js
+ * Централизованная VFS (Virtual File System) на базе IndexedDB.
+ * ВСЕ взаимодействия с файлами идут только через этот модуль.
+ */
+
+class ProjectDB {
+    constructor(dbName = 'IDE_VFS', version = 1) {
+        this.dbName = dbName;
+        this.version = version;
+        this.db = null;
+        this.initPromise = this.init();
+    }
+
+    async init() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.version);
+
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('files')) {
+                    const store = db.createObjectStore('files', { keyPath: 'path' });
+                    store.createIndex('lastModified', 'lastModified', { unique: false });
+                    console.log('[VFS SYSTEM] IndexedDB initialized');
+                }
+            };
+
+            request.onsuccess = (event) => {
+                this.db = event.target.result;
+                console.log('[VFS SYSTEM] Database connection established');
+                resolve(this.db);
+            };
+
+            request.onerror = (event) => {
+                console.error('[VFS ERROR] Failed to open DB:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async ensureReady() {
+        if (!this.db) await this.initPromise;
+    }
+
+    /**
+     * Сохраняет файл в VFS и эмитит событие обновления
+     * @param {string} path - Путь к файлу (например, 'index.html')
+     * @param {string} content - Содержимое файла
+     */
+    async saveFile(path, content) {
+        await this.ensureReady();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['files'], 'readwrite');
+            const store = transaction.objectStore('files');
+
+            const fileRecord = {
+                path: path,
+                content: content,
+                lastModified: Date.now()
+            };
+
+            const request = store.put(fileRecord);
+
+            request.onsuccess = () => {
+                // ЯРКОЕ ЛОГИРОВАНИЕ ЗАПИСИ
+                console.log(`%c[VFS WRITE] ${path} (${content.length} bytes)`, 'color: #00ff00; font-weight: bold; background: #003300; padding: 2px 5px;');
+
+                // Эмитим реактивное событие для всех подписчиков (Monaco, Preview, etc.)
+                window.dispatchEvent(new CustomEvent('vfs:file-updated', {
+                    detail: { path, content, timestamp: fileRecord.lastModified }
+                }));
+
+                resolve(fileRecord);
+            };
+
+            request.onerror = (e) => {
+                console.error(`[VFS ERROR] Failed to save ${path}:`, e.target.error);
+                reject(e.target.error);
+            };
+        });
+    }
+
+    /**
+     * Читает файл из VFS
+     * @param {string} path - Путь к файлу
+     * @returns {Promise<string|null>}
+     */
+    async getFile(path) {
+        await this.ensureReady();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['files'], 'readonly');
+            const store = transaction.objectStore('files');
+            const request = store.get(path);
+
+            request.onsuccess = () => {
+                const record = request.result;
+                if (record) {
+                    // ЯРКОЕ ЛОГИРОВАНИЕ ЧТЕНИЯ
+                    console.log(`%c[VFS READ] ${path} (${record.content.length} bytes)`, 'color: #00ccff; font-weight: bold; background: #003344; padding: 2px 5px;');
+                    resolve(record.content);
+                } else {
+                    console.log(`[VFS READ] ${path} not found (null)`);
+                    resolve(null);
+                }
+            };
+
+            request.onerror = (e) => {
+                console.error(`[VFS ERROR] Failed to get ${path}:`, e.target.error);
+                reject(e.target.error);
+            };
+        });
+    }
+
+    /**
+     * Получает все файлы из VFS
+     * @returns {Promise<Array<{path: string, content: string}>>}
+     */
+    async getAllFiles() {
+        await this.ensureReady();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['files'], 'readonly');
+            const store = transaction.objectStore('files');
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const files = request.result.map(r => ({ path: r.path, content: r.content }));
+                console.log(`[VFS READ] All files loaded: ${files.length} items`);
+                resolve(files);
+            };
+
+            request.onerror = (e) => {
+                reject(e.target.error);
+            };
+        });
+    }
+
+    /**
+     * Удаляет файл из VFS
+     */
+    async deleteFile(path) {
+        await this.ensureReady();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['files'], 'readwrite');
+            const store = transaction.objectStore('files');
+            const request = store.delete(path);
+
+            request.onsuccess = () => {
+                console.log(`%c[VFS DELETE] ${path}`, 'color: #ff0000; font-weight: bold;');
+                window.dispatchEvent(new CustomEvent('vfs:file-deleted', { detail: { path } }));
+                resolve();
+            };
+
+            request.onerror = (e) => reject(e.target.error);
+        });
+    }
+
+    async clearAll() {
+        await this.ensureReady();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['files'], 'readwrite');
+            const store = transaction.objectStore('files');
+            const request = store.clear();
+
+            request.onsuccess = () => {
+                console.log('[VFS SYSTEM] All files cleared');
+                window.dispatchEvent(new CustomEvent('vfs:cleared'));
+                resolve();
+            };
+            request.onerror = (e) => reject(e.target.error);
+        });
+    }
+}
+
+// Глобальный экземпляр VFS
+window.projectDB = new ProjectDB();
