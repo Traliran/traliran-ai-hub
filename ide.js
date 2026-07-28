@@ -259,13 +259,27 @@ function initWorkspace() {
     checkApiConfiguration();
 }
 
-function saveWorkspace() {
+async function saveWorkspace() {
     // Save active file content first
     if (activeFileName && projectFiles[activeFileName] !== undefined && codeEditor) {
         projectFiles[activeFileName] = codeEditor.getValue();
     }
+    
+    // Save to localStorage for backward compatibility
     localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
     localStorage.setItem('ide_active_file', activeFileName);
+    
+    // Also save all files to IndexedDB
+    try {
+        const savePromises = Object.entries(projectFiles).map(([path, content]) => {
+            const language = getLanguageForFile(path);
+            return window.projectDB.saveFile(path, content, language);
+        });
+        await Promise.all(savePromises);
+        console.log('💾 Workspace saved to IndexedDB');
+    } catch (e) {
+        console.error('Failed to save to IndexedDB:', e);
+    }
 }
 
 // Render File List with conditional delete option & checkboxes for AI context
@@ -345,21 +359,32 @@ function selectFile(filename) {
     }
 }
 
-function deleteFile(filename) {
+async function deleteFile(filename) {
     if (confirm(`Are you sure you want to delete ${filename}?`)) {
         delete projectFiles[filename];
         if (activeFileName === filename) {
             const remaining = Object.keys(projectFiles);
             activeFileName = remaining.length > 0 ? remaining[0] : "index.html";
         }
+        
+        // Save to localStorage
         saveWorkspace();
+        
+        // Delete from IndexedDB
+        try {
+            await window.projectDB.deleteFile(filename);
+            console.log(`🗑️ Deleted ${filename} from IndexedDB`);
+        } catch (e) {
+            console.error('Failed to delete from IndexedDB:', e);
+        }
+        
         renderFileList();
         selectFile(activeFileName);
         runPreview();
     }
 }
 
-addNewFileBtn.addEventListener('click', () => {
+addNewFileBtn.addEventListener('click', async () => {
     const filename = prompt("Enter new file name (e.g., config.json, contact.html):");
     if (!filename) return;
     const cleanName = filename.trim().replace(/\s+/g, '_');
@@ -371,7 +396,10 @@ addNewFileBtn.addEventListener('click', () => {
     }
 
     projectFiles[cleanName] = `// New ${cleanName} content\n`;
-    saveWorkspace();
+    
+    // Save to localStorage and IndexedDB
+    await saveWorkspace();
+    
     renderFileList();
     selectFile(cleanName);
 });
@@ -919,12 +947,14 @@ async function fetchCompletion(messages, signal) {
                 content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
             })),
             temperature,
-            top_p: topP
+            top_p: topP,
+            stream: true  // Enable streaming
         };
 
         if (systemMessage) {
             anthropicPayload.system = systemMessage.content;
         }
+        
         const response = await fetch(`${endpoint}/messages`, {
             method: 'POST',
             headers,
@@ -936,7 +966,9 @@ async function fetchCompletion(messages, signal) {
             const errJson = await response.json().catch(() => ({}));
             throw new Error(errJson.error?.message || `HTTP ${response.status}`);
         }
-        return response.json();
+        
+        // Handle streaming response
+        return await handleStreamingResponse(response, 'anthropic');
     }
 
     const headers = { 'Content-Type': 'application/json' };
@@ -947,7 +979,8 @@ async function fetchCompletion(messages, signal) {
         messages,
         temperature,
         top_p: topP,
-        max_tokens: maxTokens
+        max_tokens: maxTokens,
+        stream: true  // Enable streaming
     };
 
     const response = await fetch(`${endpoint}/chat/completions`, {
@@ -961,7 +994,68 @@ async function fetchCompletion(messages, signal) {
         const errJson = await response.json().catch(() => ({}));
         throw new Error(errJson.error?.message || `HTTP ${response.status}`);
     }
-    return response.json();
+    
+    // Handle streaming response
+    return await handleStreamingResponse(response, 'openai');
+}
+
+async function handleStreamingResponse(response, type) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let fullContent = '';
+    let done = false;
+
+    while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        
+        if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') continue;
+                    
+                    try {
+                        const parsed = JSON.parse(data);
+                        
+                        if (type === 'openai') {
+                            const delta = parsed.choices?.[0]?.delta?.content;
+                            if (delta) {
+                                fullContent += delta;
+                                // Update chat window in real-time
+                                updateStreamingChat(fullContent);
+                            }
+                        } else if (type === 'anthropic') {
+                            if (parsed.delta?.text) {
+                                fullContent += parsed.delta.text;
+                                updateStreamingChat(fullContent);
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore parse errors for incomplete chunks
+                    }
+                }
+            }
+        }
+    }
+    
+    // Return formatted response matching non-streaming structure
+    if (type === 'anthropic') {
+        return { content: [{ type: 'text', text: fullContent }] };
+    }
+    return { choices: [{ message: { content: fullContent } }] };
+}
+
+function updateStreamingChat(content) {
+    // Find or create the last assistant message element
+    const lastMsg = aiChatWindow.querySelector('.bg-violet-900\\/20:last-child .prose');
+    if (lastMsg) {
+        lastMsg.innerHTML = marked.parse(content);
+        aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+    }
 }
 
 function extractAiResponse(response) {
@@ -1493,7 +1587,7 @@ Do not include any extra text outside of the file output blocks unless you are p
             if (Object.keys(parsed.files).length > 0) {
                 // Apply changes immediately
                 proposedChanges = parsed.files;
-                applyProposedChanges();
+                await applyProposedChanges();
                 
                 // Update selectedFiles with new content for next iteration
                 Object.entries(parsed.files).forEach(([filepath, contentOrPatch]) => {
@@ -1681,7 +1775,7 @@ async function handleAiRequest(customPrompt = "") {
         const extractedFilesCount = Object.keys(parsed.files).length;
         if (extractedFilesCount > 0) {
             proposedChanges = parsed.files;
-            applyProposedChanges();
+            await applyProposedChanges();
         } else {
             const noChangeDiv = document.createElement('div');
             noChangeDiv.className = 'bg-amber-950/40 border border-amber-900 text-amber-300 p-2.5 rounded-lg text-xs';
@@ -1710,7 +1804,7 @@ async function handleAiRequest(customPrompt = "") {
     }
 }
 
-function applyProposedChanges() {
+async function applyProposedChanges() {
      if (!proposedChanges) return;
 
      const appliedFiles = [];
@@ -1736,8 +1830,19 @@ function applyProposedChanges() {
          }
      });
 
-     // 2. Persist workspace state
-     saveWorkspace();
+     // 2. Persist workspace state to localStorage and IndexedDB
+     await saveWorkspace();
+     
+     // Also explicitly save each changed file to IndexedDB to trigger update events
+     for (const filepath of appliedFiles) {
+         try {
+             const language = getLanguageForFile(filepath);
+             await window.projectDB.saveFile(filepath, projectFiles[filepath], language);
+         } catch (e) {
+             console.error(`Failed to save ${filepath} to IndexedDB:`, e);
+         }
+     }
+     
      renderFileList();
 
      // 3. Update Monaco Editor if the active file was changed, preserving cursor/scroll position
@@ -2353,9 +2458,61 @@ updateLoginButton();
 setupIdeSyncUI();
 
 // Initialization
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize IndexedDB first
+    await window.projectDB.initPromise;
+    
+    // Load files from IndexedDB if available
+    const dbFiles = await window.projectDB.getAllFiles();
+    if (Object.keys(dbFiles).length > 0) {
+        projectFiles = dbFiles;
+        // Save to localStorage for backward compatibility
+        localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
+    }
+    
     initWorkspace();
     initializeMonaco();
+
+    // Listen for file updates from IndexedDB and update Monaco editor
+    window.addEventListener('file-updated', (event) => {
+        const { path, content, language } = event.detail;
+        
+        // Update in-memory projectFiles
+        projectFiles[path] = content;
+        
+        // Save to localStorage for backward compatibility
+        localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
+        
+        // If this is the active file, update Monaco editor immediately
+        if (path === activeFileName && codeEditor) {
+            const model = codeEditor.getModel();
+            if (model) {
+                // Save cursor position
+                const position = codeEditor.getPosition();
+                const scrollTop = codeEditor.getScrollTop();
+                
+                // Update content using executeEdits for reliability
+                codeEditor.executeEdits('db-update', [{
+                    range: model.getFullModelRange(),
+                    text: content
+                }]);
+                
+                // Restore cursor position and scroll
+                codeEditor.setPosition(position);
+                codeEditor.setScrollTop(scrollTop);
+            } else {
+                codeEditor.setValue(content);
+            }
+            
+            console.log(`📝 Editor updated for ${path}`);
+        }
+        
+        // Re-render file list to show changes
+        renderFileList();
+        
+        // Update preview
+        runPreview();
+    });
 
     if (SYNC_MANAGER.isLoggedIn()) {
         SYNC_MANAGER.pullAndMerge().then(() => {

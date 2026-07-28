@@ -1,3 +1,127 @@
+/**
+ * IndexedDB Wrapper for Project Storage
+ * Replaces ephemeral file system with persistent browser storage
+ */
+class ProjectDB {
+    constructor(dbName = 'WebIdeDB', version = 1) {
+        this.dbName = dbName;
+        this.version = version;
+        this.db = null;
+        this.initPromise = this.init();
+    }
+
+    async init() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.version);
+
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                // Store for files: key = filePath, value = { content, language, lastModified }
+                if (!db.objectStoreNames.contains('files')) {
+                    db.createObjectStore('files', { keyPath: 'path' });
+                }
+                // Store for settings/metadata
+                if (!db.objectStoreNames.contains('meta')) {
+                    db.createObjectStore('meta', { keyPath: 'key' });
+                }
+            };
+
+            request.onsuccess = (event) => {
+                this.db = event.target.result;
+                console.log('✅ IndexedDB initialized');
+                resolve(this.db);
+            };
+
+            request.onerror = (event) => {
+                console.error('❌ IndexedDB error:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async saveFile(path, content, language = 'javascript') {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            
+            const record = {
+                path,
+                content,
+                language,
+                lastModified: Date.now()
+            };
+
+            const req = store.put(record);
+            req.onsuccess = () => {
+                // Dispatch custom event for UI updates
+                window.dispatchEvent(new CustomEvent('file-updated', { 
+                    detail: { path, content, language } 
+                }));
+                resolve(record);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async getFile(path) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readonly');
+            const store = tx.objectStore('files');
+            const req = store.get(path);
+
+            req.onsuccess = () => resolve(req.result ? req.result.content : null);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async getAllFiles() {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readonly');
+            const store = tx.objectStore('files');
+            const req = store.getAll();
+
+            req.onsuccess = () => {
+                const files = {};
+                req.result.forEach(f => files[f.path] = f.content);
+                resolve(files);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async deleteFile(path) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            const req = store.delete(path);
+
+            req.onsuccess = () => {
+                window.dispatchEvent(new CustomEvent('file-deleted', { detail: { path } }));
+                resolve(true);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+    
+    async clearAll() {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            const req = store.clear();
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
+        });
+    }
+}
+
+// Global instance
+window.projectDB = new ProjectDB();
+
 const DB_CONNECTOR = {
   _config: null,
 
