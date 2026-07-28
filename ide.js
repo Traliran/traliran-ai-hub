@@ -1167,6 +1167,7 @@ function applyDiffsToFiles(diffsByFile) {
 
  function parseFileTags(responseText) {
      const cleaned = unwrapMarkdownFenceTags(responseText);
+     // Создаем новый regex для каждого вызова, чтобы избежать проблем с lastIndex
      const fileRegex = /<<<FILE_START:\s*(.*?)\s*>>>([\s\S]*?)<<<FILE_END>>>/g;
      let match;
      const extractedFiles = {};
@@ -1175,10 +1176,8 @@ function applyDiffsToFiles(diffsByFile) {
          const filePath = match[1].trim();
          let fileContent = match[2];
 
-         if (fileContent.startsWith('\r\n')) fileContent = fileContent.substring(2);
-         else if (fileContent.startsWith('\n')) fileContent = fileContent.substring(1);
-         if (fileContent.endsWith('\r\n')) fileContent = fileContent.substring(0, fileContent.length - 2);
-         else if (fileContent.endsWith('\n')) fileContent = fileContent.substring(0, fileContent.length - 1);
+         // Удаляем лишние пробелы и переносы строк в начале и конце содержимого
+         fileContent = fileContent.trim();
 
          extractedFiles[filePath] = fileContent;
      }
