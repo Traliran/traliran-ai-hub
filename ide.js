@@ -435,29 +435,15 @@ function initializeMonaco() {
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
         });
 
-        // Debounced save to VFS on Monaco changes
-        let saveTimeout = null;
         codeEditor.onDidChangeModelContent(() => {
             if (applyingProposedChanges) return;
             if (activeFileName && projectFiles[activeFileName] !== undefined) {
                 projectFiles[activeFileName] = codeEditor.getValue();
                 localStorage.setItem('ide_project_files', JSON.stringify(projectFiles));
-                
-                // Debounce VFS write (300ms)
-                clearTimeout(saveTimeout);
-                saveTimeout = setTimeout(async () => {
-                    const content = codeEditor.getValue();
-                    const language = getLanguageForFile(activeFileName);
-                    try {
-                        await window.projectDB.saveFile(activeFileName, content, language);
-                    } catch (e) {
-                        console.error('[MONACO SAVE ERROR]:', e);
-                    }
-                }, 300);
             }
         });
 
-        // Initial file load from VFS with executeEdits for reliability
+        // Initial file load with executeEdits for reliability
         const initialContent = projectFiles[activeFileName] || "";
         const model = codeEditor.getModel();
         if (model) {
@@ -506,9 +492,6 @@ function getPreviewHtml() {
 }
 
 function runPreview() {
-    // [VFS READ] for Preview - all files read from projectFiles (synced with VFS)
-    console.log('[VFS READ]: Reading all files from VFS for Live Preview');
-    
     const content = getPreviewHtml();
     projectIframe.srcdoc = content;
     setupErrorListener(); // Initialize error detection for this preview
@@ -1028,9 +1011,6 @@ async function handleStreamingResponse(response, type) {
         
         if (value) {
             const chunk = decoder.decode(value, { stream: true });
-            // [AI STREAM CHUNK] logging
-            console.log(`[AI STREAM CHUNK]: ${chunk.substring(0, 100)}...`);
-            
             const lines = chunk.split('\n');
             
             for (const line of lines) {
@@ -1600,13 +1580,6 @@ Do not include any extra text outside of the file output blocks unless you are p
 
             const rawText = extractAiResponse(response);
             const parsed = parseAndExtractFiles(rawText);
-            
-            // [AI PARSER RESULT] logging
-            if (Object.keys(parsed.files).length > 0) {
-                console.log('[AI PARSER RESULT]: Extracted files:', Object.keys(parsed.files));
-            } else {
-                console.warn('[AI PARSER RESULT]: NULL - No files extracted from AI response');
-            }
 
             lastResult = { cleanText: parsed.cleanText, files: parsed.files, rawText };
             
@@ -1693,9 +1666,6 @@ function updateIterationStatus(message) {
 }
 
 function buildWorkflowFeedback(appliedFiles) {
-    // [VFS READ] for feedback - read current state from VFS for next iteration
-    console.log('[VFS READ]: Reading current project state for AI feedback');
-    
     const fileNames = Object.keys(appliedFiles).join(', ');
     return `✓ Successfully applied changes to: ${fileNames}.\n\nProject state has been updated. Preview refreshed.\n\nWould you like to:\n- Make additional improvements?\n- Fix any issues?\n- Add more features?\n\nIf you're done, please confirm completion. Otherwise, proceed with the next set of changes using the same file tag format.`;
 }
@@ -1867,8 +1837,6 @@ async function applyProposedChanges() {
      for (const filepath of appliedFiles) {
          try {
              const language = getLanguageForFile(filepath);
-             // [VFS WRITE] via AI agent
-             console.log(`[VFS WRITE]: ${filepath} (${projectFiles[filepath].length} bytes) from AI agent`);
              await window.projectDB.saveFile(filepath, projectFiles[filepath], language);
          } catch (e) {
              console.error(`Failed to save ${filepath} to IndexedDB:`, e);
@@ -2505,12 +2473,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     initWorkspace();
     initializeMonaco();
 
-    // Listen for VFS updates and react (Monaco + Preview)
-    window.addEventListener('vfs:updated', (event) => {
+    // Listen for file updates from IndexedDB and update Monaco editor
+    window.addEventListener('file-updated', (event) => {
         const { path, content, language } = event.detail;
-        
-        // [MONACO REACTION] logging
-        console.log(`[MONACO REACTION]: vfs:updated event for ${path}`);
         
         // Update in-memory projectFiles
         projectFiles[path] = content;
@@ -2527,7 +2492,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const scrollTop = codeEditor.getScrollTop();
                 
                 // Update content using executeEdits for reliability
-                codeEditor.executeEdits('vfs-update', [{
+                codeEditor.executeEdits('db-update', [{
                     range: model.getFullModelRange(),
                     text: content
                 }]);
@@ -2539,7 +2504,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 codeEditor.setValue(content);
             }
             
-            console.log(`[MONACO EDIT UPDATE]: Editor content updated for ${path}`);
+            console.log(`📝 Editor updated for ${path}`);
         }
         
         // Re-render file list to show changes
