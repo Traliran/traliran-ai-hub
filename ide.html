@@ -256,10 +256,22 @@
             <p class="text-xs text-gray-400">Connect to Firebase, Supabase, or PocketBase for cloud synchronization.</p>
             
             <div class="space-y-3">
-                <input type="email" id="loginEmail" placeholder="Email address" 
-                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
-                <input type="password" id="loginPassword" placeholder="Password" 
-                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Database URL / Endpoint</label>
+                    <input type="text" id="loginDbUrl" placeholder="https://your-db.firebaseio.com" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Database API Key</label>
+                    <input type="password" id="loginDbKey" placeholder="Your API key" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="border-t border-gray-800 pt-3">
+                    <input type="email" id="loginEmail" placeholder="Email address" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                    <input type="password" id="loginPassword" placeholder="Password" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none mt-2">
+                </div>
             </div>
             
             <div class="flex gap-2">

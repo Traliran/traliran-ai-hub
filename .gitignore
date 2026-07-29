@@ -7,5 +7,6 @@ node_modules/
 
 # Environment
 .env
-.env.*
+.env.local
+*.env.*
 ```
