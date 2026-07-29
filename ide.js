@@ -1,0 +1,1575 @@
+/**
+ * Traliran AI IDE - Serverless Web IDE
+ * Main JavaScript Module
+ * 
+ * Features:
+ * - VFS (Virtual File System) with IndexedDB/Cloud sync
+ * - Monaco Editor integration
+ * - Autonomous AI Agent with tool calling
+ * - Git-like version control
+ * - Assistant Store
+ * - Live Preview
+ */
+
+// ==================== STATE MANAGEMENT ====================
+
+// VFS State
+let vfsFiles = {}; // { path: { content, language, lastModified } }
+let activeFilePath = null;
+let openFiles = []; // Array of file paths
+let monacoEditor = null;
+let monacoModels = {}; // Cache of Monaco models by path
+
+// Bot Store State
+let customBots = [];
+let activeBotId = null;
+let editingBotId = null;
+
+const OFFICIAL_BOTS = [
+    {
+        name: "UX Forge AI",
+        description: "UX Forge AI analyzes your code inside the IDE for accessibility, performance, and modern UI patterns.",
+        link: "https://whop.com/traliran-ai-huub/ux-forge-ai"
+    },
+    {
+        name: "Code Reviewer Pro",
+        description: "Expert code reviewer focused on bugs, security vulnerabilities, and best practices.",
+        link: "https://whop.com/traliran-ai-huub/code-reviewer-pro"
+    }
+];
+
+// AI Agent State
+let agentChatHistory = [];
+let agentAbortController = null;
+let isAgentProcessing = false;
+let totalTokensUsed = 0;
+
+// Version Control State
+let commitHistory = [];
+
+// Auth State
+let isLoggedIn = false;
+
+// API Configuration (synced from Hub)
+let apiConfig = {
+    provider: 'groq',
+    apiKey: '',
+    endpoint: '',
+    model: ''
+};
+
+// ==================== DOM ELEMENTS ====================
+
+let filesTabBtn, versionControlTabBtn;
+let filesPanel, versionControlPanel;
+let fileTreeContainer, openFilesTabs;
+let commitMessageInput, createCommitBtn, commitHistoryList;
+let exportZipBtn, importZipBtn, zipFileInput;
+let newFileBtn, saveFileBtn, togglePreviewBtn, previewPanel, previewFrame, closePreviewBtn;
+let monacoContainer;
+
+// Bot Store DOM Elements
+let openBotStoreBtn, botStoreModal, closeBotStoreModal, botStoreGrid, createNewBotBtn;
+let exportBotsBtn, importBotsInput, botEditorModal, closeBotEditorModal, botEditorTitle;
+let editBotName, editBotPrompt, editBotModel, editBotTemp, saveBotBtn, deleteBotBtn;
+
+// AI Agent DOM Elements
+let agentChatWindow, agentInput, sendAgentBtn, stopAgentBtn, agentStatusIndicator;
+let agentModelDisplay, tokenUsageDisplay;
+
+// Auth DOM Elements
+let loginBtn, loginBtnText, loginModal, closeLoginModal, loginEmail, loginPassword;
+let doLoginBtn, doRegisterBtn, doLogoutBtn, loginStatus;
+
+// ==================== PROVIDERS CONFIG ====================
+
+const PROVIDERS = {
+    groq: { url: 'https://api.groq.com/openai/v1', hasKey: true, type: 'openai' },
+    google: { url: 'https://generativelanguage.googleapis.com/v1beta/openai', hasKey: true, type: 'openai' },
+    openrouter: { url: 'https://openrouter.ai/api/v1', hasKey: true, type: 'openai' },
+    openai: { url: 'https://api.openai.com/v1', hasKey: true, type: 'openai' },
+    deepseek: { url: 'https://api.deepseek.com/v1', hasKey: true, type: 'openai' },
+    qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', hasKey: true, type: 'openai' },
+    glm: { url: 'https://open.bigmodel.cn/api/paas/v4', hasKey: true, type: 'openai' },
+    claude: { url: 'https://api.anthropic.com/v1', hasKey: true, type: 'anthropic' },
+    ollama: { url: 'http://localhost:11434/v1', hasKey: false, type: 'openai' },
+    llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
+};
+
+// ==================== UTILITY FUNCTIONS ====================
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function getLanguageFromPath(path) {
+    const ext = path.split('.').pop().toLowerCase();
+    const langMap = {
+        'js': 'javascript', 'mjs': 'javascript',
+        'ts': 'typescript', 'tsx': 'typescript',
+        'html': 'html', 'htm': 'html',
+        'css': 'css', 'scss': 'scss', 'sass': 'scss',
+        'json': 'json',
+        'md': 'markdown',
+        'py': 'python',
+        'java': 'java',
+        'c': 'c', 'cpp': 'cpp', 'h': 'c', 'hpp': 'cpp',
+        'cs': 'csharp',
+        'go': 'go',
+        'rs': 'rust',
+        'php': 'php',
+        'rb': 'ruby',
+        'swift': 'swift',
+        'kt': 'kotlin',
+        'sql': 'sql',
+        'sh': 'shell', 'bash': 'shell',
+        'yaml': 'yaml', 'yml': 'yaml',
+        'xml': 'xml',
+        'vue': 'vue',
+        'svelte': 'svelte'
+    };
+    return langMap[ext] || 'plaintext';
+}
+
+function debounce(fn, delay) {
+    let timeoutId;
+    return function(...args) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+// ==================== VFS (VIRTUAL FILE SYSTEM) ====================
+
+const VFS = {
+    async init() {
+        console.log('[VFS] Initializing...');
+        await this.loadFromStorage();
+        this.setupEventListeners();
+        console.log('[VFS] Initialized with', Object.keys(vfsFiles).length, 'files');
+    },
+
+    async loadFromStorage() {
+        try {
+            const stored = localStorage.getItem('ide_vfs_files');
+            if (stored) {
+                vfsFiles = JSON.parse(stored);
+            }
+            
+            // Load commits
+            const commitsStored = localStorage.getItem('ide_vfs_commits');
+            if (commitsStored) {
+                commitHistory = JSON.parse(commitsStored);
+            }
+            
+            // If empty, create default files
+            if (Object.keys(vfsFiles).length === 0) {
+                await this.writeFile('README.md', '# Welcome to Traliran AI IDE\n\nStart coding! The AI agent can help you.\n');
+                await this.writeFile('index.html', '<!DOCTYPE html>\n<html>\n<head>\n    <title>My App</title>\n</head>\n<body>\n    <h1>Hello World</h1>\n    <script src="app.js"><\/script>\n</body>\n</html>\n');
+                await this.writeFile('app.js', '// Your JavaScript code here\nconsole.log("Hello from AI IDE!");\n');
+                await this.writeFile('styles.css', '/* Your styles here */\nbody {\n    font-family: system-ui;\n    margin: 2rem;\n}\n');
+            }
+        } catch (e) {
+            console.error('[VFS] Load error:', e);
+            vfsFiles = {};
+        }
+    },
+
+    async saveToStorage() {
+        try {
+            localStorage.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
+            window.dispatchEvent(new CustomEvent('vfs:saved'));
+        } catch (e) {
+            console.error('[VFS] Save error:', e);
+        }
+    },
+
+    async writeFile(path, content) {
+        console.log('[VFS WRITE]', path, 'bytes:', content.length);
+        const language = getLanguageFromPath(path);
+        
+        vfsFiles[path] = {
+            content,
+            language,
+            lastModified: Date.now()
+        };
+
+        await this.saveToStorage();
+        
+        // Emit update event
+        window.dispatchEvent(new CustomEvent('vfs:file-updated', { 
+            detail: { path, content, language } 
+        }));
+
+        // Sync to cloud if logged in
+        if (isLoggedIn && DB_CONNECTOR.isLoggedIn()) {
+            this.syncToCloud(path);
+        }
+
+        return vfsFiles[path];
+    },
+
+    async readFile(path) {
+        console.log('[VFS READ]', path);
+        const file = vfsFiles[path];
+        if (!file) {
+            throw new Error(`File not found: ${path}`);
+        }
+        return file.content;
+    },
+
+    async deleteFile(path) {
+        console.log('[VFS DELETE]', path);
+        delete vfsFiles[path];
+        await this.saveToStorage();
+        window.dispatchEvent(new CustomEvent('vfs:file-deleted', { detail: { path } }));
+    },
+
+    getFileTree() {
+        const tree = {};
+        for (const path of Object.keys(vfsFiles)) {
+            const parts = path.split('/');
+            let current = tree;
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                if (i === parts.length - 1) {
+                    current[part] = { type: 'file', path };
+                } else {
+                    if (!current[part]) {
+                        current[part] = { type: 'folder', children: {} };
+                    }
+                    current = current[part].children;
+                }
+            }
+        }
+        return tree;
+    },
+
+    listFiles(dir = '') {
+        const files = [];
+        for (const path of Object.keys(vfsFiles)) {
+            if (dir === '' || path.startsWith(dir + '/') || path.startsWith(dir)) {
+                files.push(path);
+            }
+        }
+        return files.sort();
+    },
+
+    setupEventListeners() {
+        // Listen for Monaco changes
+        window.addEventListener('monaco:content-changed', async (e) => {
+            const { path, content } = e.detail;
+            if (path && content !== undefined) {
+                await this.writeFile(path, content);
+            }
+        });
+
+        // Listen for VFS updates (from AI or other sources)
+        window.addEventListener('vfs:file-updated', (e) => {
+            const { path, content } = e.detail;
+            if (path === activeFilePath && monacoEditor) {
+                console.log('[MONACO REACTION] Updating editor for', path);
+                const model = monacoEditor.getModel();
+                if (model && model.getValue() !== content) {
+                    model.setValue(content);
+                }
+            }
+        });
+    },
+
+    async syncToCloud(path) {
+        try {
+            // Use SYNC_MANAGER if available for better queue handling
+            if (typeof SYNC_MANAGER !== 'undefined' && SYNC_MANAGER.pushVFSFileToCloud) {
+                await SYNC_MANAGER.pushVFSFileToCloud(path);
+            } else {
+                await DB_CONNECTOR.saveData('ide_vfs', path, vfsFiles[path]);
+            }
+            console.log('[VFS] Synced to cloud:', path);
+        } catch (e) {
+            console.error('[VFS] Cloud sync error:', e);
+        }
+    },
+
+    async syncFromCloud() {
+        if (!DB_CONNECTOR.isLoggedIn()) return;
+        try {
+            // Use SYNC_MANAGER if available for proper collection handling
+            if (typeof SYNC_MANAGER !== 'undefined' && SYNC_MANAGER.pullFromCloud) {
+                const data = await SYNC_MANAGER.pullFromCloud('ide_vfs');
+                if (data && typeof data === 'object') {
+                    vfsFiles = { ...vfsFiles, ...data };
+                    await this.saveToStorage();
+                    console.log('[VFS] Synced from cloud via SYNC_MANAGER');
+                }
+            } else {
+                const data = await DB_CONNECTOR.fetchData('ide_vfs');
+                if (data && typeof data === 'object') {
+                    vfsFiles = { ...vfsFiles, ...data };
+                    await this.saveToStorage();
+                    console.log('[VFS] Synced from cloud');
+                }
+            }
+        } catch (e) {
+            console.error('[VFS] Cloud pull error:', e);
+        }
+    }
+};
+
+// ==================== VERSION CONTROL ====================
+
+const VERSION_CONTROL = {
+    async createCommit(message) {
+        const commit = {
+            id: 'commit_' + Date.now(),
+            timestamp: Date.now(),
+            message: message || 'Untitled commit',
+            snapshot: JSON.parse(JSON.stringify(vfsFiles))
+        };
+        
+        commitHistory.unshift(commit);
+        localStorage.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+        
+        // Also save to IndexedDB for persistence
+        if (typeof projectDB !== 'undefined' && projectDB.saveCommit) {
+            try {
+                await projectDB.saveCommit(commit);
+            } catch (e) {
+                console.error('[VERSION] IndexedDB save error:', e);
+            }
+        }
+        
+        console.log('[VERSION] Created commit:', commit.id);
+        this.renderCommitHistory();
+        return commit;
+    },
+
+    async revertToCommit(commitId) {
+        const commit = commitHistory.find(c => c.id === commitId);
+        if (!commit) {
+            throw new Error('Commit not found');
+        }
+        
+        vfsFiles = JSON.parse(JSON.stringify(commit.snapshot));
+        await VFS.saveToStorage();
+        
+        // Refresh editor and file tree
+        window.dispatchEvent(new CustomEvent('vfs:reverted', { detail: { commitId } }));
+        
+        console.log('[VERSION] Reverted to:', commitId);
+        this.renderCommitHistory();
+    },
+
+    async loadCommitsFromStorage() {
+        // Try IndexedDB first
+        if (typeof projectDB !== 'undefined' && projectDB.getAllCommits) {
+            try {
+                const commits = await projectDB.getAllCommits();
+                if (commits && commits.length > 0) {
+                    commitHistory = commits;
+                    localStorage.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+                    console.log('[VERSION] Loaded', commits.length, 'commits from IndexedDB');
+                    return;
+                }
+            } catch (e) {
+                console.error('[VERSION] IndexedDB load error:', e);
+            }
+        }
+        
+        // Fallback to localStorage
+        const stored = localStorage.getItem('ide_vfs_commits');
+        if (stored) {
+            try {
+                commitHistory = JSON.parse(stored);
+                console.log('[VERSION] Loaded', commitHistory.length, 'commits from localStorage');
+            } catch (e) {
+                commitHistory = [];
+            }
+        }
+    },
+
+    renderCommitHistory() {
+        if (!commitHistoryList) return;
+        
+        commitHistoryList.innerHTML = '';
+        
+        if (commitHistory.length === 0) {
+            commitHistoryList.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">No commits yet</p>';
+            return;
+        }
+        
+        for (const commit of commitHistory) {
+            const date = new Date(commit.timestamp);
+            const div = document.createElement('div');
+            div.className = 'bg-gray-800 border border-gray-700 rounded p-2 cursor-pointer hover:border-violet-500 transition';
+            div.innerHTML = `
+                <div class="text-xs font-mono text-violet-400 truncate">${escapeHtml(commit.message)}</div>
+                <div class="text-[10px] text-gray-500 mt-1">${date.toLocaleString()}</div>
+                <div class="text-[10px] text-gray-600 mt-1">${Object.keys(commit.snapshot).length} files</div>
+            `;
+            div.onclick = () => {
+                if (confirm(`Revert to this commit? This will replace current workspace.`)) {
+                    this.revertToCommit(commit.id);
+                }
+            };
+            commitHistoryList.appendChild(div);
+        }
+    },
+
+    async exportAsZip() {
+        const zip = new JSZip();
+        
+        for (const [path, file] of Object.entries(vfsFiles)) {
+            zip.file(path, file.content);
+        }
+        
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'project-export-' + Date.now() + '.zip';
+        a.click();
+        
+        URL.revokeObjectURL(url);
+        console.log('[VERSION] Exported as ZIP');
+    },
+
+    async importFromZip(file) {
+        try {
+            const zip = new JSZip();
+            const contents = await zip.loadAsync(file);
+            
+            const promises = [];
+            contents.forEach((relativePath, zipEntry) => {
+                if (!zipEntry.dir) {
+                    promises.push(
+                        zipEntry.async('string').then(content => {
+                            VFS.writeFile(relativePath, content);
+                        })
+                    );
+                }
+            });
+            
+            await Promise.all(promises);
+            console.log('[VERSION] Imported from ZIP');
+            alert('Project imported successfully!');
+        } catch (e) {
+            console.error('[VERSION] Import error:', e);
+            alert('Failed to import ZIP: ' + e.message);
+        }
+    }
+};
+
+// ==================== MONACO EDITOR INTEGRATION ====================
+
+const MONACO = {
+    async init() {
+        return new Promise((resolve, reject) => {
+            if (typeof require === 'undefined') {
+                reject(new Error('Monaco loader not available'));
+                return;
+            }
+            
+            require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+            
+            require(['vs/editor/editor.main'], () => {
+                console.log('[MONACO] Loaded');
+                this.createEditor();
+                resolve();
+            }, reject);
+        });
+    },
+
+    createEditor() {
+        if (!monacoContainer) return;
+        
+        monacoEditor = monaco.editor.create(monacoContainer, {
+            value: '',
+            language: 'javascript',
+            theme: 'vs-dark',
+            automaticLayout: true,
+            minimap: { enabled: true },
+            fontSize: 14,
+            wordWrap: 'on',
+            scrollBeyondLastLine: false,
+            renderWhitespace: 'selection',
+            tabSize: 2
+        });
+
+        // Debounced save on content change
+        monacoEditor.onDidChangeModelContent(debounce(() => {
+            if (activeFilePath) {
+                const content = monacoEditor.getValue();
+                console.log('[MONACO] Content changed, scheduling save');
+                window.dispatchEvent(new CustomEvent('monaco:content-changed', {
+                    detail: { path: activeFilePath, content }
+                }));
+            }
+        }, 500));
+
+        console.log('[MONACO] Editor created');
+    },
+
+    async openFile(path) {
+        console.log('[MONACO OPEN]', path);
+        
+        if (!vfsFiles[path]) {
+            console.error('[MONACO] File not in VFS:', path);
+            return;
+        }
+
+        const file = vfsFiles[path];
+        
+        // Create or reuse model
+        if (!monacoModels[path]) {
+            monacoModels[path] = monaco.editor.createModel(
+                file.content,
+                file.language
+            );
+        } else {
+            monacoModels[path].setValue(file.content);
+        }
+
+        monacoEditor.setModel(monacoModels[path]);
+        activeFilePath = path;
+
+        // Add to open files if not already
+        if (!openFiles.includes(path)) {
+            openFiles.push(path);
+        }
+
+        this.renderTabs();
+        console.log('[MONACO REACTION] Opened', path);
+    },
+
+    closeFile(path) {
+        const idx = openFiles.indexOf(path);
+        if (idx > -1) {
+            openFiles.splice(idx, 1);
+        }
+
+        if (activeFilePath === path) {
+            if (openFiles.length > 0) {
+                this.openFile(openFiles[Math.max(0, idx - 1)]);
+            } else {
+                activeFilePath = null;
+                monacoEditor.setModel(null);
+            }
+        }
+
+        this.renderTabs();
+    },
+
+    renderTabs() {
+        if (!openFilesTabs) return;
+        
+        openFilesTabs.innerHTML = '';
+        
+        for (const path of openFiles) {
+            const isActive = path === activeFilePath;
+            const fileName = path.split('/').pop();
+            
+            const tab = document.createElement('div');
+            tab.className = `flex items-center gap-2 px-3 py-2 text-xs border-r border-gray-800 cursor-pointer whitespace-nowrap ${
+                isActive ? 'bg-gray-800 text-violet-400 border-b-2 border-b-violet-400' : 'text-gray-400 hover:bg-gray-800/50'
+            }`;
+            tab.innerHTML = `
+                <span>${this.getFileIcon(path)} ${escapeHtml(fileName)}</span>
+                <button class="hover:text-white ml-1" data-path="${path}">×</button>
+            `;
+            
+            tab.onclick = (e) => {
+                if (e.target.dataset.path) {
+                    this.closeFile(e.target.dataset.path);
+                } else {
+                    this.openFile(path);
+                }
+            };
+            
+            openFilesTabs.appendChild(tab);
+        }
+    },
+
+    getFileIcon(path) {
+        const ext = path.split('.').pop().toLowerCase();
+        const icons = {
+            'js': '📜', 'mjs': '📜',
+            'ts': '📘', 'tsx': '⚛️',
+            'html': '🌐', 'htm': '🌐',
+            'css': '🎨', 'scss': '🎨',
+            'json': '📋',
+            'md': '📝',
+            'py': '🐍',
+            'vue': '💚',
+            'svelte': '🔷'
+        };
+        return icons[ext] || '📄';
+    },
+
+    getCurrentContent() {
+        if (!monacoEditor || !activeFilePath) return null;
+        return monacoEditor.getValue();
+    }
+};
+
+// ==================== AI AGENT WITH TOOL CALLING ====================
+
+const AI_AGENT = {
+    tools: [
+        {
+            name: 'list_files',
+            description: 'Returns the directory structure/tree of the workspace',
+            parameters: {
+                type: 'object',
+                properties: {
+                    directory: { type: 'string', description: 'Optional directory path to list (default: root)' }
+                }
+            },
+            execute: async (args) => {
+                const dir = args.directory || '';
+                const files = VFS.listFiles(dir);
+                return JSON.stringify({ files }, null, 2);
+            }
+        },
+        {
+            name: 'read_file',
+            description: 'Fetches full content of a specific file',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Full path to the file' }
+                },
+                required: ['path']
+            },
+            execute: async (args) => {
+                try {
+                    const content = await VFS.readFile(args.path);
+                    return JSON.stringify({ success: true, content }, null, 2);
+                } catch (e) {
+                    return JSON.stringify({ success: false, error: e.message }, null, 2);
+                }
+            }
+        },
+        {
+            name: 'write_file',
+            description: 'Creates or overwrites a file with new content',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Full path where to write the file' },
+                    content: { type: 'string', description: 'Complete file content' }
+                },
+                required: ['path', 'content']
+            },
+            execute: async (args) => {
+                try {
+                    await VFS.writeFile(args.path, args.content);
+                    return JSON.stringify({ success: true, message: `File written: ${args.path}` }, null, 2);
+                } catch (e) {
+                    return JSON.stringify({ success: false, error: e.message }, null, 2);
+                }
+            }
+        },
+        {
+            name: 'edit_file_part',
+            description: 'Edits part of a file by searching for pattern and replacing it',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Full path to the file' },
+                    search_pattern: { type: 'string', description: 'Text or regex pattern to find' },
+                    replace_content: { type: 'string', description: 'Content to replace the match with' }
+                },
+                required: ['path', 'search_pattern', 'replace_content']
+            },
+            execute: async (args) => {
+                try {
+                    const content = await VFS.readFile(args.path);
+                    const regex = new RegExp(args.search_pattern, 'g');
+                    if (!regex.test(content)) {
+                        return JSON.stringify({ success: false, error: 'Pattern not found in file' }, null, 2);
+                    }
+                    const newContent = content.replace(regex, args.replace_content);
+                    await VFS.writeFile(args.path, newContent);
+                    return JSON.stringify({ success: true, message: 'File updated successfully' }, null, 2);
+                } catch (e) {
+                    return JSON.stringify({ success: false, error: e.message }, null, 2);
+                }
+            }
+        }
+    ],
+
+    async sendMessage(userMessage) {
+        if (isAgentProcessing) return;
+        
+        isAgentProcessing = true;
+        agentAbortController = new AbortController();
+        
+        this.addMessageToChat('user', userMessage);
+        agentInput.value = '';
+        
+        const statusEl = document.getElementById('agentStatusIndicator');
+        statusEl.textContent = 'Thinking...';
+        statusEl.classList.add('text-violet-400');
+
+        try {
+            // Get active bot if any
+            const activeBot = customBots.find(b => b.id === activeBotId);
+            
+            // Build system prompt
+            const systemPrompt = activeBot 
+                ? activeBot.prompt 
+                : `You are an expert AI coding assistant integrated into a web-based IDE. You have access to the user's file system through tool calls.
+
+IMPORTANT RULES:
+1. Always use tools to interact with files - NEVER make up file contents
+2. First request: Use list_files() to see the project structure
+3. Before modifying: Use read_file() to understand current code
+4. Make targeted changes using edit_file_part() when possible
+5. Use write_file() only for new files or complete rewrites
+6. Explain what you're doing before and after tool calls
+7. If asked general questions, analyze code via tools first, then answer without modifying files
+8. Work step-by-step - don't try everything in one call
+
+Be helpful, precise, and professional. All communication must be in English.`;
+
+            // Initial context: file tree only
+            const fileTree = VFS.getFileTree();
+            const initialContext = `Current workspace structure:\n${JSON.stringify(fileTree, null, 2)}`;
+
+            // Build messages array
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: initialContext },
+                ...agentChatHistory.slice(-10), // Last 10 messages for context
+                { role: 'user', content: userMessage }
+            ];
+
+            // Get API config
+            const provider = apiConfig.provider || localStorage.getItem('gem_provider') || 'groq';
+            const apiKey = apiConfig.apiKey || localStorage.getItem('gem_key_' + provider) || '';
+            const model = apiConfig.model || localStorage.getItem('gem_model') || '';
+            const baseEndpoint = PROVIDERS[provider]?.url || '';
+
+            if (!apiKey && PROVIDERS[provider]?.hasKey) {
+                this.addMessageToChat('assistant', '⚠️ Please configure your API key in Settings first.');
+                isAgentProcessing = false;
+                statusEl.textContent = 'Error';
+                return;
+            }
+
+            // Execute tool loop
+            await this.executeToolLoop(messages, provider, apiKey, model, baseEndpoint);
+
+        } catch (e) {
+            console.error('[AI AGENT] Error:', e);
+            this.addMessageToChat('assistant', `❌ Error: ${e.message}`);
+        } finally {
+            isAgentProcessing = false;
+            agentAbortController = null;
+            statusEl.textContent = 'Ready';
+            statusEl.classList.remove('text-violet-400');
+        }
+    },
+
+    async executeToolLoop(messages, provider, apiKey, model, endpoint, maxIterations = 10) {
+        let iterations = 0;
+        
+        while (iterations < maxIterations) {
+            iterations++;
+            console.log(`[AI TOOL CALL] Iteration ${iterations}`);
+
+            const response = await this.callLLM(messages, provider, apiKey, model, endpoint);
+            
+            if (!response) break;
+
+            const { content, toolCalls } = response;
+            totalTokensUsed += response.usage?.total_tokens || 0;
+            this.updateTokenDisplay();
+
+            // If no tool calls, just show response and exit
+            if (!toolCalls || toolCalls.length === 0) {
+                if (content) {
+                    this.addMessageToChat('assistant', content);
+                    agentChatHistory.push({ role: 'assistant', content });
+                }
+                break;
+            }
+
+            // Execute tool calls
+            for (const toolCall of toolCalls) {
+                const tool = this.tools.find(t => t.name === toolCall.function.name);
+                
+                if (tool) {
+                    console.log('[AI TOOL CALL] Executing:', toolCall.function.name);
+                    
+                    let args;
+                    try {
+                        args = JSON.parse(toolCall.function.arguments);
+                    } catch (e) {
+                        args = {};
+                    }
+
+                    const result = await tool.execute(args);
+                    
+                    // Add tool result to messages
+                    messages.push({
+                        role: 'tool',
+                        content: result,
+                        tool_call_id: toolCall.id
+                    });
+
+                    // Show brief notification in chat
+                    this.addToolNotification(toolCall.function.name, args);
+                }
+            }
+
+            // Continue loop with tool results
+        }
+
+        if (iterations >= maxIterations) {
+            this.addMessageToChat('assistant', '⚠️ Reached maximum iteration limit. Please refine your request.');
+        }
+    },
+
+    async callLLM(messages, provider, apiKey, model, endpoint) {
+        console.log('[AI TOOL CALL] Calling LLM:', provider, model);
+        
+        // Reuse Hub's fetchSingleCompletion if available (from app.js)
+        const url = endpoint || PROVIDERS[provider]?.url;
+        const hasKey = PROVIDERS[provider]?.hasKey !== false;
+        
+        // Build tool definitions for OpenAI-compatible APIs
+        const tools = this.tools.map(t => ({
+            type: 'function',
+            function: {
+                name: t.name,
+                description: t.description,
+                parameters: t.parameters
+            }
+        }));
+
+        const payload = {
+            model: model,
+            messages: messages,
+            temperature: 0.7,
+            tools: tools,
+            tool_choice: 'auto'
+        };
+
+        try {
+            // Use Hub's fetchSingleCompletion if available (reuse existing API client)
+            if (typeof fetchSingleCompletion === 'function') {
+                console.log('[AI TOOL CALL] Using Hub API client');
+                const data = await fetchSingleCompletion(url, apiKey, hasKey, payload, provider, agentAbortController?.signal);
+                const choice = data.choices?.[0]?.message;
+                return {
+                    content: choice?.content,
+                    toolCalls: choice?.tool_calls,
+                    usage: data.usage
+                };
+            }
+            
+            // Fallback to direct fetch
+            console.log('[AI TOOL CALL] Using direct fetch');
+            const headers = { 'Content-Type': 'application/json' };
+            if (hasKey && apiKey) {
+                if (provider === 'openai' || provider === 'groq' || provider === 'deepseek' || provider === 'openrouter') {
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                } else {
+                    headers['x-api-key'] = apiKey;
+                }
+            }
+            if (provider === 'openrouter') {
+                headers['HTTP-Referer'] = window.location.origin;
+            }
+
+            const resp = await fetch(url + '/chat/completions', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+                signal: agentAbortController?.signal
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error?.message || `HTTP ${resp.status}`);
+            }
+
+            const data = await resp.json();
+            const choice = data.choices[0]?.message;
+
+            return {
+                content: choice?.content,
+                toolCalls: choice?.tool_calls,
+                usage: data.usage
+            };
+
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                this.addMessageToChat('assistant', '⏹️ Request stopped by user.');
+            } else {
+                throw e;
+            }
+        }
+    },
+
+    addMessageToChat(role, content) {
+        if (!agentChatWindow) return;
+
+        const div = document.createElement('div');
+        div.className = role === 'user' 
+            ? 'bg-violet-900/30 border border-violet-800 rounded-lg p-3 text-sm ml-8'
+            : 'bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-sm mr-8';
+
+        // Parse markdown for assistant messages
+        const formattedContent = role === 'assistant' ? marked.parse(content) : escapeHtml(content);
+        
+        div.innerHTML = `
+            <div class="font-semibold text-xs mb-1 ${role === 'user' ? 'text-violet-400' : 'text-gray-400'}">
+                ${role === 'user' ? '👤 You' : '🤖 Assistant'}
+            </div>
+            <div class="prose prose-invert prose-sm max-w-none text-gray-200">${formattedContent}</div>
+        `;
+
+        agentChatWindow.appendChild(div);
+        agentChatWindow.scrollTop = agentChatWindow.scrollHeight;
+    },
+
+    addToolNotification(toolName, args) {
+        if (!agentChatWindow) return;
+
+        const div = document.createElement('div');
+        div.className = 'bg-gray-900/50 border border-gray-800 rounded p-2 text-[10px] text-gray-500 my-1';
+        
+        let argStr = Object.entries(args).map(([k, v]) => `${k}: ${v}`).join(', ');
+        if (argStr.length > 80) argStr = argStr.substring(0, 77) + '...';
+        
+        div.innerHTML = `🔧 <span class="text-violet-400">${toolName}</span>(${argStr})`;
+        agentChatWindow.appendChild(div);
+        agentChatWindow.scrollTop = agentChatWindow.scrollHeight;
+    },
+
+    updateTokenDisplay() {
+        if (tokenUsageDisplay) {
+            tokenUsageDisplay.textContent = `Tokens: ${totalTokensUsed.toLocaleString()}`;
+        }
+    },
+
+    stopGeneration() {
+        if (agentAbortController) {
+            agentAbortController.abort();
+        }
+    }
+};
+
+// ==================== BOT STORE (per assistant-store.md) ====================
+
+function renderBotStore() {
+    if (!botStoreGrid) return;
+    
+    botStoreGrid.innerHTML = '';
+    
+    // Official/Premium Bots Section
+    const premiumSection = document.createElement('div');
+    premiumSection.className = 'col-span-full';
+    premiumSection.innerHTML = '<h3 class="text-sm font-bold text-amber-400 mb-3">🌟 Premium Assistants</h3>';
+    botStoreGrid.appendChild(premiumSection);
+    
+    const premiumGrid = document.createElement('div');
+    premiumGrid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4 col-span-full';
+    
+    OFFICIAL_BOTS.forEach(bot => {
+        const card = document.createElement('div');
+        card.className = 'bg-gray-800/50 border border-amber-900/50 rounded-xl p-4 space-y-2';
+        card.innerHTML = `
+            <div class="flex justify-between items-start">
+                <h4 class="font-bold text-amber-300">${escapeHtml(bot.name)}</h4>
+                <span class="text-[10px] bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded">PREMIUM</span>
+            </div>
+            <p class="text-xs text-gray-400 line-clamp-2">${escapeHtml(bot.description)}</p>
+            <a href="${bot.link}" target="_blank" class="block text-center bg-amber-600 hover:bg-amber-700 text-white text-xs py-2 rounded-lg transition">
+                🔗 Get on Whop
+            </a>
+        `;
+        premiumGrid.appendChild(card);
+    });
+    
+    botStoreGrid.appendChild(premiumGrid);
+    
+    // Custom Bots Section
+    const customSection = document.createElement('div');
+    customSection.className = 'col-span-full mt-4';
+    customSection.innerHTML = '<h3 class="text-sm font-bold text-gray-400 mb-3">📁 Your Custom Assistants</h3>';
+    botStoreGrid.appendChild(customSection);
+    
+    if (customBots.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'col-span-full text-center py-8 border-2 border-dashed border-gray-800 rounded-xl';
+        emptyState.innerHTML = `
+            <div class="text-4xl mb-2">🏪</div>
+            <p class="text-sm text-gray-500">Your custom store is empty. Create your first assistant or import a preset!</p>
+        `;
+        botStoreGrid.appendChild(emptyState);
+    } else {
+        const customGrid = document.createElement('div');
+        customGrid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4 col-span-full';
+        
+        customBots.forEach(bot => {
+            const isActive = bot.id === activeBotId;
+            const card = document.createElement('div');
+            card.className = `bg-gray-800/50 border rounded-xl p-4 space-y-2 ${isActive ? 'border-amber-500 ring-1 ring-amber-500' : 'border-gray-700 hover:border-gray-600'}`;
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <h4 class="font-bold text-gray-200">${escapeHtml(bot.name)}</h4>
+                    ${isActive ? '<span class="text-[10px] bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded">ACTIVE</span>' : ''}
+                </div>
+                <p class="text-xs text-gray-400 line-clamp-2 h-8 overflow-hidden">${escapeHtml(bot.prompt)}</p>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="useBot('${bot.id}')" class="flex-1 ${isActive ? 'bg-gray-700 text-gray-400 cursor-default' : 'bg-amber-600 hover:bg-amber-700 text-white'} text-xs py-1.5 rounded transition">
+                        ${isActive ? 'Using' : 'Use'}
+                    </button>
+                    <button onclick="openBotEditor('${bot.id}')" class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs py-1.5 rounded transition">
+                        ✏️ Edit
+                    </button>
+                </div>
+            `;
+            customGrid.appendChild(card);
+        });
+        
+        botStoreGrid.appendChild(customGrid);
+    }
+}
+
+function openBotEditor(botId = null) {
+    editingBotId = botId;
+    
+    if (botId) {
+        const bot = customBots.find(b => b.id === botId);
+        if (bot) {
+            botEditorTitle.textContent = 'Edit Assistant';
+            editBotName.value = bot.name;
+            editBotPrompt.value = bot.prompt;
+            editBotModel.value = bot.model || '';
+            editBotTemp.value = bot.temp || 0.7;
+        }
+    } else {
+        botEditorTitle.textContent = 'Create New Assistant';
+        editBotName.value = '';
+        editBotPrompt.value = '';
+        editBotModel.value = apiConfig.model || '';
+        editBotTemp.value = 0.7;
+    }
+    
+    // Populate model dropdown
+    editBotModel.innerHTML = '';
+    const currentModel = localStorage.getItem('gem_model') || apiConfig.model;
+    if (currentModel) {
+        const opt = document.createElement('option');
+        opt.value = currentModel;
+        opt.textContent = currentModel + ' (Current)';
+        editBotModel.appendChild(opt);
+    }
+    
+    botEditorModal.classList.remove('hidden');
+}
+
+function useBot(botId) {
+    activeBotId = botId;
+    localStorage.setItem('ide_active_bot_id', botId);
+    renderBotStore();
+    
+    // Show notification
+    const bot = customBots.find(b => b.id === botId);
+    if (bot && agentChatWindow) {
+        const notif = document.createElement('div');
+        notif.className = 'bg-amber-900/30 border border-amber-700 rounded-lg p-3 text-xs text-amber-300 animate-pulse';
+        notif.innerHTML = `✅ Now using: <strong>${escapeHtml(bot.name)}</strong>`;
+        agentChatWindow.appendChild(notif);
+        setTimeout(() => notif.remove(), 3000);
+        agentChatWindow.scrollTop = agentChatWindow.scrollHeight;
+    }
+}
+
+function saveBot() {
+    const name = editBotName.value.trim();
+    const prompt = editBotPrompt.value.trim();
+    
+    if (!name || !prompt) {
+        alert('Please provide both name and system prompt.');
+        return;
+    }
+    
+    const temp = parseFloat(editBotTemp.value) || 0.7;
+    
+    if (editingBotId) {
+        // Update existing
+        const idx = customBots.findIndex(b => b.id === editingBotId);
+        if (idx > -1) {
+            customBots[idx] = {
+                ...customBots[idx],
+                name,
+                prompt,
+                model: editBotModel.value,
+                temp
+            };
+        }
+    } else {
+        // Create new
+        const newBot = {
+            id: 'bot_' + Date.now(),
+            name,
+            prompt,
+            model: editBotModel.value,
+            temp
+        };
+        customBots.push(newBot);
+    }
+    
+    localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+    botEditorModal.classList.add('hidden');
+    renderBotStore();
+}
+
+function deleteBot() {
+    if (!editingBotId) return;
+    
+    if (!confirm('Delete this assistant?')) return;
+    
+    customBots = customBots.filter(b => b.id !== editingBotId);
+    
+    if (activeBotId === editingBotId) {
+        activeBotId = null;
+        localStorage.removeItem('ide_active_bot_id');
+    }
+    
+    localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+    botEditorModal.classList.add('hidden');
+    renderBotStore();
+}
+
+function exportBots() {
+    const json = JSON.stringify(customBots, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'traliran-ide-bots.json';
+    a.click();
+    
+    URL.revokeObjectURL(url);
+}
+
+function importBots(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const imported = JSON.parse(e.target.result);
+            if (Array.isArray(imported)) {
+                customBots = [...customBots, ...imported];
+                localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+                renderBotStore();
+                alert(`Imported ${imported.length} assistant(s)!`);
+            } else {
+                throw new Error('Invalid format');
+            }
+        } catch (err) {
+            alert('Failed to import: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// Expose to window for onclick handlers
+window.useBot = useBot;
+window.openBotEditor = openBotEditor;
+
+// ==================== AUTH & SETTINGS SYNC ====================
+
+function loadApiConfig() {
+    apiConfig.provider = localStorage.getItem('gem_provider') || 'groq';
+    apiConfig.apiKey = localStorage.getItem('gem_key_' + apiConfig.provider) || '';
+    apiConfig.endpoint = localStorage.getItem('gem_endpoint') || '';
+    apiConfig.model = localStorage.getItem('gem_model') || '';
+    
+    if (agentModelDisplay) {
+        agentModelDisplay.textContent = `Model: ${apiConfig.model || '--'}`;
+    }
+}
+
+function updateAuthUI() {
+    isLoggedIn = DB_CONNECTOR.isLoggedIn();
+    
+    if (loginBtnText) {
+        loginBtnText.textContent = isLoggedIn ? DB_CONNECTOR.getUserEmail() : 'Login';
+    }
+    
+    if (doLogoutBtn) {
+        doLogoutBtn.classList.toggle('hidden', !isLoggedIn);
+    }
+    
+    if (doLoginBtn && doRegisterBtn) {
+        doLoginBtn.classList.toggle('hidden', isLoggedIn);
+        doRegisterBtn.classList.toggle('hidden', isLoggedIn);
+    }
+}
+
+async function handleLogin(email, password) {
+    try {
+        loginStatus.textContent = 'Logging in...';
+        await DB_CONNECTOR.login(email, password);
+        updateAuthUI();
+        loginStatus.textContent = '✓ Logged in!';
+        setTimeout(() => loginModal.classList.add('hidden'), 1000);
+        
+        // Sync VFS from cloud
+        await VFS.syncFromCloud();
+    } catch (e) {
+        loginStatus.textContent = '✗ ' + e.message;
+    }
+}
+
+async function handleRegister(email, password) {
+    try {
+        loginStatus.textContent = 'Registering...';
+        await DB_CONNECTOR.register(email, password);
+        updateAuthUI();
+        loginStatus.textContent = '✓ Registered!';
+        setTimeout(() => loginModal.classList.add('hidden'), 1000);
+    } catch (e) {
+        loginStatus.textContent = '✗ ' + e.message;
+    }
+}
+
+async function handleLogout() {
+    await DB_CONNECTOR.logout();
+    updateAuthUI();
+    loginModal.classList.add('hidden');
+}
+
+// ==================== LIVE PREVIEW ====================
+
+const PREVIEW = {
+    isVisible: false,
+    
+    toggle() {
+        this.isVisible = !this.isVisible;
+        previewPanel.classList.toggle('hidden', !this.isVisible);
+        
+        if (this.isVisible) {
+            this.render();
+        }
+    },
+    
+    render() {
+        if (!previewFrame) return;
+        
+        // Find HTML file to preview
+        let htmlContent = '';
+        let cssContent = '';
+        let jsContent = '';
+        
+        // Look for index.html or main HTML file
+        const htmlFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.html'));
+        const mainHtml = htmlFiles.find(p => p.includes('index')) || htmlFiles[0];
+        
+        if (mainHtml) {
+            htmlContent = vfsFiles[mainHtml].content;
+        }
+        
+        // Inject CSS
+        const cssFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.css'));
+        if (cssFiles.length > 0) {
+            const styleTag = '<style>\n' + cssFiles.map(f => vfsFiles[f].content).join('\n') + '\n</style>';
+            htmlContent = htmlContent.replace('</head>', styleTag + '</head>');
+        }
+        
+        // Inject JS
+        const jsFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.js'));
+        if (jsFiles.length > 0) {
+            const scriptTag = '<script>\n' + jsFiles.map(f => vfsFiles[f].content).join('\n') + '\n<\/script>';
+            htmlContent = htmlContent.replace('</body>', scriptTag + '</body>');
+        }
+        
+        // Render in iframe
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        previewFrame.src = URL.createObjectURL(blob);
+    }
+};
+
+// ==================== FILE TREE RENDERING ====================
+
+function renderFileTree() {
+    if (!fileTreeContainer) return;
+    
+    fileTreeContainer.innerHTML = '';
+    const tree = VFS.getFileTree();
+    
+    function renderNode(node, path = '') {
+        for (const [name, info] of Object.entries(node)) {
+            const itemPath = path ? `${path}/${name}` : name;
+            
+            const div = document.createElement('div');
+            div.className = `file-tree-item text-xs py-1 flex items-center gap-1 ${activeFilePath === itemPath ? 'active' : ''}`;
+            
+            if (info.type === 'folder') {
+                div.innerHTML = `<span>📁</span><span>${escapeHtml(name)}</span>`;
+                fileTreeContainer.appendChild(div);
+                
+                // Render children
+                const childContainer = document.createElement('div');
+                childContainer.style.paddingLeft = '12px';
+                fileTreeContainer.appendChild(childContainer);
+                
+                const oldContainer = fileTreeContainer;
+                fileTreeContainer = childContainer;
+                renderNode(info.children, itemPath);
+                fileTreeContainer = oldContainer;
+            } else {
+                div.innerHTML = `<span>📄</span><span class="truncate">${escapeHtml(name)}</span>`;
+                div.onclick = () => {
+                    MONACO.openFile(itemPath);
+                    renderFileTree(); // Update active state
+                };
+                fileTreeContainer.appendChild(div);
+            }
+        }
+    }
+    
+    renderNode(tree);
+}
+
+// ==================== INITIALIZATION ====================
+
+async function init() {
+    console.log('[IDE] Initializing...');
+    
+    // Get DOM elements
+    filesTabBtn = document.getElementById('filesTabBtn');
+    versionControlTabBtn = document.getElementById('versionControlTabBtn');
+    filesPanel = document.getElementById('filesPanel');
+    versionControlPanel = document.getElementById('versionControlPanel');
+    fileTreeContainer = document.getElementById('fileTreeContainer');
+    openFilesTabs = document.getElementById('openFilesTabs');
+    commitMessageInput = document.getElementById('commitMessageInput');
+    createCommitBtn = document.getElementById('createCommitBtn');
+    commitHistoryList = document.getElementById('commitHistoryList');
+    exportZipBtn = document.getElementById('exportZipBtn');
+    importZipBtn = document.getElementById('importZipBtn');
+    zipFileInput = document.getElementById('zipFileInput');
+    newFileBtn = document.getElementById('newFileBtn');
+    saveFileBtn = document.getElementById('saveFileBtn');
+    togglePreviewBtn = document.getElementById('togglePreviewBtn');
+    previewPanel = document.getElementById('previewPanel');
+    previewFrame = document.getElementById('previewFrame');
+    closePreviewBtn = document.getElementById('closePreviewBtn');
+    monacoContainer = document.getElementById('monacoContainer');
+    
+    // Bot Store elements
+    openBotStoreBtn = document.getElementById('openBotStoreBtn');
+    botStoreModal = document.getElementById('botStoreModal');
+    closeBotStoreModal = document.getElementById('closeBotStoreModal');
+    botStoreGrid = document.getElementById('botStoreGrid');
+    createNewBotBtn = document.getElementById('createNewBotBtn');
+    exportBotsBtn = document.getElementById('exportBotsBtn');
+    importBotsInput = document.getElementById('importBotsInput');
+    botEditorModal = document.getElementById('botEditorModal');
+    closeBotEditorModal = document.getElementById('closeBotEditorModal');
+    botEditorTitle = document.getElementById('botEditorTitle');
+    editBotName = document.getElementById('editBotName');
+    editBotPrompt = document.getElementById('editBotPrompt');
+    editBotModel = document.getElementById('editBotModel');
+    editBotTemp = document.getElementById('editBotTemp');
+    saveBotBtn = document.getElementById('saveBotBtn');
+    deleteBotBtn = document.getElementById('deleteBotBtn');
+    
+    // AI Agent elements
+    agentChatWindow = document.getElementById('agentChatWindow');
+    agentInput = document.getElementById('agentInput');
+    sendAgentBtn = document.getElementById('sendAgentBtn');
+    stopAgentBtn = document.getElementById('stopAgentBtn');
+    agentStatusIndicator = document.getElementById('agentStatusIndicator');
+    agentModelDisplay = document.getElementById('agentModelDisplay');
+    tokenUsageDisplay = document.getElementById('tokenUsageDisplay');
+    
+    // Auth elements
+    loginBtn = document.getElementById('loginBtn');
+    loginBtnText = document.getElementById('loginBtnText');
+    loginModal = document.getElementById('loginModal');
+    closeLoginModal = document.getElementById('closeLoginModal');
+    loginEmail = document.getElementById('loginEmail');
+    loginPassword = document.getElementById('loginPassword');
+    doLoginBtn = document.getElementById('doLoginBtn');
+    doRegisterBtn = document.getElementById('doRegisterBtn');
+    doLogoutBtn = document.getElementById('doLogoutBtn');
+    loginStatus = document.getElementById('loginStatus');
+    
+    // Initialize VFS
+    await VFS.init();
+    
+    // Load commits from storage (IndexedDB or localStorage)
+    await VERSION_CONTROL.loadCommitsFromStorage();
+    
+    // Initialize Monaco
+    try {
+        await MONACO.init();
+        // Open first file or README
+        const firstFile = Object.keys(vfsFiles)[0];
+        if (firstFile) {
+            MONACO.openFile(firstFile);
+        }
+    } catch (e) {
+        console.error('[IDE] Monaco failed to load:', e);
+    }
+    
+    // Load custom bots
+    const savedBots = localStorage.getItem('ide_custom_bots');
+    if (savedBots) {
+        try {
+            customBots = JSON.parse(savedBots);
+        } catch (e) {
+            customBots = [];
+        }
+    }
+    
+    const savedActiveBot = localStorage.getItem('ide_active_bot_id');
+    activeBotId = savedActiveBot;
+    
+    // Load API config
+    loadApiConfig();
+    
+    // Render UI
+    renderFileTree();
+    VERSION_CONTROL.renderCommitHistory();
+    
+    // Setup event listeners
+    
+    // Tab switching
+    filesTabBtn.onclick = () => {
+        filesPanel.classList.remove('hidden');
+        versionControlPanel.classList.add('hidden');
+        filesTabBtn.classList.add('text-violet-400', 'border-b-2', 'border-violet-400', 'bg-gray-800/50');
+        filesTabBtn.classList.remove('text-gray-400');
+        versionControlTabBtn.classList.remove('text-violet-400', 'border-b-2', 'border-violet-400', 'bg-gray-800/50');
+        versionControlTabBtn.classList.add('text-gray-400');
+    };
+    
+    versionControlTabBtn.onclick = () => {
+        filesPanel.classList.add('hidden');
+        versionControlPanel.classList.remove('hidden');
+        versionControlTabBtn.classList.add('text-violet-400', 'border-b-2', 'border-violet-400', 'bg-gray-800/50');
+        versionControlTabBtn.classList.remove('text-gray-400');
+        filesTabBtn.classList.remove('text-violet-400', 'border-b-2', 'border-violet-400', 'bg-gray-800/50');
+        filesTabBtn.classList.add('text-gray-400');
+        VERSION_CONTROL.renderCommitHistory();
+    };
+    
+    // File operations
+    newFileBtn.onclick = async () => {
+        const name = prompt('Enter file name (e.g., script.js):');
+        if (name) {
+            await VFS.writeFile(name, '');
+            MONACO.openFile(name);
+            renderFileTree();
+        }
+    };
+    
+    saveFileBtn.onclick = () => {
+        if (activeFilePath) {
+            const content = MONACO.getCurrentContent();
+            if (content !== undefined) {
+                VFS.writeFile(activeFilePath, content);
+                console.log('[IDE] File saved');
+            }
+        }
+    };
+    
+    // Keyboard shortcut for save
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            saveFileBtn.click();
+        }
+    });
+    
+    // Preview
+    togglePreviewBtn.onclick = () => PREVIEW.toggle();
+    closePreviewBtn.onclick = () => PREVIEW.toggle();
+    
+    // Version control
+    createCommitBtn.onclick = async () => {
+        const message = commitMessageInput.value.trim();
+        if (!message) {
+            alert('Please enter a commit message');
+            return;
+        }
+        await VERSION_CONTROL.createCommit(message);
+        commitMessageInput.value = '';
+    };
+    
+    exportZipBtn.onclick = () => VERSION_CONTROL.exportAsZip();
+    importZipBtn.onclick = () => zipFileInput.click();
+    zipFileInput.onchange = (e) => {
+        if (e.target.files[0]) {
+            VERSION_CONTROL.importFromZip(e.target.files[0]);
+        }
+    };
+    
+    // Bot Store
+    openBotStoreBtn.onclick = () => {
+        renderBotStore();
+        botStoreModal.classList.remove('hidden');
+    };
+    closeBotStoreModal.onclick = () => botStoreModal.classList.add('hidden');
+    createNewBotBtn.onclick = () => openBotEditor();
+    saveBotBtn.onclick = saveBot;
+    deleteBotBtn.onclick = deleteBot;
+    closeBotEditorModal.onclick = () => botEditorModal.classList.add('hidden');
+    exportBotsBtn.onclick = exportBots;
+    importBotsInput.onchange = importBots;
+    
+    // AI Agent
+    sendAgentBtn.onclick = () => {
+        const msg = agentInput.value.trim();
+        if (msg) AI_AGENT.sendMessage(msg);
+    };
+    
+    agentInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendAgentBtn.click();
+        }
+    });
+    
+    stopAgentBtn.onclick = () => AI_AGENT.stopGeneration();
+    
+    // Auth
+    loginBtn.onclick = () => loginModal.classList.remove('hidden');
+    closeLoginModal.onclick = () => loginModal.classList.add('hidden');
+    doLoginBtn.onclick = () => handleLogin(loginEmail.value, loginPassword.value);
+    doRegisterBtn.onclick = () => handleRegister(loginEmail.value, loginPassword.value);
+    doLogoutBtn.onclick = handleLogout;
+    
+    // Listen for settings changes in Hub
+    window.addEventListener('storage', (e) => {
+        if (e.key?.startsWith('gem_')) {
+            loadApiConfig();
+        }
+    });
+    
+    updateAuthUI();
+    
+    console.log('[IDE] Initialization complete');
+}
+
+// Start the app
+document.addEventListener('DOMContentLoaded', init);

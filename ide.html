@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traliran AI IDE - Serverless Code Editor</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        #monacoContainer { height: 100%; width: 100%; }
+        .monaco-editor-container { flex: 1; overflow: hidden; }
+        .file-tree-item { cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+        .file-tree-item:hover { background-color: rgba(251, 191, 36, 0.1); }
+        .file-tree-item.active { background-color: rgba(251, 191, 36, 0.2); }
+        .chat-scroll::-webkit-scrollbar { width: 6px; }
+        .chat-scroll::-webkit-scrollbar-track { background: #111827; }
+        .chat-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        .chat-scroll::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-gray-900 border-b border-gray-800 p-3 sticky top-0 z-20 shadow-md">
+        <div class="max-w-[1920px] mx-auto flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">⚡</span>
+                <h1 class="text-lg font-black text-violet-400 tracking-wide">Traliran AI IDE</h1>
+                <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1 rounded transition ml-2">
+                    ◀ Back to Hub
+                </a>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button id="newFileBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded transition" title="New File">
+                    📄 New File
+                </button>
+                <button id="saveFileBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded transition" title="Save File (Ctrl+S)">
+                    💾 Save
+                </button>
+                <button id="togglePreviewBtn" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded transition" title="Toggle Live Preview">
+                    👁️ Preview
+                </button>
+                <button id="openBotStoreBtn" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 text-xs px-3 py-1.5 rounded transition" title="Assistant Store">
+                    🏪 Assistants
+                </button>
+                <button id="loginBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded transition" title="Login / Cloud Sync">
+                    🔑 <span id="loginBtnText">Login</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-[1920px] w-full mx-auto flex relative overflow-hidden">
+        
+        <!-- Left Sidebar - Files & Version Control -->
+        <aside class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+            <!-- Tab Headers -->
+            <div class="flex border-b border-gray-800">
+                <button id="filesTabBtn" class="flex-1 px-3 py-2 text-xs font-medium text-violet-400 border-b-2 border-violet-400 bg-gray-800/50">
+                    📁 Files
+                </button>
+                <button id="versionControlTabBtn" class="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-200">
+                    📜 Versions
+                </button>
+            </div>
+
+            <!-- Files Panel -->
+            <div id="filesPanel" class="flex-1 overflow-y-auto chat-scroll p-2">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase">Workspace</h3>
+                    <button id="addFolderBtn" class="text-gray-400 hover:text-emerald-400 text-xs" title="Add Folder">📁+</button>
+                </div>
+                <div id="fileTreeContainer" class="space-y-1 text-sm font-mono">
+                    <!-- File tree populated by JS -->
+                </div>
+            </div>
+
+            <!-- Version Control Panel (hidden by default) -->
+            <div id="versionControlPanel" class="hidden flex-1 overflow-y-auto chat-scroll p-2">
+                <div class="mb-3">
+                    <input type="text" id="commitMessageInput" placeholder="Commit message..." 
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs focus:border-violet-500 focus:outline-none">
+                    <button id="createCommitBtn" class="w-full mt-2 bg-violet-600 hover:bg-violet-700 text-white text-xs py-1.5 rounded transition">
+                        📦 Create Commit
+                    </button>
+                </div>
+                <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Commit History</h3>
+                <div id="commitHistoryList" class="space-y-2">
+                    <!-- Commits populated by JS -->
+                </div>
+                <div class="mt-4 pt-3 border-t border-gray-800">
+                    <button id="exportZipBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 rounded transition mb-2">
+                        📦 Export as ZIP
+                    </button>
+                    <button id="importZipBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 rounded transition">
+                        📥 Import ZIP
+                    </button>
+                    <input type="file" id="zipFileInput" accept=".zip" class="hidden">
+                </div>
+            </div>
+        </aside>
+
+        <!-- Monaco Editor Container -->
+        <section class="flex-1 flex flex-col min-w-0">
+            <!-- Open Files Tabs -->
+            <div id="openFilesTabs" class="flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
+                <!-- Tabs populated by JS -->
+            </div>
+            
+            <!-- Monaco Editor -->
+            <div class="flex-1 relative">
+                <div id="monacoContainer" class="absolute inset-0"></div>
+            </div>
+
+            <!-- Live Preview Panel (collapsible) -->
+            <div id="previewPanel" class="hidden h-64 border-t border-gray-800 bg-gray-950">
+                <div class="flex justify-between items-center px-3 py-1.5 bg-gray-900 border-b border-gray-800">
+                    <span class="text-xs font-bold text-gray-400">Live Preview</span>
+                    <button id="closePreviewBtn" class="text-gray-400 hover:text-white text-xs">✕ Close</button>
+                </div>
+                <iframe id="previewFrame" class="w-full h-[calc(100%-32px)] border-0 bg-white"></iframe>
+            </div>
+        </section>
+
+        <!-- Right Sidebar - AI Agent Chat -->
+        <aside class="w-96 bg-gray-900 border-l border-gray-800 flex flex-col overflow-hidden">
+            <div class="p-3 border-b border-gray-800">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-bold text-violet-400 text-sm uppercase">AI Coding Agent</h2>
+                    <span id="agentStatusIndicator" class="text-[10px] text-gray-500">Ready</span>
+                </div>
+                <p class="text-[10px] text-gray-500 mt-1">Autonomous agent with file system access</p>
+            </div>
+
+            <!-- Chat Messages -->
+            <div id="agentChatWindow" class="flex-1 overflow-y-auto chat-scroll p-3 space-y-3">
+                <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-xs text-gray-300">
+                    <p class="font-semibold text-violet-400 mb-1">🤖 Welcome to AI IDE!</p>
+                    <p>I can help you write, edit, and refactor code. I have access to your workspace files.</p>
+                    <ul class="mt-2 space-y-1 text-gray-400">
+                        <li>• Ask me to create new files</li>
+                        <li>• Request code modifications</li>
+                        <li>• Debug issues in your code</li>
+                        <li>• Explain code structure</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-3 border-t border-gray-800 bg-gray-900">
+                <textarea id="agentInput" rows="3" placeholder="Describe what you want to build or change..." 
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none resize-none"></textarea>
+                <div class="flex gap-2 mt-2">
+                    <button id="sendAgentBtn" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm py-2 rounded transition">
+                        ➤ Send
+                    </button>
+                    <button id="stopAgentBtn" class="hidden flex-1 bg-rose-600 hover:bg-rose-700 text-white text-sm py-2 rounded transition">
+                        ⏹ Stop
+                    </button>
+                </div>
+                <div class="flex items-center justify-between mt-2 text-[10px] text-gray-500">
+                    <span id="agentModelDisplay">Model: --</span>
+                    <span id="tokenUsageDisplay">Tokens: 0</span>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Bot Store Modal -->
+    <div id="botStoreModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative flex flex-col max-h-[90vh]">
+            <button id="closeBotStoreModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">✕</button>
+            
+            <div class="flex justify-between items-start">
+                <div>
+                    <h2 class="text-2xl font-bold text-amber-400">🏪 Assistant Store</h2>
+                    <p class="text-sm text-gray-400 mt-1">Manage your custom AI personas and specialized coding assistants.</p>
+                </div>
+                <div class="flex gap-2">
+                    <label for="importBotsInput" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg transition cursor-pointer">
+                        📥 Import
+                    </label>
+                    <input type="file" id="importBotsInput" accept=".json" class="hidden">
+                    <button id="exportBotsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg transition">
+                        📤 Export
+                    </button>
+                </div>
+            </div>
+
+            <div id="botStoreGrid" class="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Bots populated dynamically by JS -->
+            </div>
+
+            <button id="createNewBotBtn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-lg transition">
+                ➕ Create New Assistant
+            </button>
+        </div>
+    </div>
+
+    <!-- Bot Editor Modal -->
+    <div id="botEditorModal" class="hidden fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative">
+            <button id="closeBotEditorModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">✕</button>
+            
+            <h2 id="botEditorTitle" class="text-xl font-bold text-amber-400">Edit Assistant</h2>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">Assistant Name</label>
+                    <input type="text" id="editBotName" placeholder="e.g., React Expert" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:outline-none">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">System Prompt (Instructions)</label>
+                    <textarea id="editBotPrompt" rows="6" placeholder="Define the assistant's role, expertise, and communication style..." 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:outline-none resize-none"></textarea>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Preferred Model</label>
+                        <select id="editBotModel" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:outline-none">
+                            <!-- Populated from available models -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Temperature (0-2)</label>
+                        <input type="number" id="editBotTemp" step="0.1" min="0" max="2" value="0.7" 
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-between pt-4 border-t border-gray-800">
+                <button id="deleteBotBtn" class="bg-rose-600 hover:bg-rose-700 text-white text-sm px-4 py-2 rounded-lg transition">
+                    🗑️ Delete Bot
+                </button>
+                <button id="saveBotBtn" class="bg-amber-600 hover:bg-amber-700 text-white text-sm px-6 py-2 rounded-lg transition">
+                    Save Assistant
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button id="closeLoginModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">✕</button>
+            <h2 class="text-xl font-bold text-emerald-400">Cloud Sync Login</h2>
+            <p class="text-xs text-gray-400">Connect to Firebase, Supabase, or PocketBase for cloud synchronization.</p>
+            
+            <div class="space-y-3">
+                <input type="email" id="loginEmail" placeholder="Email address" 
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                <input type="password" id="loginPassword" placeholder="Password" 
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+            </div>
+            
+            <div class="flex gap-2">
+                <button id="doLoginBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-2 rounded-lg transition">
+                    Login
+                </button>
+                <button id="doRegisterBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg transition">
+                    Register
+                </button>
+            </div>
+            
+            <button id="doLogoutBtn" class="hidden w-full bg-rose-600 hover:bg-rose-700 text-white text-sm py-2 rounded-lg transition">
+                Logout
+            </button>
+            
+            <div id="loginStatus" class="text-xs text-gray-400 text-center"></div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="db-connector.js"></script>
+    <script src="sync-manager.js"></script>
+    <script src="ide.js"></script>
+</body>
+</html>
