@@ -106,19 +106,7 @@ const PROVIDERS = {
     llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
 };
 
-const DEFAULT_FILES = {
-    "index.html": `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project</title>
-</head>
-<body>
-    <h1>Hello World</h1>
-</body>
-</html>`
-};
+const DEFAULT_FILES = {};
 
 // Markdown support for copilot text
 marked.use({ breaks: true, gfm: true });
@@ -162,9 +150,9 @@ function initWorkspace() {
         }
     });
     
-    // Fallback if index.html is missing
-    if (!projectFiles["index.html"]) {
-        projectFiles["index.html"] = DEFAULT_FILES["index.html"];
+    // Fallback if no files exist - create empty index.html
+    if (Object.keys(projectFiles).length === 0) {
+        projectFiles["index.html"] = "";
     }
 
     // Set active file
@@ -214,6 +202,8 @@ async function saveWorkspace() {
     } catch (e) {
         console.error('Failed to save to IndexedDB:', e);
     }
+    
+    return true; // Signal completion
 }
 
 // Render File List with conditional delete option & checkboxes for AI context
@@ -402,7 +392,12 @@ function initializeMonaco() {
 
 // Assembly & Preview Logic
 function getPreviewHtml() {
-    let html = projectFiles["index.html"] || "<h1>No index.html found</h1>";
+    let html = projectFiles["index.html"] || "";
+    
+    // If index.html is empty or missing, show a friendly message
+    if (!html || html.trim() === "") {
+        return "<h1 style='color: #888; text-align: center; margin-top: 50px;'>No content yet - Ask AI to generate code!</h1>";
+    }
 
     // Inline custom css files
     Object.entries(projectFiles).forEach(([filename, content]) => {
