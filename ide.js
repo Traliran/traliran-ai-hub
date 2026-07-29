@@ -640,7 +640,9 @@ const AI_AGENT = {
                 type: 'object',
                 properties: {
                     directory: { type: 'string', description: 'Optional directory path to list (default: root)' }
-                }
+                },
+                required: [],
+                additionalProperties: false
             },
             execute: async (args) => {
                 const dir = args.directory || '';
@@ -656,7 +658,8 @@ const AI_AGENT = {
                 properties: {
                     path: { type: 'string', description: 'Full path to the file' }
                 },
-                required: ['path']
+                required: ['path'],
+                additionalProperties: false
             },
             execute: async (args) => {
                 try {
@@ -676,7 +679,8 @@ const AI_AGENT = {
                     path: { type: 'string', description: 'Full path where to write the file' },
                     content: { type: 'string', description: 'Complete file content' }
                 },
-                required: ['path', 'content']
+                required: ['path', 'content'],
+                additionalProperties: false
             },
             execute: async (args) => {
                 try {
@@ -697,7 +701,8 @@ const AI_AGENT = {
                     search_pattern: { type: 'string', description: 'Text or regex pattern to find' },
                     replace_content: { type: 'string', description: 'Content to replace the match with' }
                 },
-                required: ['path', 'search_pattern', 'replace_content']
+                required: ['path', 'search_pattern', 'replace_content'],
+                additionalProperties: false
             },
             execute: async (args) => {
                 try {
@@ -857,12 +862,18 @@ Be helpful, precise, and professional. All communication must be in English.`;
         const hasKey = PROVIDERS[provider]?.hasKey !== false;
         
         // Build tool definitions for OpenAI-compatible APIs
+        // Ensure every tool has required fields: name, description, parameters with type/properties/required
         const tools = this.tools.map(t => ({
             type: 'function',
             function: {
                 name: t.name,
                 description: t.description,
-                parameters: t.parameters
+                parameters: {
+                    type: t.parameters.type || 'object',
+                    properties: t.parameters.properties || {},
+                    required: t.parameters.required || [],
+                    additionalProperties: t.parameters.additionalProperties ?? false
+                }
             }
         }));
 
