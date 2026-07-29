@@ -3,7 +3,7 @@
  * Replaces ephemeral file system with persistent browser storage
  */
 class ProjectDB {
-    constructor(dbName = 'WebIdeDB', version = 1) {
+    constructor(dbName = 'WebAppDB', version = 1) {
         this.dbName = dbName;
         this.version = version;
         this.db = null;
