@@ -96,6 +96,159 @@ const PROVIDERS = {
     llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
 };
 
+// ==================== API CLIENT FUNCTIONS (from app.js) ====================
+
+function normalizeContentToText(content) {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+        return content.map(part => {
+            if (typeof part === 'string') return part;
+            if (part?.type === 'text' || part?.type === 'input_text') return part.text || part.content || '';
+            if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') return '[Image]';
+            if (part?.type === 'video_url' || part?.type === 'video' || part?.type === 'input_video') return '[Video]';
+            return '';
+        }).join('');
+    }
+    return '';
+}
+
+function convertContentForAnthropic(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return normalizeContentToText(content);
+
+    return content.map(part => {
+        if (typeof part === 'string') return { type: 'text', text: part };
+        if (part?.type === 'text' || part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
+        if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') {
+            const dataUrl = part.image_url?.url || part.url || '';
+            if (dataUrl.startsWith('data:')) {
+                const [meta, payload] = dataUrl.split(',');
+                const mime = meta.match(/data:(.+);/)?.[1] || 'image/png';
+                return { type: 'image', source: { type: 'base64', media_type: mime, data: payload } };
+            }
+            return { type: 'text', text: '[Image attachment]' };
+        }
+        if (part?.type === 'video_url' || part?.type === 'video' || part?.type === 'input_video') {
+            return { type: 'text', text: '[Video attachment]' };
+        }
+        return { type: 'text', text: '' };
+    }).filter(item => item && (item.text || item.type === 'image'));
+}
+
+async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal) {
+    const provider = PROVIDERS[providerName] || PROVIDERS.openai;
+    if (provider.type === 'anthropic') {
+        const headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+        };
+
+        const systemMessage = bodyPayload.messages.find(msg => msg.role === 'system');
+        const anthropicPayload = {
+            model: bodyPayload.model,
+            max_tokens: bodyPayload.max_tokens || 1024,
+            messages: bodyPayload.messages.filter(msg => msg.role !== 'system').map(msg => ({
+                role: msg.role === 'assistant' ? 'assistant' : 'user',
+                content: convertContentForAnthropic(msg.content)
+            })),
+            temperature: bodyPayload.temperature,
+            top_p: bodyPayload.top_p
+        };
+
+        if (systemMessage) {
+            anthropicPayload.system = typeof systemMessage.content === 'string' ? systemMessage.content : normalizeContentToText(systemMessage.content);
+        }
+
+        const response = await fetch(`${endpoint}/messages`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(anthropicPayload),
+            signal
+        });
+
+        if (!response.ok) {
+            const errJson = await response.json().catch(() => ({}));
+            throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+    const response = await fetch(`${endpoint}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyPayload),
+        signal
+    });
+
+    if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+    }
+    return response.json();
+}
+
+async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal, onDelta) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+    bodyPayload.stream = true;
+
+    const response = await fetch(`${endpoint}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyPayload),
+        signal
+    });
+
+    if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+        const result = await response.json();
+        return { content: result.choices?.[0]?.message?.content || '' };
+    }
+
+    const decoder = new TextDecoder();
+    let accumulated = '';
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\\n');
+        buffer = lines.pop();
+        for (let line of lines) {
+            line = line.trim();
+            if (!line) continue;
+            if (line === 'data: [DONE]') {
+                continue;
+            }
+            if (line.startsWith('data:')) {
+                const payload = line.slice(5).trim();
+                if (!payload) continue;
+                try {
+                    const eventData = JSON.parse(payload);
+                    const delta = eventData.choices?.[0]?.delta?.content || '';
+                    accumulated += delta;
+                    if (delta) onDelta(delta);
+                } catch (error) {
+                    // ignore parse errors for partial chunks
+                }
+            }
+        }
+    }
+
+    return { content: accumulated };
+}
+
 // ==================== UTILITY FUNCTIONS ====================
 
 function escapeHtml(value) {
