@@ -127,46 +127,94 @@
             </div>
         </section>
 
-        <!-- Right Sidebar - AI Agent Chat -->
+        <!-- Right Sidebar - AI Agent & Settings -->
         <aside class="w-96 bg-gray-900 border-l border-gray-800 flex flex-col overflow-hidden">
-            <div class="p-3 border-b border-gray-800">
-                <div class="flex justify-between items-center">
-                    <h2 class="font-bold text-violet-400 text-sm uppercase">AI Coding Agent</h2>
-                    <span id="agentStatusIndicator" class="text-[10px] text-gray-500">Ready</span>
-                </div>
-                <p class="text-[10px] text-gray-500 mt-1">Autonomous agent with file system access</p>
+            <!-- Tabs Header -->
+            <div class="flex border-b border-gray-800">
+                <button onclick="switchRightTab('agent')" id="tabBtnAgent" class="flex-1 px-3 py-2 text-xs font-medium text-violet-400 border-b-2 border-violet-400 bg-gray-800/50">
+                    🤖 Agent
+                </button>
+                <button onclick="switchRightTab('settings')" id="tabBtnSettings" class="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-200">
+                    ⚙️ API Config
+                </button>
             </div>
 
-            <!-- Chat Messages -->
-            <div id="agentChatWindow" class="flex-1 overflow-y-auto chat-scroll p-3 space-y-3">
-                <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-xs text-gray-300">
-                    <p class="font-semibold text-violet-400 mb-1">🤖 Welcome to AI IDE!</p>
-                    <p>I can help you write, edit, and refactor code. I have access to your workspace files.</p>
-                    <ul class="mt-2 space-y-1 text-gray-400">
-                        <li>• Ask me to create new files</li>
-                        <li>• Request code modifications</li>
-                        <li>• Debug issues in your code</li>
-                        <li>• Explain code structure</li>
-                    </ul>
+            <!-- AI Agent Panel -->
+            <div id="panelAgent" class="flex-1 flex flex-col overflow-hidden">
+                <!-- Chat Messages -->
+                <div id="agentChatWindow" class="flex-1 overflow-y-auto chat-scroll p-3 space-y-3">
+                    <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-xs text-gray-300">
+                        <p class="font-semibold text-violet-400 mb-1">🤖 Welcome to AI IDE!</p>
+                        <p>I can help you write, edit, and refactor code. I have access to your workspace files.</p>
+                        <ul class="mt-2 space-y-1 text-gray-400">
+                            <li>• Ask me to create new files</li>
+                            <li>• Request code modifications</li>
+                            <li>• Debug issues in your code</li>
+                            <li>• Explain code structure</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-3 border-t border-gray-800 bg-gray-900">
+                    <textarea id="agentInput" rows="3" placeholder="Describe what you want to build or change..." 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none resize-none"></textarea>
+                    <div class="flex gap-2 mt-2">
+                        <button id="sendAgentBtn" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm py-2 rounded transition">
+                            ➤ Send
+                        </button>
+                        <button id="stopAgentBtn" class="hidden flex-1 bg-rose-600 hover:bg-rose-700 text-white text-sm py-2 rounded transition">
+                            ⏹ Stop
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between mt-2 text-[10px] text-gray-500">
+                        <span id="agentStatusIndicator" class="text-[10px] text-gray-500">Ready</span>
+                        <span id="agentModelDisplay">Model: --</span>
+                        <span id="tokenUsageDisplay">Tokens: 0</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Input Area -->
-            <div class="p-3 border-t border-gray-800 bg-gray-900">
-                <textarea id="agentInput" rows="3" placeholder="Describe what you want to build or change..." 
-                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none resize-none"></textarea>
-                <div class="flex gap-2 mt-2">
-                    <button id="sendAgentBtn" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm py-2 rounded transition">
-                        ➤ Send
-                    </button>
-                    <button id="stopAgentBtn" class="hidden flex-1 bg-rose-600 hover:bg-rose-700 text-white text-sm py-2 rounded transition">
-                        ⏹ Stop
-                    </button>
+            <!-- API Settings Panel (hidden by default) -->
+            <div id="panelSettings" class="hidden flex-1 overflow-y-auto chat-scroll p-4 space-y-4">
+                <div class="bg-blue-900/30 border border-blue-800 rounded p-3">
+                    <h4 class="text-blue-400 text-xs font-bold uppercase mb-1">Configuration Source</h4>
+                    <p class="text-gray-400 text-xs">Settings are loaded from the main Hub if available. You can override them here specifically for this IDE session.</p>
                 </div>
-                <div class="flex items-center justify-between mt-2 text-[10px] text-gray-500">
-                    <span id="agentModelDisplay">Model: --</span>
-                    <span id="tokenUsageDisplay">Tokens: 0</span>
+
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold mb-1">Provider</label>
+                    <select id="apiProvider" onchange="updateModelSuggestions()" class="w-full bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none">
+                        <option value="openai">OpenAI</option>
+                        <option value="groq">Groq</option>
+                        <option value="google">Google Gemini</option>
+                        <option value="anthropic">Anthropic (Claude)</option>
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="custom">Custom Endpoint</option>
+                    </select>
                 </div>
+
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold mb-1">API Key</label>
+                    <input type="password" id="apiKey" class="w-full bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none" placeholder="sk-...">
+                </div>
+
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold mb-1">Model Name</label>
+                    <input type="text" id="apiModel" class="w-full bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none" placeholder="e.g., gpt-4o, llama-3-70b...">
+                    <p class="text-gray-500 text-xs mt-1" id="modelHint">Select a provider to see suggestions.</p>
+                </div>
+
+                <div id="customUrlGroup" class="hidden">
+                    <label class="block text-gray-400 text-xs font-bold mb-1">Base URL (Optional)</label>
+                    <input type="text" id="apiBaseUrl" class="w-full bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none" placeholder="https://api.example.com/v1">
+                </div>
+
+                <button onclick="saveApiSettings()" class="w-full bg-green-700 hover:bg-green-600 text-white text-sm font-medium py-2 rounded transition-colors mt-4">
+                    Save & Apply Settings
+                </button>
+                
+                <div id="settingsStatus" class="text-center text-xs mt-2 h-4"></div>
             </div>
         </aside>
     </main>

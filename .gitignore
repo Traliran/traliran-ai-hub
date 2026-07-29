@@ -1,12 +1,1 @@
-```
-# Dependencies
-node_modules/
-
-# Editors
-.vscode/
-
-# Environment
-.env
-.env.local
-*.env.*
-```
+Nothing should be ignored based on the provided file changes. The modified files (`ide.html`, `ide.js`) are source code files that should not be added to .gitignore.

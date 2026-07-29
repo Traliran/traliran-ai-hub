@@ -1214,6 +1214,123 @@ function importBots(event) {
 window.useBot = useBot;
 window.openBotEditor = openBotEditor;
 
+
+// ==================== API SETTINGS PANEL ====================
+
+function switchRightTab(tabName) {
+    const agentPanel = document.getElementById('panelAgent');
+    const settingsPanel = document.getElementById('panelSettings');
+    const agentBtn = document.getElementById('tabBtnAgent');
+    const settingsBtn = document.getElementById('tabBtnSettings');
+
+    if (tabName === 'agent') {
+        agentPanel.classList.remove('hidden');
+        settingsPanel.classList.add('hidden');
+        agentBtn.classList.add('text-violet-400', 'border-b-2', 'border-violet-400', 'bg-gray-800/50');
+        agentBtn.classList.remove('text-gray-400');
+        settingsBtn.classList.remove('text-violet-400', 'border-b-2', 'border-violet-400', 'bg-gray-800/50');
+        settingsBtn.classList.add('text-gray-400');
+    } else {
+        agentPanel.classList.add('hidden');
+        settingsPanel.classList.remove('hidden');
+        settingsBtn.classList.add('text-violet-400', 'border-b-2', 'border-violet-400', 'bg-gray-800/50');
+        settingsBtn.classList.remove('text-gray-400');
+        agentBtn.classList.remove('text-violet-400', 'border-b-2', 'border-violet-400', 'bg-gray-800/50');
+        agentBtn.classList.add('text-gray-400');
+        loadSettingsIntoForm();
+    }
+}
+
+function loadSettingsIntoForm() {
+    const providerSelect = document.getElementById('apiProvider');
+    const apiKeyInput = document.getElementById('apiKey');
+    const apiModelInput = document.getElementById('apiModel');
+    const apiBaseUrlInput = document.getElementById('apiBaseUrl');
+    const customUrlGroup = document.getElementById('customUrlGroup');
+
+    if (providerSelect) providerSelect.value = apiConfig.provider || 'groq';
+    if (apiKeyInput) apiKeyInput.value = apiConfig.apiKey || '';
+    if (apiModelInput) apiModelInput.value = apiConfig.model || '';
+    if (apiBaseUrlInput) apiBaseUrlInput.value = apiConfig.endpoint || '';
+    if (customUrlGroup) customUrlGroup.classList.toggle('hidden', apiConfig.provider !== 'custom');
+    updateModelSuggestions();
+}
+
+function updateModelSuggestions() {
+    const provider = document.getElementById('apiProvider').value;
+    const modelInput = document.getElementById('apiModel');
+    const hint = document.getElementById('modelHint');
+    const customUrlGroup = document.getElementById('customUrlGroup');
+
+    const suggestions = {
+        openai: 'gpt-4o, gpt-4-turbo, gpt-3.5-turbo',
+        groq: 'llama-3.1-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b',
+        google: 'gemini-1.5-pro, gemini-1.5-flash, gemini-pro',
+        anthropic: 'claude-3-5-sonnet-20241022, claude-3-opus-20240229, claude-3-haiku-20240307',
+        openrouter: 'meta-llama/llama-3-70b-instruct, mistralai/mistral-large',
+        custom: 'Enter model name from your provider'
+    };
+
+    if (hint) hint.textContent = 'Suggested: ' + (suggestions[provider] || 'See provider docs');
+    if (customUrlGroup) customUrlGroup.classList.toggle('hidden', provider !== 'custom');
+
+    if (modelInput && !modelInput.value) {
+        const defaultModels = {
+            openai: 'gpt-4o',
+            groq: 'llama-3.1-70b-versatile',
+            google: 'gemini-1.5-pro',
+            anthropic: 'claude-3-5-sonnet-20241022',
+            openrouter: 'meta-llama/llama-3-70b-instruct'
+        };
+        modelInput.value = defaultModels[provider] || '';
+    }
+}
+
+async function saveApiSettings() {
+    const provider = document.getElementById('apiProvider').value;
+    const apiKey = document.getElementById('apiKey').value.trim();
+    const model = document.getElementById('apiModel').value.trim();
+    const baseUrl = document.getElementById('apiBaseUrl').value.trim();
+    const statusEl = document.getElementById('settingsStatus');
+
+    if (!apiKey) {
+        statusEl.textContent = '✗ API Key required';
+        statusEl.className = 'text-center text-xs mt-2 h-4 text-red-400';
+        return;
+    }
+    if (!model) {
+        statusEl.textContent = '✗ Model name required';
+        statusEl.className = 'text-center text-xs mt-2 h-4 text-red-400';
+        return;
+    }
+
+    try {
+        localStorage.setItem('gem_provider', provider);
+        localStorage.setItem('gem_key_' + provider, apiKey);
+        localStorage.setItem('gem_model', model);
+        if (baseUrl) localStorage.setItem('gem_endpoint', baseUrl);
+
+        apiConfig.provider = provider;
+        apiConfig.apiKey = apiKey;
+        apiConfig.model = model;
+        apiConfig.endpoint = baseUrl;
+
+        if (agentModelDisplay) agentModelDisplay.textContent = `Model: ${model}`;
+
+        statusEl.textContent = '✓ Settings saved!';
+        statusEl.className = 'text-center text-xs mt-2 h-4 text-green-400';
+
+        setTimeout(() => switchRightTab('agent'), 1000);
+    } catch (e) {
+        statusEl.textContent = '✗ Error: ' + e.message;
+        statusEl.className = 'text-center text-xs mt-2 h-4 text-red-400';
+    }
+}
+
+window.switchRightTab = switchRightTab;
+window.updateModelSuggestions = updateModelSuggestions;
+window.saveApiSettings = saveApiSettings;
+
 // ==================== AUTH & SETTINGS SYNC ====================
 
 function loadApiConfig() {
