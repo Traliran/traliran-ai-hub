@@ -55,7 +55,7 @@ class ProjectDB {
             const req = store.put(record);
             req.onsuccess = () => {
                 // Dispatch custom event for UI updates
-                window.dispatchEvent(new CustomEvent('file-updated', { 
+                window.dispatchEvent(new CustomEvent('vfs:updated', { 
                     detail: { path, content, language } 
                 }));
                 resolve(record);
