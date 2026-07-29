@@ -112,78 +112,12 @@ const DEFAULT_FILES = {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traliran Sandbox App</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Project</title>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="max-w-md w-full bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-2xl text-center space-y-6">
-        <div class="space-y-2">
-            <span class="text-5xl inline-block animate-bounce">⚡</span>
-            <h1 id="title" class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400">
-                Interactive IDE
-            </h1>
-            <p class="text-gray-400 text-xs">A live interactive sandbox page. Modify and build with AI Copilot!</p>
-        </div>
-
-        <div class="bg-gray-950 p-4 rounded-xl border border-gray-800/80 font-mono text-left text-xs space-y-2">
-            <div class="flex justify-between text-gray-500">
-                <span>File Path:</span>
-                <span class="text-violet-400">index.html</span>
-            </div>
-            <div class="flex justify-between text-gray-500">
-                <span>Styles:</span>
-                <span class="text-emerald-400">styles.css</span>
-            </div>
-            <div class="flex justify-between text-gray-500">
-                <span>Interactive:</span>
-                <span class="text-amber-400">script.js</span>
-            </div>
-        </div>
-
-        <div class="flex flex-col gap-2 pt-2">
-            <button id="actionBtn" class="bg-violet-600 hover:bg-violet-500 active:scale-95 text-white font-bold py-2.5 px-6 rounded-xl transition cursor-pointer">
-                Push Trigger
-            </button>
-            <p id="counter" class="text-xs text-gray-500 font-medium">Click Counter: 0</p>
-        </div>
-    </div>
-    <script src="script.js"></script>
+<body>
+    <h1>Hello World</h1>
 </body>
-</html>`,
-    "styles.css": `/* Custom project styling */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap');
-
-body {
-    font-family: 'Space Grotesk', sans-serif;
-}
-
-button {
-    box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4);
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}`,
-    "script.js": `// Interactive behaviors
-let counterValue = 0;
-const actionBtn = document.getElementById('actionBtn');
-const counterDisplay = document.getElementById('counter');
-const titleDisplay = document.getElementById('title');
-
-if (actionBtn) {
-    actionBtn.addEventListener('click', () => {
-        counterValue++;
-        counterDisplay.textContent = \`Click Counter: \${counterValue}\`;
-        
-        // Dynamic title change
-        const colors = [
-            'from-violet-400 to-fuchsia-400',
-            'from-emerald-400 to-teal-400',
-            'from-amber-400 to-orange-400',
-            'from-sky-400 to-indigo-400'
-        ];
-        
-        const randomColor = colors[counterValue % colors.length];
-        titleDisplay.className = \`text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r \${randomColor}\`;
-    });
-}`
+</html>`
 };
 
 // Markdown support for copilot text
@@ -442,7 +376,7 @@ function initializeMonaco() {
         let saveTimeout = null;
         codeEditor.onDidChangeModelContent(() => {
             if (applyingProposedChanges) return;
-            if (isUpdatingFromVFS) return; // Ignore changes caused by VFS update
+            if (window.isUpdatingFromVFS) return; // Ignore changes caused by VFS update
             
             if (activeFileName && projectFiles[activeFileName] !== undefined) {
                 projectFiles[activeFileName] = codeEditor.getValue();
@@ -1851,29 +1785,31 @@ async function applyProposedChanges() {
      // 2. Persist workspace state to localStorage and IndexedDB
      await saveWorkspace();
      
-     // Also explicitly save each changed file to IndexedDB to trigger update events
-     for (const filepath of appliedFiles) {
-         try {
-             const language = getLanguageForFile(filepath);
-             await window.projectDB.saveFile(filepath, projectFiles[filepath], language);
-         } catch (e) {
-             console.error(`Failed to save ${filepath} to IndexedDB:`, e);
-         }
-     }
+     // Note: saveWorkspace already saves all files to IndexedDB which triggers vfs:updated events
+     // The event listener in ide.js will update Monaco editor automatically
      
      renderFileList();
 
      // 3. Update Monaco Editor if the active file was changed, preserving cursor/scroll position
+     // This is a fallback - the vfs:updated event should handle this
      if (codeEditor && projectFiles[activeFileName] !== undefined && appliedFiles.includes(activeFileName)) {
          const savedPosition = codeEditor.getPosition();
          const savedScrollTop = codeEditor.getScrollTop();
          const savedScrollLeft = codeEditor.getScrollLeft();
 
-         codeEditor.setValue(projectFiles[activeFileName]);
-
-         if (savedPosition) {
-             const model = codeEditor.getModel();
-             if (model) {
+         // Use executeEdits for smoother update
+         const model = codeEditor.getModel();
+         if (model) {
+             const currentValue = codeEditor.getValue();
+             const newValue = projectFiles[activeFileName];
+             
+             if (currentValue !== newValue) {
+                 codeEditor.executeEdits('ai-apply', [{
+                     range: model.getFullModelRange(),
+                     text: newValue
+                 }]);
+                 
+                 // Restore position
                  const maxLine = model.getLineCount();
                  const maxColumn = model.getLineMaxColumn(savedPosition.lineNumber);
                  const restoredPosition = {
@@ -1881,12 +1817,11 @@ async function applyProposedChanges() {
                      lineNumber: Math.min(savedPosition.lineNumber, maxLine)
                  };
                  codeEditor.setPosition(restoredPosition);
-                 codeEditor.revealPositionInCenter(restoredPosition);
+                 
+                 if (savedScrollTop !== undefined) codeEditor.setScrollTop(savedScrollTop);
+                 if (savedScrollLeft !== undefined) codeEditor.setScrollLeft(savedScrollLeft);
              }
          }
-
-         if (savedScrollTop !== undefined) codeEditor.setScrollTop(savedScrollTop);
-         if (savedScrollLeft !== undefined) codeEditor.setScrollLeft(savedScrollLeft);
      }
 
      // 4. Show notification in chat
@@ -2499,7 +2434,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Debounce for preview updates to prevent excessive re-rendering
     let previewTimeout = null;
     
-    // Listen for VFS updates and react (Monaco + Preview)
+    // Declare isUpdatingFromVFS at module scope so it's accessible from both Monaco listener and VFS listener
+    window.isUpdatingFromVFS = false;
+    
+    // Listen for DMS updates and react (Monaco + Preview)
     window.addEventListener('vfs:updated', (event) => {
         const { path, content, language } = event.detail;
         
@@ -2518,7 +2456,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const scrollTop = codeEditor.getScrollTop();
                 
                 // Set flag to prevent triggering another save
-                isUpdatingFromVFS = true;
+                window.isUpdatingFromVFS = true;
                 
                 // Update content using executeEdits for reliability
                 codeEditor.executeEdits('db-update', [{
@@ -2531,7 +2469,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 codeEditor.setScrollTop(scrollTop);
                 
                 // Reset flag after a short delay
-                setTimeout(() => { isUpdatingFromVFS = false; }, 50);
+                setTimeout(() => { window.isUpdatingFromVFS = false; }, 50);
             } else {
                 codeEditor.setValue(content);
             }
