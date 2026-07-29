@@ -78,7 +78,7 @@ let agentChatWindow, agentInput, sendAgentBtn, stopAgentBtn, agentStatusIndicato
 let agentModelDisplay, tokenUsageDisplay;
 
 // Auth DOM Elements
-let loginBtn, loginBtnText, loginModal, closeLoginModal, loginEmail, loginPassword;
+let loginBtn, loginBtnText, loginModal, closeLoginModal, loginDbUrl, loginDbKey, loginEmail, loginPassword;
 let doLoginBtn, doRegisterBtn, doLogoutBtn, loginStatus;
 
 // ==================== PROVIDERS CONFIG ====================
@@ -421,22 +421,34 @@ const VERSION_CONTROL = {
     },
 
     async exportAsZip() {
+        if (typeof JSZip === 'undefined') {
+            alert('ZIP library not loaded. Please check your internet connection.');
+            return;
+        }
+        
         const zip = new JSZip();
         
         for (const [path, file] of Object.entries(vfsFiles)) {
             zip.file(path, file.content);
         }
         
-        const blob = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'project-export-' + Date.now() + '.zip';
-        a.click();
-        
-        URL.revokeObjectURL(url);
-        console.log('[VERSION] Exported as ZIP');
+        try {
+            const blob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'workspace-export-' + Date.now() + '.zip';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            URL.revokeObjectURL(url);
+            console.log('[VERSION] Exported as ZIP');
+        } catch (e) {
+            console.error('[VERSION] Export error:', e);
+            alert('Failed to export ZIP: ' + e.message);
+        }
     },
 
     async importFromZip(file) {
@@ -840,7 +852,7 @@ Be helpful, precise, and professional. All communication must be in English.`;
     async callLLM(messages, provider, apiKey, model, endpoint) {
         console.log('[AI TOOL CALL] Calling LLM:', provider, model);
         
-        // Reuse Hub's fetchSingleCompletion if available (from app.js)
+        // Use Hub's fetchSingleCompletion if available (reuse existing API client from app.js)
         const url = endpoint || PROVIDERS[provider]?.url;
         const hasKey = PROVIDERS[provider]?.hasKey !== false;
         
@@ -863,9 +875,9 @@ Be helpful, precise, and professional. All communication must be in English.`;
         };
 
         try {
-            // Use Hub's fetchSingleCompletion if available (reuse existing API client)
+            // Try to use Hub's fetchSingleCompletion if available (reuse existing API client)
             if (typeof fetchSingleCompletion === 'function') {
-                console.log('[AI TOOL CALL] Using Hub API client');
+                console.log('[AI TOOL CALL] Using Hub API client (fetchSingleCompletion)');
                 const data = await fetchSingleCompletion(url, apiKey, hasKey, payload, provider, agentAbortController?.signal);
                 const choice = data.choices?.[0]?.message;
                 return {
@@ -875,18 +887,23 @@ Be helpful, precise, and professional. All communication must be in English.`;
                 };
             }
             
-            // Fallback to direct fetch
+            // Fallback to direct fetch with proper headers per provider
             console.log('[AI TOOL CALL] Using direct fetch');
             const headers = { 'Content-Type': 'application/json' };
+            
+            // Set authorization header based on provider type
             if (hasKey && apiKey) {
-                if (provider === 'openai' || provider === 'groq' || provider === 'deepseek' || provider === 'openrouter') {
-                    headers['Authorization'] = `Bearer ${apiKey}`;
-                } else {
+                if (provider === 'claude') {
                     headers['x-api-key'] = apiKey;
+                    headers['anthropic-version'] = '2023-06-01';
+                } else if (provider === 'openrouter') {
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                    headers['HTTP-Referer'] = window.location.origin;
+                    headers['X-Title'] = 'Traliran AI IDE';
+                } else {
+                    // Groq, OpenAI, Google, DeepSeek, etc.
+                    headers['Authorization'] = `Bearer ${apiKey}`;
                 }
-            }
-            if (provider === 'openrouter') {
-                headers['HTTP-Referer'] = window.location.origin;
             }
 
             const resp = await fetch(url + '/chat/completions', {
@@ -897,8 +914,11 @@ Be helpful, precise, and professional. All communication must be in English.`;
             });
 
             if (!resp.ok) {
-                const err = await resp.json().catch(() => ({}));
-                throw new Error(err.error?.message || `HTTP ${resp.status}`);
+                const errText = await resp.text().catch(() => '');
+                let errJson = {};
+                try { errJson = JSON.parse(errText); } catch {}
+                const errMsg = errJson.error?.message || errJson.message || `HTTP ${resp.status}`;
+                throw new Error(`API Error (${resp.status}): ${errMsg}`);
             }
 
             const data = await resp.json();
@@ -914,7 +934,8 @@ Be helpful, precise, and professional. All communication must be in English.`;
             if (e.name === 'AbortError') {
                 this.addMessageToChat('assistant', '⏹️ Request stopped by user.');
             } else {
-                throw e;
+                console.error('[AI TOOL CALL] Error:', e);
+                throw new Error('Failed to connect to AI service: ' + e.message);
             }
         }
     },
@@ -1225,6 +1246,19 @@ function updateAuthUI() {
 
 async function handleLogin(email, password) {
     try {
+        const dbUrl = loginDbUrl.value.trim();
+        const dbKey = loginDbKey.value.trim();
+        
+        if (!dbUrl) {
+            loginStatus.textContent = '✗ Database URL required';
+            return;
+        }
+        
+        // Save DB config first
+        DB_CONNECTOR.setConfig(dbUrl, dbKey);
+        localStorage.setItem('gem_db_url', dbUrl);
+        localStorage.setItem('gem_db_key', dbKey);
+        
         loginStatus.textContent = 'Logging in...';
         await DB_CONNECTOR.login(email, password);
         updateAuthUI();
@@ -1240,6 +1274,19 @@ async function handleLogin(email, password) {
 
 async function handleRegister(email, password) {
     try {
+        const dbUrl = loginDbUrl.value.trim();
+        const dbKey = loginDbKey.value.trim();
+        
+        if (!dbUrl) {
+            loginStatus.textContent = '✗ Database URL required';
+            return;
+        }
+        
+        // Save DB config first
+        DB_CONNECTOR.setConfig(dbUrl, dbKey);
+        localStorage.setItem('gem_db_url', dbUrl);
+        localStorage.setItem('gem_db_key', dbKey);
+        
         loginStatus.textContent = 'Registering...';
         await DB_CONNECTOR.register(email, password);
         updateAuthUI();
@@ -1319,10 +1366,25 @@ function renderFileTree() {
             const itemPath = path ? `${path}/${name}` : name;
             
             const div = document.createElement('div');
-            div.className = `file-tree-item text-xs py-1 flex items-center gap-1 ${activeFilePath === itemPath ? 'active' : ''}`;
+            div.className = `file-tree-item text-xs py-1 flex items-center justify-between gap-1 ${activeFilePath === itemPath ? 'active' : ''}`;
             
             if (info.type === 'folder') {
-                div.innerHTML = `<span>📁</span><span>${escapeHtml(name)}</span>`;
+                const folderDiv = document.createElement('div');
+                folderDiv.className = 'flex items-center gap-1 flex-1';
+                folderDiv.innerHTML = `<span>📁</span><span>${escapeHtml(name)}</span>`;
+                div.appendChild(folderDiv);
+                
+                // Delete button for folders
+                const delBtn = document.createElement('button');
+                delBtn.className = 'text-gray-500 hover:text-rose-400 text-[10px] px-1';
+                delBtn.innerHTML = '🗑';
+                delBtn.title = 'Delete folder';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteFileOrFolder(itemPath);
+                };
+                div.appendChild(delBtn);
+                
                 fileTreeContainer.appendChild(div);
                 
                 // Render children
@@ -1335,17 +1397,69 @@ function renderFileTree() {
                 renderNode(info.children, itemPath);
                 fileTreeContainer = oldContainer;
             } else {
-                div.innerHTML = `<span>📄</span><span class="truncate">${escapeHtml(name)}</span>`;
-                div.onclick = () => {
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'flex items-center gap-1 flex-1 cursor-pointer';
+                fileDiv.innerHTML = `<span>📄</span><span class="truncate">${escapeHtml(name)}</span>`;
+                fileDiv.onclick = () => {
                     MONACO.openFile(itemPath);
                     renderFileTree(); // Update active state
                 };
+                div.appendChild(fileDiv);
+                
+                // Delete button for files
+                const delBtn = document.createElement('button');
+                delBtn.className = 'text-gray-500 hover:text-rose-400 text-[10px] px-1';
+                delBtn.innerHTML = '🗑';
+                delBtn.title = 'Delete file';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteFileOrFolder(itemPath);
+                };
+                div.appendChild(delBtn);
+                
                 fileTreeContainer.appendChild(div);
             }
         }
     }
     
     renderNode(tree);
+}
+
+async function deleteFileOrFolder(path) {
+    const file = vfsFiles[path];
+    if (file) {
+        // It's a file
+        if (!confirm(`Delete file "${path}"? This cannot be undone.`)) return;
+        
+        // Close tab if open
+        if (openFiles.includes(path)) {
+            MONACO.closeFile(path);
+        }
+        
+        await VFS.deleteFile(path);
+        renderFileTree();
+    } else {
+        // It's a folder - delete all files in it
+        const filesInFolder = Object.keys(vfsFiles).filter(p => p.startsWith(path + '/'));
+        if (filesInFolder.length === 0) {
+            alert('Folder is empty or does not exist.');
+            return;
+        }
+        if (!confirm(`Delete folder "${path}" and all ${filesInFolder.length} files inside? This cannot be undone.`)) return;
+        
+        // Close tabs for files in folder
+        for (const f of filesInFolder) {
+            if (openFiles.includes(f)) {
+                MONACO.closeFile(f);
+            }
+        }
+        
+        // Delete all files
+        for (const f of filesInFolder) {
+            await VFS.deleteFile(f);
+        }
+        renderFileTree();
+    }
 }
 
 // ==================== INITIALIZATION ====================
@@ -1406,12 +1520,20 @@ async function init() {
     loginBtnText = document.getElementById('loginBtnText');
     loginModal = document.getElementById('loginModal');
     closeLoginModal = document.getElementById('closeLoginModal');
+    loginDbUrl = document.getElementById('loginDbUrl');
+    loginDbKey = document.getElementById('loginDbKey');
     loginEmail = document.getElementById('loginEmail');
     loginPassword = document.getElementById('loginPassword');
     doLoginBtn = document.getElementById('doLoginBtn');
     doRegisterBtn = document.getElementById('doRegisterBtn');
     doLogoutBtn = document.getElementById('doLogoutBtn');
     loginStatus = document.getElementById('loginStatus');
+    
+    // Load saved DB config
+    const savedDbUrl = localStorage.getItem('gem_db_url') || '';
+    const savedDbKey = localStorage.getItem('gem_db_key') || '';
+    if (savedDbUrl && loginDbUrl) loginDbUrl.value = savedDbUrl;
+    if (savedDbKey && loginDbKey) loginDbKey.value = savedDbKey;
     
     // Initialize VFS
     await VFS.init();

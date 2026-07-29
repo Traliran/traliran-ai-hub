@@ -7,6 +7,15 @@
  * - Cloud sync via DB_CONNECTOR when logged in
  * - Version Control snapshots
  * - Reactive events: vfs:file-updated, vfs:file-deleted, vfs:saved
+ * 
+ * VFS Methods exported for ide.js usage:
+ * - projectDB.saveFile(path, content, language)
+ * - projectDB.getFile(path)
+ * - projectDB.getAllFiles()
+ * - projectDB.deleteFile(path)
+ * - projectDB.saveCommit(commitData)
+ * - projectDB.getAllCommits()
+ * - projectDB.getCommit(commitId)
  */
 
 class ProjectDB {
@@ -50,6 +59,12 @@ class ProjectDB {
         });
     }
 
+    /**
+     * Save a file to IndexedDB and emit vfs:file-updated event
+     * @param {string} path - File path
+     * @param {string} content - File content
+     * @param {string} language - Language identifier
+     */
     async saveFile(path, content, language = 'javascript') {
         await this.initPromise;
         return new Promise((resolve, reject) => {
@@ -76,6 +91,11 @@ class ProjectDB {
         });
     }
 
+    /**
+     * Read a file from IndexedDB
+     * @param {string} path - File path
+     * @returns {Promise<string|null>} File content or null
+     */
     async getFile(path) {
         await this.initPromise;
         return new Promise((resolve, reject) => {
@@ -91,6 +111,10 @@ class ProjectDB {
         });
     }
 
+    /**
+     * Get all files from IndexedDB
+     * @returns {Promise<Object>} Object with paths as keys and content as values
+     */
     async getAllFiles() {
         await this.initPromise;
         return new Promise((resolve, reject) => {
@@ -107,6 +131,10 @@ class ProjectDB {
         });
     }
 
+    /**
+     * Delete a file from IndexedDB and emit vfs:file-deleted event
+     * @param {string} path - File path
+     */
     async deleteFile(path) {
         await this.initPromise;
         return new Promise((resolve, reject) => {
@@ -123,7 +151,10 @@ class ProjectDB {
         });
     }
 
-    // Version Control: Save commit snapshot
+    /**
+     * Save a version control commit snapshot
+     * @param {Object} commitData - Commit object with id, timestamp, message, snapshot
+     */
     async saveCommit(commitData) {
         await this.initPromise;
         return new Promise((resolve, reject) => {
@@ -138,6 +169,10 @@ class ProjectDB {
         });
     }
 
+    /**
+     * Get all commits sorted by timestamp (newest first)
+     * @returns {Promise<Array>} Array of commit objects
+     */
     async getAllCommits() {
         await this.initPromise;
         return new Promise((resolve, reject) => {
@@ -153,6 +188,11 @@ class ProjectDB {
         });
     }
 
+    /**
+     * Get a specific commit by ID
+     * @param {string} commitId - Commit ID
+     * @returns {Promise<Object|null>} Commit object or null
+     */
     async getCommit(commitId) {
         await this.initPromise;
         return new Promise((resolve, reject) => {
@@ -164,6 +204,9 @@ class ProjectDB {
         });
     }
 
+    /**
+     * Clear all files from IndexedDB
+     */
     async clearAll() {
         await this.initPromise;
         return new Promise((resolve, reject) => {
@@ -176,7 +219,7 @@ class ProjectDB {
     }
 }
 
-// Global instance
+// Global instance - accessible by ide.js and other modules
 window.projectDB = new ProjectDB();
 
 const DB_CONNECTOR = {

@@ -1,3 +1,19 @@
+/**
+ * Sync Manager - Handles cloud synchronization for VFS and other data
+ * 
+ * Features:
+ * - Auto-sync VFS files to cloud when logged in
+ * - Queue-based sync for offline support
+ * - Granular file-level sync for VFS
+ * - Full snapshot sync for commits
+ * 
+ * Methods:
+ * - SYNC_MANAGER.pushVFSFileToCloud(filePath)
+ * - SYNC_MANAGER.pullFromCloud(collection)
+ * - SYNC_MANAGER.pushAll()
+ * - SYNC_MANAGER.pullAndMerge()
+ */
+
 const SYNC_MANAGER = {
   _syncQueue: [],
   _debounceTimers: {},
