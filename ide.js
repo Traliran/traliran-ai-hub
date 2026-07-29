@@ -1023,11 +1023,11 @@ If no tool is needed, just respond normally with your answer.`;
 
                     const result = await tool.execute(args);
                     
-                    // Add tool result to messages
+                    // Add tool result to messages as a user message with context
+                    // We use 'user' role instead of 'tool' to avoid API errors when tools aren't defined
                     messages.push({
-                        role: 'tool',
-                        content: result,
-                        tool_call_id: toolCall.id
+                        role: 'user',
+                        content: `[Tool result from ${toolCall.function.name}]: ${result}`
                     });
 
                     // Show brief notification in chat
@@ -1121,9 +1121,13 @@ If no tool is needed, just respond normally with your answer.`;
                 }
             }
 
+            // Filter out 'tool' role messages as we emulate tools via text
+            // Sending 'tool' role without defined tools causes API errors
+            const cleanMessages = messages.filter(msg => msg.role !== 'tool');
+
             const payload = {
                 model: model,
-                messages: messages,
+                messages: cleanMessages,
                 temperature: 0.7
                 // No tools/tool_choice sent - they're in system prompt
             };
