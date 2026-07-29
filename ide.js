@@ -1010,12 +1010,11 @@ Be helpful, precise, and professional. All communication must be in English.`;
     async callLLM(messages, provider, apiKey, model, endpoint) {
         console.log('[AI TOOL CALL] Calling LLM:', provider, model);
         
-        // Use Hub's fetchSingleCompletion if available (reuse existing API client from app.js)
         const url = endpoint || PROVIDERS[provider]?.url;
         const hasKey = PROVIDERS[provider]?.hasKey !== false;
+        const providerConfig = PROVIDERS[provider];
         
         // Build tool definitions for OpenAI-compatible APIs
-        // Ensure every tool has required fields: name, description, parameters with type/properties/required
         const tools = this.tools.map(t => ({
             type: 'function',
             function: {
@@ -1030,45 +1029,84 @@ Be helpful, precise, and professional. All communication must be in English.`;
             }
         }));
 
-        const payload = {
-            model: model,
-            messages: messages,
-            temperature: 0.7,
-            tools: tools,
-            tool_choice: 'auto'
-        };
-
         try {
-            // Try to use Hub's fetchSingleCompletion if available (reuse existing API client)
-            if (typeof fetchSingleCompletion === 'function') {
-                console.log('[AI TOOL CALL] Using Hub API client (fetchSingleCompletion)');
-                const data = await fetchSingleCompletion(url, apiKey, hasKey, payload, provider, agentAbortController?.signal);
-                const choice = data.choices?.[0]?.message;
+            // Handle Anthropic (Claude) separately - it doesn't support tools in the same way
+            if (providerConfig?.type === 'anthropic') {
+                console.log('[AI TOOL CALL] Using Anthropic API');
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                };
+
+                const systemMessage = messages.find(msg => msg.role === 'system');
+                const userMessages = messages.filter(msg => msg.role !== 'system').map(msg => ({
+                    role: msg.role === 'assistant' ? 'assistant' : 'user',
+                    content: convertContentForAnthropic(msg.content)
+                }));
+
+                const anthropicPayload = {
+                    model: model,
+                    max_tokens: 4096,
+                    messages: userMessages,
+                    temperature: 0.7,
+                    tools: tools.length > 0 ? tools : undefined
+                };
+
+                if (systemMessage) {
+                    anthropicPayload.system = typeof systemMessage.content === 'string' 
+                        ? systemMessage.content 
+                        : normalizeContentToText(systemMessage.content);
+                }
+
+                const resp = await fetch(url + '/messages', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(anthropicPayload),
+                    signal: agentAbortController?.signal
+                });
+
+                if (!resp.ok) {
+                    const errJson = await resp.json().catch(() => ({}));
+                    throw new Error(errJson.error?.message || `HTTP ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                const content = data.content?.[0]?.text || '';
+                const toolCalls = data.content?.filter(c => c.type === 'tool_use').map(c => ({
+                    id: c.id,
+                    type: 'function',
+                    function: { name: c.name, arguments: JSON.stringify(c.input) }
+                })) || [];
+
                 return {
-                    content: choice?.content,
-                    toolCalls: choice?.tool_calls,
+                    content: content,
+                    toolCalls: toolCalls,
                     usage: data.usage
                 };
             }
-            
-            // Fallback to direct fetch with proper headers per provider
-            console.log('[AI TOOL CALL] Using direct fetch');
+
+            // For OpenAI-compatible APIs (Groq, OpenAI, etc.)
+            console.log('[AI TOOL CALL] Using OpenAI-compatible API');
             const headers = { 'Content-Type': 'application/json' };
             
-            // Set authorization header based on provider type
             if (hasKey && apiKey) {
-                if (provider === 'claude') {
-                    headers['x-api-key'] = apiKey;
-                    headers['anthropic-version'] = '2023-06-01';
-                } else if (provider === 'openrouter') {
+                if (provider === 'openrouter') {
                     headers['Authorization'] = `Bearer ${apiKey}`;
                     headers['HTTP-Referer'] = window.location.origin;
                     headers['X-Title'] = 'Traliran AI IDE';
                 } else {
-                    // Groq, OpenAI, Google, DeepSeek, etc.
                     headers['Authorization'] = `Bearer ${apiKey}`;
                 }
             }
+
+            const payload = {
+                model: model,
+                messages: messages,
+                temperature: 0.7,
+                tools: tools.length > 0 ? tools : undefined,
+                tool_choice: tools.length > 0 ? 'auto' : undefined
+            };
 
             const resp = await fetch(url + '/chat/completions', {
                 method: 'POST',
