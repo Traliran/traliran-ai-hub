@@ -950,6 +950,42 @@ Be helpful, precise, and professional. All communication must be in English.`;
     async executeToolLoop(messages, provider, apiKey, model, endpoint, maxIterations = 10) {
         let iterations = 0;
         
+        // Build tool definitions for system prompt
+        const toolDescriptions = this.tools.map(t => {
+            const params = t.parameters.properties || {};
+            const paramList = Object.entries(params).map(([name, schema]) => {
+                const type = schema.type || 'string';
+                const desc = schema.description || '';
+                const required = t.parameters.required?.includes(name) ? '(required)' : '(optional)';
+                return `  - ${name} (${type}, ${required}): ${desc}`;
+            }).join('\n');
+            
+            return `### ${t.name}\nDescription: ${t.description}\nParameters:\n${paramList}`;
+        }).join('\n\n');
+
+        // Add tool instructions to system message
+        const systemPrompt = `You are an AI assistant in a code IDE. You can use the following tools to interact with the file system and editor:
+
+${toolDescriptions}
+
+To call a tool, respond with a JSON object in this exact format:
+{"tool": "tool_name", "arguments": {"param1": "value1", "param2": "value2"}}
+
+Only output the JSON object when you want to call a tool. Do not include any other text.
+If you need to make multiple tool calls, wait for the results before making the next call.
+If no tool is needed, just respond normally with your answer.`;
+
+        // Inject or replace system message
+        const existingSystemIndex = messages.findIndex(msg => msg.role === 'system');
+        if (existingSystemIndex !== -1) {
+            const existingContent = typeof messages[existingSystemIndex].content === 'string' 
+                ? messages[existingSystemIndex].content 
+                : normalizeContentToText(messages[existingSystemIndex].content);
+            messages[existingSystemIndex].content = systemPrompt + '\n\n' + existingContent;
+        } else {
+            messages.unshift({ role: 'system', content: systemPrompt });
+        }
+        
         while (iterations < maxIterations) {
             iterations++;
             console.log(`[AI TOOL CALL] Iteration ${iterations}`);
@@ -1014,23 +1050,10 @@ Be helpful, precise, and professional. All communication must be in English.`;
         const hasKey = PROVIDERS[provider]?.hasKey !== false;
         const providerConfig = PROVIDERS[provider];
         
-        // Build tool definitions for OpenAI-compatible APIs
-        const tools = this.tools.map(t => ({
-            type: 'function',
-            function: {
-                name: t.name,
-                description: t.description,
-                parameters: {
-                    type: t.parameters.type || 'object',
-                    properties: t.parameters.properties || {},
-                    required: t.parameters.required || [],
-                    additionalProperties: t.parameters.additionalProperties ?? false
-                }
-            }
-        }));
-
+        // Tools are now in system prompt, no need to send via API
+        
         try {
-            // Handle Anthropic (Claude) separately - it doesn't support tools in the same way
+            // Handle Anthropic (Claude) separately
             if (providerConfig?.type === 'anthropic') {
                 console.log('[AI TOOL CALL] Using Anthropic API');
                 const headers = {
@@ -1049,8 +1072,8 @@ Be helpful, precise, and professional. All communication must be in English.`;
                     model: model,
                     max_tokens: 4096,
                     messages: userMessages,
-                    temperature: 0.7,
-                    tools: tools.length > 0 ? tools : undefined
+                    temperature: 0.7
+                    // No tools sent - they're in system prompt
                 };
 
                 if (systemMessage) {
@@ -1073,11 +1096,9 @@ Be helpful, precise, and professional. All communication must be in English.`;
 
                 const data = await resp.json();
                 const content = data.content?.[0]?.text || '';
-                const toolCalls = data.content?.filter(c => c.type === 'tool_use').map(c => ({
-                    id: c.id,
-                    type: 'function',
-                    function: { name: c.name, arguments: JSON.stringify(c.input) }
-                })) || [];
+                
+                // Try to parse tool call from text content
+                const toolCalls = this.parseToolCallsFromText(content);
 
                 return {
                     content: content,
@@ -1103,9 +1124,8 @@ Be helpful, precise, and professional. All communication must be in English.`;
             const payload = {
                 model: model,
                 messages: messages,
-                temperature: 0.7,
-                tools: tools.length > 0 ? tools : undefined,
-                tool_choice: tools.length > 0 ? 'auto' : undefined
+                temperature: 0.7
+                // No tools/tool_choice sent - they're in system prompt
             };
 
             const resp = await fetch(url + '/chat/completions', {
@@ -1125,10 +1145,14 @@ Be helpful, precise, and professional. All communication must be in English.`;
 
             const data = await resp.json();
             const choice = data.choices[0]?.message;
+            const content = choice?.content || '';
+            
+            // Try to parse tool calls from text content
+            const toolCalls = this.parseToolCallsFromText(content);
 
             return {
-                content: choice?.content,
-                toolCalls: choice?.tool_calls,
+                content: content,
+                toolCalls: toolCalls,
                 usage: data.usage
             };
 
@@ -1140,6 +1164,33 @@ Be helpful, precise, and professional. All communication must be in English.`;
                 throw new Error('Failed to connect to AI service: ' + e.message);
             }
         }
+    },
+
+    // Parse tool calls from text response (JSON format)
+    parseToolCallsFromText(content) {
+        if (!content) return [];
+        
+        try {
+            // Try to find JSON object in the content
+            const jsonMatch = content.match(/\{[\s\S]*"tool"[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.tool && parsed.arguments) {
+                    return [{
+                        id: 'tool_' + Date.now(),
+                        type: 'function',
+                        function: {
+                            name: parsed.tool,
+                            arguments: JSON.stringify(parsed.arguments)
+                        }
+                    }];
+                }
+            }
+        } catch (e) {
+            // Not a valid JSON tool call
+        }
+        
+        return [];
     },
 
     addMessageToChat(role, content) {
