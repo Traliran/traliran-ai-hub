@@ -1,7 +1,14 @@
 /**
- * IndexedDB Wrapper for Project Storage
+ * IndexedDB Wrapper for Project Storage + VFS Operations
  * Replaces ephemeral file system with persistent browser storage
+ * 
+ * Features:
+ * - File CRUD operations with automatic event emission
+ * - Cloud sync via DB_CONNECTOR when logged in
+ * - Version Control snapshots
+ * - Reactive events: vfs:file-updated, vfs:file-deleted, vfs:saved
  */
+
 class ProjectDB {
     constructor(dbName = 'WebAppDB', version = 1) {
         this.dbName = dbName;
@@ -23,6 +30,10 @@ class ProjectDB {
                 // Store for settings/metadata
                 if (!db.objectStoreNames.contains('meta')) {
                     db.createObjectStore('meta', { keyPath: 'key' });
+                }
+                // Store for version control commits
+                if (!db.objectStoreNames.contains('commits')) {
+                    db.createObjectStore('commits', { keyPath: 'id' });
                 }
             };
 
@@ -55,9 +66,10 @@ class ProjectDB {
             const req = store.put(record);
             req.onsuccess = () => {
                 // Dispatch custom event for UI updates
-                window.dispatchEvent(new CustomEvent('vfs:updated', { 
+                window.dispatchEvent(new CustomEvent('vfs:file-updated', { 
                     detail: { path, content, language } 
                 }));
+                console.log('[VFS WRITE] IndexedDB:', path, 'bytes:', content.length);
                 resolve(record);
             };
             req.onerror = () => reject(req.error);
@@ -71,7 +83,10 @@ class ProjectDB {
             const store = tx.objectStore('files');
             const req = store.get(path);
 
-            req.onsuccess = () => resolve(req.result ? req.result.content : null);
+            req.onsuccess = () => {
+                console.log('[VFS READ] IndexedDB:', path);
+                resolve(req.result ? req.result.content : null);
+            };
             req.onerror = () => reject(req.error);
         });
     }
@@ -100,13 +115,55 @@ class ProjectDB {
             const req = store.delete(path);
 
             req.onsuccess = () => {
-                window.dispatchEvent(new CustomEvent('file-deleted', { detail: { path } }));
+                window.dispatchEvent(new CustomEvent('vfs:file-deleted', { detail: { path } }));
+                console.log('[VFS DELETE] IndexedDB:', path);
                 resolve(true);
             };
             req.onerror = () => reject(req.error);
         });
     }
-    
+
+    // Version Control: Save commit snapshot
+    async saveCommit(commitData) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('commits', 'readwrite');
+            const store = tx.objectStore('commits');
+            const req = store.put(commitData);
+            req.onsuccess = () => {
+                console.log('[VERSION] Commit saved to IndexedDB:', commitData.id);
+                resolve(commitData);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async getAllCommits() {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('commits', 'readonly');
+            const store = tx.objectStore('commits');
+            const req = store.getAll();
+            req.onsuccess = () => {
+                const commits = req.result || [];
+                commits.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(commits);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async getCommit(commitId) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('commits', 'readonly');
+            const store = tx.objectStore('commits');
+            const req = store.get(commitId);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
     async clearAll() {
         await this.initPromise;
         return new Promise((resolve, reject) => {
