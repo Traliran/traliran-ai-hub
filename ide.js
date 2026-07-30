@@ -1152,10 +1152,15 @@ If no tool is needed, just respond normally with your answer.`;
             console.log('[AI TOOL CALL] Raw API response:', JSON.stringify(data, null, 2));
             const choice = data.choices[0]?.message;
             const content = choice?.content || '';
+            const reasoning = choice?.reasoning || '';
             console.log('[AI TOOL CALL] Response content:', content);
+            console.log('[AI TOOL CALL] Reasoning:', reasoning);
             
-            // Try to parse tool calls from text content
-            const toolCalls = this.parseToolCallsFromText(content);
+            // Try to parse tool calls from text content or reasoning
+            let toolCalls = this.parseToolCallsFromText(content);
+            if (toolCalls.length === 0 && reasoning) {
+                toolCalls = this.parseToolCallsFromText(reasoning);
+            }
             console.log('[AI TOOL CALL] Parsed tool calls:', toolCalls);
 
             return {
