@@ -1,16 +1,3 @@
-/**
- * Traliran AI IDE - Serverless Web IDE
- * Main JavaScript Module
- * 
- * Features:
- * - VFS (Virtual File System) with IndexedDB/Cloud sync
- * - Monaco Editor integration
- * - Autonomous AI Agent with tool calling
- * - Git-like version control
- * - Assistant Store
- * - Live Preview
- */
-
 // ==================== STATE MANAGEMENT ====================
 
 // VFS State
@@ -31,11 +18,6 @@ const OFFICIAL_BOTS = [
         description: "UX Forge AI analyzes your code inside the IDE for accessibility, performance, and modern UI patterns.",
         link: "https://whop.com/traliran-ai-huub/ux-forge-ai"
     },
-    {
-        name: "Code Reviewer Pro",
-        description: "Expert code reviewer focused on bugs, security vulnerabilities, and best practices.",
-        link: "https://whop.com/traliran-ai-huub/code-reviewer-pro"
-    }
 ];
 
 // AI Agent State
