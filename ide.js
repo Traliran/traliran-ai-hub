@@ -1128,8 +1128,9 @@ If no tool is needed, just respond normally with your answer.`;
             const payload = {
                 model: model,
                 messages: cleanMessages,
-                temperature: 0.7
-                // No tools/tool_choice sent - they're in system prompt
+                temperature: 0.7,
+                tool_choice: 'auto'
+                // No tools sent - they're in system prompt
             };
 
             const resp = await fetch(url + '/chat/completions', {
