@@ -1128,8 +1128,7 @@ If no tool is needed, just respond normally with your answer.`;
             const payload = {
                 model: model,
                 messages: cleanMessages,
-                temperature: 0.7,
-                tool_choice: 'auto'
+                temperature: 0.7
                 // No tools sent - they're in system prompt
             };
 
