@@ -201,8 +201,13 @@
 
                 <div>
                     <label class="block text-gray-400 text-xs font-bold mb-1">Model Name</label>
-                    <input type="text" id="apiModel" class="w-full bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none" placeholder="e.g., gpt-4o, llama-3-70b...">
-                    <p class="text-gray-500 text-xs mt-1" id="modelHint">Select a provider to see suggestions.</p>
+                    <div class="flex gap-2">
+                        <select id="apiModel" class="flex-1 bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none">
+                            <option value="">(Enter API key to load models)</option>
+                        </select>
+                        <button id="refreshModelsBtn" onclick="fetchActiveModels()" class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2 rounded border border-gray-600" title="Refresh model list">🔄</button>
+                    </div>
+                    <p class="text-gray-500 text-xs mt-1" id="modelHint">Enter API key above, then pick a model.</p>
                 </div>
 
                 <div id="customUrlGroup" class="hidden">

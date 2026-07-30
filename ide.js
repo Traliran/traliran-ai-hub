@@ -1130,7 +1130,6 @@ If no tool is needed, just respond normally with your answer.`;
             }
 
             const data = await resp.json();
-            console.log('[AI TOOL CALL] Raw API response:', JSON.stringify(data, null, 2));
             const choice = data.choices[0]?.message;
             const content = choice?.content || '';
             console.log('[AI TOOL CALL] Response content:', content);
@@ -1486,45 +1485,109 @@ function switchRightTab(tabName) {
 function loadSettingsIntoForm() {
     const providerSelect = document.getElementById('apiProvider');
     const apiKeyInput = document.getElementById('apiKey');
-    const apiModelInput = document.getElementById('apiModel');
+    const apiModelSelect = document.getElementById('apiModel');
     const apiBaseUrlInput = document.getElementById('apiBaseUrl');
     const customUrlGroup = document.getElementById('customUrlGroup');
 
     if (providerSelect) providerSelect.value = apiConfig.provider || 'groq';
     if (apiKeyInput) apiKeyInput.value = apiConfig.apiKey || '';
-    if (apiModelInput) apiModelInput.value = apiConfig.model || '';
     if (apiBaseUrlInput) apiBaseUrlInput.value = apiConfig.endpoint || '';
     if (customUrlGroup) customUrlGroup.classList.toggle('hidden', apiConfig.provider !== 'custom');
-    updateModelSuggestions();
+
+    // Populate models first, then restore saved value
+    updateModelSuggestions().then(() => {
+        if (apiConfig.model && apiModelSelect) {
+            if ([...apiModelSelect.options].some(o => o.value === apiConfig.model)) {
+                apiModelSelect.value = apiConfig.model;
+            } else {
+                const opt = document.createElement('option');
+                opt.value = apiConfig.model;
+                opt.textContent = apiConfig.model + ' (saved)';
+                apiModelSelect.appendChild(opt);
+                apiModelSelect.value = apiConfig.model;
+            }
+        }
+    });
 }
 
 function updateModelSuggestions() {
     const provider = document.getElementById('apiProvider').value;
-    const modelInput = document.getElementById('apiModel');
+    const modelSelect = document.getElementById('apiModel');
     const hint = document.getElementById('modelHint');
     const customUrlGroup = document.getElementById('customUrlGroup');
 
-    const suggestions = {
-        openai: 'gpt-4o, gpt-4-turbo, gpt-3.5-turbo',
-        groq: 'llama-3.1-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b',
-        google: 'gemini-1.5-pro, gemini-1.5-flash, gemini-pro',
-        anthropic: 'claude-3-5-sonnet-20241022, claude-3-opus-20240229, claude-3-haiku-20240307',
-        openrouter: 'meta-llama/llama-3-70b-instruct, mistralai/mistral-large',
-        custom: 'Enter model name from your provider'
-    };
-
-    if (hint) hint.textContent = 'Suggested: ' + (suggestions[provider] || 'See provider docs');
     if (customUrlGroup) customUrlGroup.classList.toggle('hidden', provider !== 'custom');
+    if (hint) hint.textContent = 'Enter API key to load available models.';
 
-    if (modelInput && !modelInput.value) {
-        const defaultModels = {
-            openai: 'gpt-4o',
-            groq: 'llama-3.1-70b-versatile',
-            google: 'gemini-1.5-pro',
-            anthropic: 'claude-3-5-sonnet-20241022',
-            openrouter: 'meta-llama/llama-3-70b-instruct'
-        };
-        modelInput.value = defaultModels[provider] || '';
+    return fetchActiveModels();
+}
+
+async function fetchActiveModels() {
+    const provider = document.getElementById('apiProvider').value;
+    const modelSelect = document.getElementById('apiModel');
+    const hint = document.getElementById('modelHint');
+    const apiKey = document.getElementById('apiKey').value.trim();
+    // Map 'anthropic' (HTML select value) to 'claude' (PROVIDERS key)
+    const providerKey = provider === 'anthropic' ? 'claude' : provider;
+    const providerConfig = PROVIDERS[providerKey];
+    const hasKey = providerConfig?.hasKey !== false;
+    const endpoint = document.getElementById('apiBaseUrl').value.trim() || providerConfig?.url || '';
+
+    if (hasKey && !apiKey) {
+        modelSelect.innerHTML = '<option value="">(Enter API key to load models)</option>';
+        if (hint) hint.textContent = 'Paste your API key above and click refresh.';
+        return;
+    }
+
+    const previousValue = modelSelect.value;
+    modelSelect.innerHTML = '<option value="">Loading models...</option>';
+
+    try {
+        if (providerKey === 'claude') {
+            const fallbackModels = ['claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest'];
+            modelSelect.innerHTML = '';
+            fallbackModels.forEach(m => modelSelect.add(new Option(m, m)));
+            if (previousValue && [...modelSelect.options].some(o => o.value === previousValue)) {
+                modelSelect.value = previousValue;
+            }
+            if (hint) hint.textContent = `${fallbackModels.length} models loaded (static list for Anthropic).`;
+            return;
+        }
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (hasKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+        const response = await fetch(`${endpoint}/models`, { method: 'GET', headers });
+        if (!response.ok) throw new Error(`Status: ${response.status}`);
+
+        const json = await response.json();
+        let models = json.data && Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+
+        models = models.filter(m => {
+            const id = (m.id || m.name || '').toLowerCase();
+            return !id.includes('whisper') && !id.includes('tts') && !id.includes('embed') && !id.includes('guard');
+        });
+
+        if (models.length === 0) {
+            modelSelect.innerHTML = '<option value="">No models found</option>';
+            if (hint) hint.textContent = 'No chat models available for this provider.';
+            return;
+        }
+
+        modelSelect.innerHTML = '';
+        models.forEach(m => {
+            const modelId = m.id || m.name;
+            modelSelect.add(new Option(modelId, modelId));
+        });
+
+        if (previousValue && [...modelSelect.options].some(o => o.value === previousValue)) {
+            modelSelect.value = previousValue;
+        }
+        if (hint) hint.textContent = `${models.length} models loaded. Select one above.`;
+    } catch (err) {
+        console.error('[MODEL FETCH]', err);
+        modelSelect.innerHTML = '<option value="">Error loading models</option>';
+        if (hint) hint.textContent = 'Failed to fetch: ' + err.message;
     }
 }
 
@@ -1572,6 +1635,7 @@ async function saveApiSettings() {
 window.switchRightTab = switchRightTab;
 window.updateModelSuggestions = updateModelSuggestions;
 window.saveApiSettings = saveApiSettings;
+window.fetchActiveModels = fetchActiveModels;
 
 // ==================== AUTH & SETTINGS SYNC ====================
 
@@ -2040,6 +2104,14 @@ async function init() {
     doRegisterBtn.onclick = () => handleRegister(loginEmail.value, loginPassword.value);
     doLogoutBtn.onclick = handleLogout;
     
+    // Auto-fetch models when API key changes
+    const apiKeyEl = document.getElementById('apiKey');
+    if (apiKeyEl) {
+        apiKeyEl.addEventListener('input', debounce(() => {
+            fetchActiveModels();
+        }, 500));
+    }
+
     // Listen for settings changes in Hub
     window.addEventListener('storage', (e) => {
         if (e.key?.startsWith('gem_')) {
