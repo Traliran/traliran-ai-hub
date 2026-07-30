@@ -1,3 +1,227 @@
+/**
+ * IndexedDB Wrapper for Project Storage + VFS Operations
+ * Replaces ephemeral file system with persistent browser storage
+ * 
+ * Features:
+ * - File CRUD operations with automatic event emission
+ * - Cloud sync via DB_CONNECTOR when logged in
+ * - Version Control snapshots
+ * - Reactive events: vfs:file-updated, vfs:file-deleted, vfs:saved
+ * 
+ * VFS Methods exported for ide.js usage:
+ * - projectDB.saveFile(path, content, language)
+ * - projectDB.getFile(path)
+ * - projectDB.getAllFiles()
+ * - projectDB.deleteFile(path)
+ * - projectDB.saveCommit(commitData)
+ * - projectDB.getAllCommits()
+ * - projectDB.getCommit(commitId)
+ */
+
+class ProjectDB {
+    constructor(dbName = 'WebAppDB', version = 1) {
+        this.dbName = dbName;
+        this.version = version;
+        this.db = null;
+        this.initPromise = this.init();
+    }
+
+    async init() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.version);
+
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                // Store for files: key = filePath, value = { content, language, lastModified }
+                if (!db.objectStoreNames.contains('files')) {
+                    db.createObjectStore('files', { keyPath: 'path' });
+                }
+                // Store for settings/metadata
+                if (!db.objectStoreNames.contains('meta')) {
+                    db.createObjectStore('meta', { keyPath: 'key' });
+                }
+                // Store for version control commits
+                if (!db.objectStoreNames.contains('commits')) {
+                    db.createObjectStore('commits', { keyPath: 'id' });
+                }
+            };
+
+            request.onsuccess = (event) => {
+                this.db = event.target.result;
+                console.log('✅ IndexedDB initialized');
+                resolve(this.db);
+            };
+
+            request.onerror = (event) => {
+                console.error('❌ IndexedDB error:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    /**
+     * Save a file to IndexedDB and emit vfs:file-updated event
+     * @param {string} path - File path
+     * @param {string} content - File content
+     * @param {string} language - Language identifier
+     */
+    async saveFile(path, content, language = 'javascript') {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            
+            const record = {
+                path,
+                content,
+                language,
+                lastModified: Date.now()
+            };
+
+            const req = store.put(record);
+            req.onsuccess = () => {
+                // Dispatch custom event for UI updates
+                window.dispatchEvent(new CustomEvent('vfs:file-updated', { 
+                    detail: { path, content, language } 
+                }));
+                console.log('[VFS WRITE] IndexedDB:', path, 'bytes:', content.length);
+                resolve(record);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Read a file from IndexedDB
+     * @param {string} path - File path
+     * @returns {Promise<string|null>} File content or null
+     */
+    async getFile(path) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readonly');
+            const store = tx.objectStore('files');
+            const req = store.get(path);
+
+            req.onsuccess = () => {
+                console.log('[VFS READ] IndexedDB:', path);
+                resolve(req.result ? req.result.content : null);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Get all files from IndexedDB
+     * @returns {Promise<Object>} Object with paths as keys and content as values
+     */
+    async getAllFiles() {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readonly');
+            const store = tx.objectStore('files');
+            const req = store.getAll();
+
+            req.onsuccess = () => {
+                const files = {};
+                req.result.forEach(f => files[f.path] = f.content);
+                resolve(files);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Delete a file from IndexedDB and emit vfs:file-deleted event
+     * @param {string} path - File path
+     */
+    async deleteFile(path) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            const req = store.delete(path);
+
+            req.onsuccess = () => {
+                window.dispatchEvent(new CustomEvent('vfs:file-deleted', { detail: { path } }));
+                console.log('[VFS DELETE] IndexedDB:', path);
+                resolve(true);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Save a version control commit snapshot
+     * @param {Object} commitData - Commit object with id, timestamp, message, snapshot
+     */
+    async saveCommit(commitData) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('commits', 'readwrite');
+            const store = tx.objectStore('commits');
+            const req = store.put(commitData);
+            req.onsuccess = () => {
+                console.log('[VERSION] Commit saved to IndexedDB:', commitData.id);
+                resolve(commitData);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Get all commits sorted by timestamp (newest first)
+     * @returns {Promise<Array>} Array of commit objects
+     */
+    async getAllCommits() {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('commits', 'readonly');
+            const store = tx.objectStore('commits');
+            const req = store.getAll();
+            req.onsuccess = () => {
+                const commits = req.result || [];
+                commits.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(commits);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Get a specific commit by ID
+     * @param {string} commitId - Commit ID
+     * @returns {Promise<Object|null>} Commit object or null
+     */
+    async getCommit(commitId) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('commits', 'readonly');
+            const store = tx.objectStore('commits');
+            const req = store.get(commitId);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Clear all files from IndexedDB
+     */
+    async clearAll() {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            const req = store.clear();
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
+        });
+    }
+}
+
+// Global instance - accessible by ide.js and other modules
+window.projectDB = new ProjectDB();
+
 const DB_CONNECTOR = {
   _config: null,
 

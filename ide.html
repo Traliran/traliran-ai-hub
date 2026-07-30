@@ -3,419 +3,350 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traliran AI IDE</title>
+    <title>Traliran AI IDE - Serverless Code Editor</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
     <style>
-        #codeEditor { width: 100%; height: 100%; min-height: 0; }
-        .editor-hide-fallback { display: none !important; }
+        #monacoContainer { height: 100%; width: 100%; }
+        .monaco-editor-container { flex: 1; overflow: hidden; }
+        .file-tree-item { cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+        .file-tree-item:hover { background-color: rgba(251, 191, 36, 0.1); }
+        .file-tree-item.active { background-color: rgba(251, 191, 36, 0.2); }
+        .chat-scroll::-webkit-scrollbar { width: 6px; }
+        .chat-scroll::-webkit-scrollbar-track { background: #111827; }
+        .chat-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        .chat-scroll::-webkit-scrollbar-thumb:hover { background: #4b5563; }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
 
     <!-- Header -->
-    <header class="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-20 shadow-md">
-        <div class="max-w-[1800px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div class="flex items-center gap-4 justify-between w-full sm:w-auto">
-                <div class="flex items-center gap-2">
-                    <span class="text-2xl">⚡</span>
-                    <h1 class="text-xl font-black text-violet-400 tracking-wide">Traliran AI IDE</h1>
-                </div>
-                <div class="flex gap-2">
-                    <button id="openBotStoreBtn" class="flex bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs transition cursor-pointer font-medium flex items-center gap-1">
-                        <span>🏪</span> Assistant Store
-                    </button>
-                    <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-1.5 px-3 rounded-lg border border-gray-700 transition flex items-center gap-1">
-                        ◀ Back to Hub
-                    </a>
-                </div>
+    <header class="bg-gray-900 border-b border-gray-800 p-3 sticky top-0 z-20 shadow-md">
+        <div class="max-w-[1920px] mx-auto flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">⚡</span>
+                <h1 class="text-lg font-black text-violet-400 tracking-wide">Traliran AI IDE</h1>
+                <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1 rounded transition ml-2">
+                    ◀ Back to Hub
+                </a>
             </div>
-
-            <!-- API Selection in Header for easy status tracking -->
-            <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
-                <button id="loginBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-1.5 rounded-lg border border-gray-700 transition shrink-0 flex items-center gap-1" title="Login / Cloud Sync">
-                    🔑 <span id="loginBtnText" class="hidden md:inline text-xs">Login</span>
+            
+            <div class="flex items-center gap-2">
+                <button id="newFileBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded transition" title="New File">
+                    📄 New File
                 </button>
-                <button id="ideApiSettingsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-1.5 rounded-lg border border-gray-700 transition shrink-0 flex items-center gap-1" title="API Settings">
-                    <span>⚙️</span> <span class="hidden md:inline text-xs">API Settings</span>
+                <button id="saveFileBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded transition" title="Save File (Ctrl+S)">
+                    💾 Save
                 </button>
-                <div class="flex items-center gap-2">
-                    <label class="text-xs text-gray-400 font-medium">Provider:</label>
-                    <select id="apiProvider" class="bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-violet-500 text-gray-200">
-                        <option value="groq">Groq Cloud</option>
-                        <option value="google">Google Gemini (OpenAI API)</option>
-                        <option value="openrouter">OpenRouter</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="deepseek">DeepSeek</option>
-                        <option value="qwen">Qwen</option>
-                        <option value="glm">GLM</option>
-                        <option value="claude">Claude</option>
-                        <option value="ollama">Ollama (Local)</option>
-                        <option value="llamacpp">Llama.cpp (Local)</option>
-                    </select>
-                </div>
-                <div class="flex items-center gap-2">
-                    <label class="text-xs text-gray-400 font-medium">Model:</label>
-                    <select id="botModel" class="bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-violet-500 max-w-[200px] text-gray-200">
-                        <option value="">(Loading...)</option>
-                    </select>
-                    <button id="refreshModelsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-1.5 rounded-lg border border-gray-700 transition" title="Refresh Model List">
-                        🔄
-                    </button>
-                </div>
-
-                <button id="runCodeBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-1.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/20">
-                    <span>▶</span> Run Preview
+                <button id="togglePreviewBtn" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded transition" title="Toggle Live Preview">
+                    👁️ Preview
+                </button>
+                <button id="openBotStoreBtn" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 text-xs px-3 py-1.5 rounded transition" title="Assistant Store">
+                    🏪 Assistants
+                </button>
+                <button id="loginBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded transition" title="Login / Cloud Sync">
+                    🔑 <span id="loginBtnText">Login</span>
                 </button>
             </div>
         </div>
     </header>
 
-    <!-- Main Workspace -->
-    <main class="flex-1 max-w-[1800px] w-full mx-auto flex overflow-hidden relative">
-
-        <!-- Left: File Explorer & File Actions -->
-        <section class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
-            <!-- Tabs: Files / Git -->
+    <!-- Main Content -->
+    <main class="flex-1 max-w-[1920px] w-full mx-auto flex relative overflow-hidden">
+        
+        <!-- Left Sidebar - Files & Version Control -->
+        <aside class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+            <!-- Tab Headers -->
             <div class="flex border-b border-gray-800">
-                <button id="tabFiles" class="flex-1 px-3 py-2 text-xs font-bold text-violet-400 bg-gray-950 border-b-2 border-violet-500 transition">
+                <button id="filesTabBtn" class="flex-1 px-3 py-2 text-xs font-medium text-violet-400 border-b-2 border-violet-400 bg-gray-800/50">
                     📁 Files
                 </button>
-                <button id="tabGit" class="flex-1 px-3 py-2 text-xs font-bold text-gray-500 hover:text-gray-300 transition border-b-2 border-transparent">
-                    🔀 Git
+                <button id="versionControlTabBtn" class="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-200">
+                    📜 Versions
                 </button>
             </div>
 
-            <!-- FILES TAB -->
-            <div id="filesPanel" class="flex-1 flex flex-col">
-                <div class="p-3 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
-                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">📁 File Explorer</h2>
-                    <button id="addNewFileBtn" class="text-violet-400 hover:text-violet-300 font-bold text-sm px-2 py-0.5 rounded hover:bg-gray-800 transition" title="New File">+ Add</button>
+            <!-- Files Panel -->
+            <div id="filesPanel" class="flex-1 overflow-y-auto chat-scroll p-2">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase">Workspace</h3>
+                    <button id="addFolderBtn" class="text-gray-400 hover:text-emerald-400 text-xs" title="Add Folder">📁+</button>
                 </div>
-
-                <!-- File List -->
-                <div id="fileList" class="flex-1 overflow-y-auto p-2 space-y-1 chat-scroll">
-                    <!-- Populated via JS -->
-                </div>
-
-                <!-- Download Project -->
-                <div class="p-3 border-t border-gray-800 bg-gray-900/50 space-y-2">
-                    <button id="downloadZipBtn" class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs font-semibold py-2 rounded-lg transition flex items-center justify-center gap-1.5">
-                        📥 Download Project files
-                    </button>
-                    <button id="resetProjectBtn" class="w-full bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/40 text-rose-300 text-xs py-1.5 rounded-lg transition text-center">
-                        Reset Workspace
-                    </button>
+                <div id="fileTreeContainer" class="space-y-1 text-sm font-mono">
+                    <!-- File tree populated by JS -->
                 </div>
             </div>
 
-            <!-- GIT TAB -->
-            <div id="gitPanel" class="hidden flex-1 flex flex-col">
-                <div class="p-3 border-b border-gray-800 bg-gray-900/50">
-                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">🔀 Git Control</h2>
-                </div>
-
-                <!-- Commit Button -->
-                <div class="p-3 border-b border-gray-800 bg-gray-950/40 space-y-2">
-                    <input id="commitMessage" type="text" placeholder="Commit message..." 
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-violet-500 text-gray-100 placeholder-gray-600">
-                    <button id="createCommitBtn" class="w-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold py-2 rounded-lg transition cursor-pointer">
-                        💾 Create Commit
+            <!-- Version Control Panel (hidden by default) -->
+            <div id="versionControlPanel" class="hidden flex-1 overflow-y-auto chat-scroll p-2">
+                <div class="mb-3">
+                    <input type="text" id="commitMessageInput" placeholder="Commit message..." 
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs focus:border-violet-500 focus:outline-none">
+                    <button id="createCommitBtn" class="w-full mt-2 bg-violet-600 hover:bg-violet-700 text-white text-xs py-1.5 rounded transition">
+                        📦 Create Commit
                     </button>
                 </div>
-
-                <!-- History List -->
-                <div id="gitHistory" class="flex-1 overflow-y-auto p-2 space-y-1 chat-scroll">
-                    <!-- Populated via JS -->
+                <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Commit History</h3>
+                <div id="commitHistoryList" class="space-y-2">
+                    <!-- Commits populated by JS -->
                 </div>
+                <div class="mt-4 pt-3 border-t border-gray-800">
+                    <button id="exportZipBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 rounded transition mb-2">
+                        📦 Export as ZIP
+                    </button>
+                    <button id="importZipBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 rounded transition">
+                        📥 Import ZIP
+                    </button>
+                    <input type="file" id="zipFileInput" accept=".zip" class="hidden">
+                </div>
+            </div>
+        </aside>
 
-                <!-- Git Stats -->
-                <div class="p-3 border-t border-gray-800 bg-gray-900/50">
-                    <div class="text-[11px] text-gray-400 space-y-1">
-                        <div>Commits: <span id="commitCount" class="text-violet-400 font-bold">0</span></div>
-                        <input type="file" id="restoreFileInput" accept=".json" class="hidden">
-                        <button id="restoreFromFileBtn" class="w-full bg-blue-900/30 hover:bg-blue-900/50 border border-blue-800/40 text-blue-300 text-xs py-1.5 rounded transition mt-2">
-                            📂 Restore from Backup
-                        </button>
-                        <button id="clearGitBtn" class="w-full bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/40 text-rose-300 text-xs py-1 rounded transition mt-1">
-                            Clear History
-                        </button>
+        <!-- Monaco Editor Container -->
+        <section class="flex-1 flex flex-col min-w-0">
+            <!-- Open Files Tabs -->
+            <div id="openFilesTabs" class="flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
+                <!-- Tabs populated by JS -->
+            </div>
+            
+            <!-- Monaco Editor -->
+            <div class="flex-1 relative">
+                <div id="monacoContainer" class="absolute inset-0"></div>
+            </div>
+
+            <!-- Live Preview Panel (collapsible) -->
+            <div id="previewPanel" class="hidden h-64 border-t border-gray-800 bg-gray-950">
+                <div class="flex justify-between items-center px-3 py-1.5 bg-gray-900 border-b border-gray-800">
+                    <span class="text-xs font-bold text-gray-400">Live Preview</span>
+                    <button id="closePreviewBtn" class="text-gray-400 hover:text-white text-xs">✕ Close</button>
+                </div>
+                <iframe id="previewFrame" class="w-full h-[calc(100%-32px)] border-0 bg-white"></iframe>
+            </div>
+        </section>
+
+        <!-- Right Sidebar - AI Agent & Settings -->
+        <aside class="w-96 bg-gray-900 border-l border-gray-800 flex flex-col overflow-hidden">
+            <!-- Tabs Header -->
+            <div class="flex border-b border-gray-800">
+                <button onclick="switchRightTab('agent')" id="tabBtnAgent" class="flex-1 px-3 py-2 text-xs font-medium text-violet-400 border-b-2 border-violet-400 bg-gray-800/50">
+                    🤖 Agent
+                </button>
+                <button onclick="switchRightTab('settings')" id="tabBtnSettings" class="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-200">
+                    ⚙️ API Config
+                </button>
+            </div>
+
+            <!-- AI Agent Panel -->
+            <div id="panelAgent" class="flex-1 flex flex-col overflow-hidden">
+                <!-- Chat Messages -->
+                <div id="agentChatWindow" class="flex-1 overflow-y-auto chat-scroll p-3 space-y-3">
+                    <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-xs text-gray-300">
+                        <p class="font-semibold text-violet-400 mb-1">🤖 Welcome to AI IDE!</p>
+                        <p>I can help you write, edit, and refactor code. I have access to your workspace files.</p>
+                        <ul class="mt-2 space-y-1 text-gray-400">
+                            <li>• Ask me to create new files</li>
+                            <li>• Request code modifications</li>
+                            <li>• Debug issues in your code</li>
+                            <li>• Explain code structure</li>
+                        </ul>
                     </div>
                 </div>
-            </div>
-        </section>
 
-        <!-- Center: Editor & Preview Split -->
-        <section class="flex-1 flex flex-col overflow-hidden min-w-0 bg-gray-950">
-            <!-- Tabs / File Path Indicator -->
-            <div class="flex bg-gray-900 border-b border-gray-800 items-center justify-between px-4 py-2 shrink-0">
-                <div class="flex items-center gap-2">
-                    <span class="text-gray-400 text-xs">Editing:</span>
-                    <span id="activeFileName" class="text-violet-400 font-mono text-xs font-bold">index.html</span>
-                </div>
-                <div class="flex bg-gray-950 p-0.5 rounded-lg border border-gray-800 text-[11px]">
-                    <button id="tabEditor" class="px-3 py-1 rounded-md bg-violet-600 text-white font-semibold transition">Code Editor</button>
-                    <button id="tabPreview" class="px-3 py-1 rounded-md text-gray-400 font-semibold transition hover:text-gray-200">Live Preview</button>
-                </div>
-            </div>
-
-            <!-- Content Area -->
-            <div class="flex-1 flex flex-col relative overflow-hidden">
-                <!-- Editor Container -->
-                <div id="editorContainer" class="flex-1 flex h-full relative">
-                    <div id="codeEditor" class="flex-1 h-full bg-gray-950 rounded-xl border border-gray-800"></div>
-                </div>
-
-                <!-- Preview Container -->
-                <div id="previewContainer" class="hidden flex-1 bg-white h-full relative">
-                    <iframe id="projectIframe" class="w-full h-full border-none bg-white"></iframe>
-                </div>
-            </div>
-        </section>
-
-        <!-- Right: AI Copilot -->
-        <section class="w-96 bg-gray-900 border-l border-gray-800 flex flex-col shrink-0">
-            <!-- Header -->
-            <div class="p-3 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
-                <div class="flex items-center gap-2">
-                    <span class="text-lg">🤖</span>
-                    <h2 class="text-xs font-black text-violet-400 uppercase tracking-wider">AI Architect</h2>
-                </div>
-            </div>
-
-            <!-- Quick Actions -->
-            <div class="p-3 bg-gray-950/40 border-b border-gray-800/80 grid grid-cols-2 gap-2">
-                <button id="btnAiGenerate" class="bg-violet-950/40 hover:bg-violet-900/40 text-violet-300 border border-violet-800/30 text-xs py-1.5 rounded transition font-medium cursor-pointer text-center" title="Generate code based on prompt">
-                    ✨ Create Layout
-                </button>
-                <button id="btnAiRefactor" class="bg-violet-950/40 hover:bg-violet-900/40 text-violet-300 border border-violet-800/30 text-xs py-1.5 rounded transition font-medium cursor-pointer text-center" title="Refactor current file">
-                    🔧 Optimize / Clean
-                </button>
-                <button id="btnAiExplain" class="bg-violet-950/40 hover:bg-violet-900/40 text-violet-300 border border-violet-800/30 text-xs py-1.5 rounded transition font-medium cursor-pointer text-center" title="Explain selected code">
-                    📖 Explain Code
-                </button>
-                <button id="btnAiFix" class="bg-violet-950/40 hover:bg-violet-900/40 text-violet-300 border border-violet-800/30 text-xs py-1.5 rounded transition font-medium cursor-pointer text-center" title="Fix errors or bugs">
-                    🐛 Debug & Fix
-                </button>
-            </div>
-
-            <!-- Chat History inside Copilot -->
-            <div id="aiChatWindow" class="flex-1 overflow-y-auto p-4 space-y-4 chat-scroll bg-gray-950/10">
-                <div id="ideWelcomeMessage" class="bg-gray-950 border border-gray-800/80 p-4 rounded-xl text-center space-y-3 my-2 text-xs">
-                    <p class="text-gray-300 leading-relaxed font-medium">
-                        I am your workspace AI. I can write HTML, CSS, and JS. 
-                    </p>
-                    <p class="text-gray-400 leading-relaxed">
-                        Specify instructions, and I will write perfect edits for your files. Every request is optimized to go directly to your API in exactly <strong>one single request</strong>.
-                    </p>
-                    <div class="bg-gray-900 p-2.5 rounded border border-gray-800 text-left space-y-1.5 text-[11px]">
-                        <span class="text-violet-400 font-bold block">💡 Pro-tips:</span>
-                        <div>• Select files on the left to edit them.</div>
-                        <div>• Type instructions below and hit Send.</div>
-                        <div>• Use the quick actions above for instant results.</div>
+                <!-- Input Area -->
+                <div class="p-3 border-t border-gray-800 bg-gray-900">
+                    <textarea id="agentInput" rows="3" placeholder="Describe what you want to build or change..." 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none resize-none"></textarea>
+                    <div class="flex gap-2 mt-2">
+                        <button id="sendAgentBtn" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm py-2 rounded transition">
+                            ➤ Send
+                        </button>
+                        <button id="stopAgentBtn" class="hidden flex-1 bg-rose-600 hover:bg-rose-700 text-white text-sm py-2 rounded transition">
+                            ⏹ Stop
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between mt-2 text-[10px] text-gray-500">
+                        <span id="agentStatusIndicator" class="text-[10px] text-gray-500">Ready</span>
+                        <span id="agentModelDisplay">Model: --</span>
+                        <span id="tokenUsageDisplay">Tokens: 0</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Input / Controls -->
-            <div class="p-3 bg-gray-900 border-t border-gray-800 flex flex-col gap-2">
-                <!-- Proposed changes or quick preview/apply -->
-                <div id="changesIndicator" class="hidden items-center justify-between bg-violet-950/30 border border-violet-900/40 p-2 rounded-lg text-xs">
-                    <span class="text-violet-300 truncate">📦 Extracted 1+ file updates!</span>
-                    <button id="applyChangesBtn" class="bg-violet-600 hover:bg-violet-500 text-white font-bold px-2.5 py-1 rounded text-[10px] transition cursor-pointer">
-                        Apply Changes
-                    </button>
+            <!-- API Settings Panel (hidden by default) -->
+            <div id="panelSettings" class="hidden flex-1 overflow-y-auto chat-scroll p-4 space-y-4">
+                <div class="bg-blue-900/30 border border-blue-800 rounded p-3">
+                    <h4 class="text-blue-400 text-xs font-bold uppercase mb-1">Configuration Source</h4>
+                    <p class="text-gray-400 text-xs">Settings are loaded from the main Hub if available. You can override them here specifically for this IDE session.</p>
                 </div>
 
-                <div class="flex gap-2 items-end">
-                    <textarea id="aiInput" rows="2" placeholder="Ask AI to modify, generate, or add functionality..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 resize-none max-h-24 chat-scroll text-gray-100 min-h-[38px]"></textarea>
-                    <button id="aiSendBtn" class="bg-violet-600 hover:bg-violet-500 text-white font-bold px-4 py-2.5 rounded-lg text-xs transition flex items-center justify-center cursor-pointer h-[38px] shrink-0">
-                        Ask AI
-                    </button>
-                    <button id="aiStopBtn" class="hidden bg-rose-600 hover:bg-rose-500 text-white font-bold px-4 py-2.5 rounded-lg text-xs transition flex items-center justify-center cursor-pointer h-[38px] shrink-0">
-                        Stop
-                </button>
-                </div>
-            </div>
-        </section>
-    </main>
-    <!-- Key Warning overlay -->
-    <div id="keyWarningModal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
-        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <div class="text-center">
-                <span class="text-4xl">⚙️</span>
-                <h3 class="text-lg font-bold text-violet-400 mt-2">API Configuration</h3>
-                <p class="text-xs text-gray-400 leading-relaxed mt-1">
-                    Configure your API key or endpoint to use the AI Copilot. We share the same database of keys with the main chat!
-                </p>
-            </div>
-
-            <div class="space-y-3 pt-2 text-left">
                 <div>
-                    <label class="block text-xs font-semibold text-gray-400 mb-1">AI Provider</label>
-                    <select id="modalApiProvider" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 text-gray-200">
-                        <option value="groq">Groq Cloud</option>
-                        <option value="google">Google Gemini (OpenAI API)</option>
-                        <option value="openrouter">OpenRouter</option>
+                    <label class="block text-gray-400 text-xs font-bold mb-1">Provider</label>
+                    <select id="apiProvider" onchange="updateModelSuggestions()" class="w-full bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none">
                         <option value="openai">OpenAI</option>
-                        <option value="deepseek">DeepSeek</option>
-                        <option value="qwen">Qwen</option>
-                        <option value="glm">GLM</option>
-                        <option value="claude">Claude</option>
-                        <option value="ollama">Ollama (Local)</option>
-                        <option value="llamacpp">Llama.cpp (Local)</option>
+                        <option value="groq">Groq</option>
+                        <option value="google">Google Gemini</option>
+                        <option value="anthropic">Anthropic (Claude)</option>
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="custom">Custom Endpoint</option>
                     </select>
                 </div>
 
-                <div id="modalApiKeyContainer">
-                    <label class="block text-xs font-semibold text-gray-400 mb-1">API Key (token)</label>
-                    <input type="password" id="modalApiKeyValue" placeholder="Enter your API key..."
-                        class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 font-mono text-gray-200">
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold mb-1">API Key</label>
+                    <input type="password" id="apiKey" class="w-full bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none" placeholder="sk-...">
                 </div>
 
-                <div id="modalEndpointContainer" class="hidden">
-                    <label class="block text-xs font-semibold text-gray-400 mb-1">Base Endpoint URL</label>
-                    <input type="text" id="modalApiEndpoint" placeholder="http://localhost:11434/v1"
-                        class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 font-mono text-gray-200">
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold mb-1">Model Name</label>
+                    <div class="flex gap-2">
+                        <select id="apiModel" class="flex-1 bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none">
+                            <option value="">(Enter API key to load models)</option>
+                        </select>
+                        <button id="refreshModelsBtn" onclick="fetchActiveModels()" class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2 rounded border border-gray-600" title="Refresh model list">🔄</button>
+                    </div>
+                    <p class="text-gray-500 text-xs mt-1" id="modelHint">Enter API key above, then pick a model.</p>
                 </div>
-            </div>
 
-            <div class="flex flex-col gap-2 pt-2">
-                <button id="modalSaveBtn" class="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-2 px-4 rounded-lg text-xs transition cursor-pointer">
-                    Save and Continue
+                <div id="customUrlGroup" class="hidden">
+                    <label class="block text-gray-400 text-xs font-bold mb-1">Base URL (Optional)</label>
+                    <input type="text" id="apiBaseUrl" class="w-full bg-gray-800 text-white text-sm rounded border border-gray-600 p-2 focus:border-blue-500 outline-none" placeholder="https://api.example.com/v1">
+                </div>
+
+                <button onclick="saveApiSettings()" class="w-full bg-green-700 hover:bg-green-600 text-white text-sm font-medium py-2 rounded transition-colors mt-4">
+                    Save & Apply Settings
                 </button>
-                <div class="flex gap-2">
-                    <a href="index.html" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-3 rounded-lg border border-gray-700 transition text-center">
-                        Back to Hub
-                    </a>
-                    <button id="modalCloseBtn" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white text-xs py-2 px-3 rounded-lg border border-gray-700 transition cursor-pointer">
-                        Close
-                    </button>
-                </div>
+                
+                <div id="settingsStatus" class="text-center text-xs mt-2 h-4"></div>
             </div>
-        </div>
-    </div>
+        </aside>
+    </main>
 
     <!-- Bot Store Modal -->
     <div id="botStoreModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative flex flex-col max-h-[90vh]">
-            <button id="closeBotStoreModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
-
+            <button id="closeBotStoreModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">✕</button>
+            
             <div class="flex justify-between items-start">
                 <div>
-                    <h2 class="text-2xl font-black text-amber-400 tracking-wide">🏪 Assistant Store</h2>
-                    <p class="text-xs text-gray-400 mt-1">Manage your custom AI personas and specialized prompts.</p>
+                    <h2 class="text-2xl font-bold text-amber-400">🏪 Assistant Store</h2>
+                    <p class="text-sm text-gray-400 mt-1">Manage your custom AI personas and specialized coding assistants.</p>
                 </div>
                 <div class="flex gap-2">
-                    <label class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-1.5 px-3 rounded-lg border border-gray-700 transition cursor-pointer flex items-center gap-1">
-                        <span>📥</span> Import
-                        <input type="file" id="importBotsInput" accept=".json" class="hidden">
+                    <label for="importBotsInput" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg transition cursor-pointer">
+                        📥 Import
                     </label>
-                    <button id="exportBotsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-1.5 px-3 rounded-lg border border-gray-700 transition cursor-pointer flex items-center gap-1">
-                        <span>📤</span> Export
+                    <input type="file" id="importBotsInput" accept=".json" class="hidden">
+                    <button id="exportBotsBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg transition">
+                        📤 Export
                     </button>
                 </div>
             </div>
 
-            <div id="botStoreGrid" class="flex-1 overflow-y-auto chat-scroll grid grid-cols-1 sm:grid-cols-2 gap-4 pr-2">
-                <!-- Bots populated by JS -->
+            <div id="botStoreGrid" class="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Bots populated dynamically by JS -->
             </div>
 
-            <div class="pt-4 border-t border-gray-800 flex justify-center">
-                <button id="createNewBotBtn" class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-6 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-lg shadow-amber-950/20">
-                    <span>➕</span> Create New Assistant
-                </button>
-            </div>
+            <button id="createNewBotBtn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-lg transition">
+                ➕ Create New Assistant
+            </button>
         </div>
     </div>
 
     <!-- Bot Editor Modal -->
     <div id="botEditorModal" class="hidden fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative">
-            <button id="closeBotEditorModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+            <button id="closeBotEditorModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">✕</button>
+            
             <h2 id="botEditorTitle" class="text-xl font-bold text-amber-400">Edit Assistant</h2>
 
             <div class="space-y-3">
                 <div>
                     <label class="block text-xs font-medium text-gray-400 mb-1">Assistant Name</label>
-                    <input type="text" id="editBotName" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-gray-100">
+                    <input type="text" id="editBotName" placeholder="e.g., React Expert" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:outline-none">
                 </div>
+                
                 <div>
-                    <label class="block text-xs font-medium text-gray-400 mb-1">System Prompt</label>
-                    <textarea id="editBotPrompt" rows="6" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 resize-none text-gray-100"></textarea>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">System Prompt (Instructions)</label>
+                    <textarea id="editBotPrompt" rows="6" placeholder="Define the assistant's role, expertise, and communication style..." 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:outline-none resize-none"></textarea>
                 </div>
+                
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-medium text-gray-400 mb-1">Preferred Model</label>
-                        <select id="editBotModel" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-gray-200">
-                            <!-- Populated dynamically -->
+                        <select id="editBotModel" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:outline-none">
+                            <!-- Populated from available models -->
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-gray-400 mb-1">Temperature</label>
-                        <input type="number" id="editBotTemp" step="0.1" min="0" max="2" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-gray-100">
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Temperature (0-2)</label>
+                        <input type="number" id="editBotTemp" step="0.1" min="0" max="2" value="0.7" 
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-amber-500 focus:outline-none">
                     </div>
                 </div>
             </div>
 
-            <div class="flex justify-between items-center pt-4 border-t border-gray-800">
-                <button id="deleteBotBtn" class="bg-rose-900/30 hover:bg-rose-900/50 text-rose-400 text-xs font-semibold py-2 px-4 rounded-lg transition cursor-pointer border border-rose-900/50">
+            <div class="flex justify-between pt-4 border-t border-gray-800">
+                <button id="deleteBotBtn" class="bg-rose-600 hover:bg-rose-700 text-white text-sm px-4 py-2 rounded-lg transition">
                     🗑️ Delete Bot
                 </button>
-                <button id="saveBotBtn" class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-6 rounded-lg transition cursor-pointer">
+                <button id="saveBotBtn" class="bg-amber-600 hover:bg-amber-700 text-white text-sm px-6 py-2 rounded-lg transition">
                     Save Assistant
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Auth Modal -->
-    <div id="authModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+    <!-- Login Modal -->
+    <div id="loginModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button id="closeAuthModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
-            <div>
-                <h2 class="text-xl font-bold text-violet-400">🔑 Cloud Sync Login</h2>
-                <p class="text-xs text-gray-400 mt-1">Sign in to sync your IDE data across devices.</p>
-            </div>
-            <div class="flex border-b border-gray-800">
-                <button id="authTabLogin" class="flex-1 py-2 text-sm font-bold text-violet-400 border-b-2 border-violet-500 transition">Login</button>
-                <button id="authTabRegister" class="flex-1 py-2 text-sm font-bold text-gray-500 border-b-2 border-transparent transition">Register</button>
-            </div>
+            <button id="closeLoginModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">✕</button>
+            <h2 class="text-xl font-bold text-emerald-400">Cloud Sync Login</h2>
+            <p class="text-xs text-gray-400">Connect to Firebase, Supabase, or PocketBase for cloud synchronization.</p>
+            
             <div class="space-y-3">
                 <div>
-                    <label class="block text-xs font-semibold text-gray-400 mb-1">Database URL</label>
-                    <input type="text" id="authDbUrl" placeholder="https://your-project.firebaseio.com or project-id"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500 transition font-mono">
+                    <label class="block text-xs text-gray-500 mb-1">Database URL / Endpoint</label>
+                    <input type="text" id="loginDbUrl" placeholder="https://your-db.firebaseio.com" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-gray-400 mb-1">API Key (if required)</label>
-                    <input type="text" id="authDbKey" placeholder="Firebase API key / Supabase anon key"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500 transition font-mono">
+                    <label class="block text-xs text-gray-500 mb-1">Database API Key</label>
+                    <input type="password" id="loginDbKey" placeholder="Your API key" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
                 </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 mb-1">Email</label>
-                    <input type="email" id="authEmail" placeholder="your@email.com"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500 transition">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 mb-1">Password</label>
-                    <input type="password" id="authPassword" placeholder="Enter password"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500 transition">
+                <div class="border-t border-gray-800 pt-3">
+                    <input type="email" id="loginEmail" placeholder="Email address" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                    <input type="password" id="loginPassword" placeholder="Password" 
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none mt-2">
                 </div>
             </div>
-            <button id="authSubmitBtn" class="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 rounded-lg text-sm transition cursor-pointer">
-                Login
+            
+            <div class="flex gap-2">
+                <button id="doLoginBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-2 rounded-lg transition">
+                    Login
+                </button>
+                <button id="doRegisterBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg transition">
+                    Register
+                </button>
+            </div>
+            
+            <button id="doLogoutBtn" class="hidden w-full bg-rose-600 hover:bg-rose-700 text-white text-sm py-2 rounded-lg transition">
+                Logout
             </button>
-            <div id="authError" class="hidden text-xs text-rose-400 text-center"></div>
+            
+            <div id="loginStatus" class="text-xs text-gray-400 text-center"></div>
         </div>
     </div>
 
-    <!-- Script Files -->
+    <!-- Scripts -->
     <script src="db-connector.js"></script>
     <script src="sync-manager.js"></script>
     <script src="ide.js"></script>
 </body>
 </html>
-

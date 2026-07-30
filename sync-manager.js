@@ -1,3 +1,19 @@
+/**
+ * Sync Manager - Handles cloud synchronization for VFS and other data
+ * 
+ * Features:
+ * - Auto-sync VFS files to cloud when logged in
+ * - Queue-based sync for offline support
+ * - Granular file-level sync for VFS
+ * - Full snapshot sync for commits
+ * 
+ * Methods:
+ * - SYNC_MANAGER.pushVFSFileToCloud(filePath)
+ * - SYNC_MANAGER.pullFromCloud(collection)
+ * - SYNC_MANAGER.pushAll()
+ * - SYNC_MANAGER.pullAndMerge()
+ */
+
 const SYNC_MANAGER = {
   _syncQueue: [],
   _debounceTimers: {},
@@ -9,11 +25,10 @@ const SYNC_MANAGER = {
     hub_sessions: { key: 'gem_sessions' },
     hub_notes: { key: 'gem_notes' },
     hub_settings: { keys: ['gem_provider', 'gem_bot_name', 'gem_system_prompt', 'gem_temp', 'gem_topp', 'gem_tokens', 'gem_theme'], isSettings: true },
-    ide_files: { key: 'ide_project_files' },
-    ide_commits: { key: 'ide_git_commits' },
-    ide_bots: { key: 'ide_custom_bots' },
     rag_knowledge: { key: 'gem_rag_kb' },
     hub_personal: { key: 'gem_personal_info' },
+    ide_vfs: { key: 'ide_vfs_files', isVFS: true },
+    ide_commits: { key: 'ide_vfs_commits', isCommits: true },
   },
 
   init() {
@@ -26,6 +41,14 @@ const SYNC_MANAGER = {
     window.addEventListener('offline', () => {
       this._isOnline = false;
       this.updateStatus('Offline - changes queued', true);
+    });
+    
+    // Listen for VFS updates and auto-sync
+    window.addEventListener('vfs:file-updated', (e) => {
+      const { path } = e.detail;
+      if (path) {
+        this.pushVFSFileToCloud(path);
+      }
     });
   },
 
@@ -55,6 +78,22 @@ const SYNC_MANAGER = {
       return settings;
     }
 
+    if (map.isVFS) {
+      const stored = localStorage.getItem('ide_vfs_files');
+      if (stored) {
+        try { return JSON.parse(stored); } catch { return {}; }
+      }
+      return {};
+    }
+
+    if (map.isCommits) {
+      const stored = localStorage.getItem('ide_vfs_commits');
+      if (stored) {
+        try { return JSON.parse(stored); } catch { return []; }
+      }
+      return [];
+    }
+
     if (map.key) {
       const val = localStorage.getItem(map.key);
       if (val !== null) {
@@ -75,6 +114,18 @@ const SYNC_MANAGER = {
             localStorage.setItem(key, val);
           }
         });
+      }
+      return;
+    }
+
+    if (map.isVFS || map.isCommits) {
+      const storageKey = collection === 'ide_vfs' ? 'ide_vfs_files' : 'ide_vfs_commits';
+      if (data !== null && data !== undefined) {
+        localStorage.setItem(storageKey, JSON.stringify(data));
+        // Dispatch event for UI updates
+        if (map.isVFS) {
+          window.dispatchEvent(new CustomEvent('vfs:synced-from-cloud', { detail: { files: data } }));
+        }
       }
       return;
     }
@@ -117,6 +168,32 @@ const SYNC_MANAGER = {
         this._syncQueue.push({ type: 'push', collection });
       }
     }, 500);
+  },
+
+  // Push single VFS file to cloud (for granular sync)
+  async pushVFSFileToCloud(filePath) {
+    if (!DB_CONNECTOR.isLoggedIn()) return;
+    if (!this._isOnline) {
+      this._syncQueue.push({ type: 'push_file', path: filePath });
+      return;
+    }
+
+    if (this._debounceTimers['vfs_' + filePath]) {
+      clearTimeout(this._debounceTimers['vfs_' + filePath]);
+    }
+
+    this._debounceTimers['vfs_' + filePath] = setTimeout(async () => {
+      try {
+        const allFiles = this._readCollectionData('ide_vfs');
+        if (allFiles && allFiles[filePath]) {
+          const fileData = allFiles[filePath];
+          await DB_CONNECTOR.saveData('ide_vfs', filePath, fileData);
+          console.log('[SYNC] Pushed file to cloud:', filePath);
+        }
+      } catch (e) {
+        console.error('VFS file sync error:', e);
+      }
+    }, 1000);
   },
 
   async pullFromCloud(collection) {
@@ -179,6 +256,16 @@ const SYNC_MANAGER = {
           }
         } catch (e) {
           console.error('Queue processing error:', e);
+          this._syncQueue.push(item);
+        }
+      } else if (item.type === 'push_file') {
+        try {
+          const allFiles = this._readCollectionData('ide_vfs');
+          if (allFiles && allFiles[item.path]) {
+            await DB_CONNECTOR.saveData('ide_vfs', item.path, allFiles[item.path]);
+          }
+        } catch (e) {
+          console.error('File queue processing error:', e);
           this._syncQueue.push(item);
         }
       }
