@@ -24,7 +24,7 @@ A lightweight, serverless, and privacy-first AI web client and sandbox running d
 
 ## 🛠️ Need a Custom Bot or Feature?
 
-Need a custom AI assistant, specialized integrations, or a unique feature for **Traliran AI Hub** or **driftwm**?
+Need a custom AI assistant, specialized integrations, or a unique feature for **Traliran AI Hub**?
 
 > 📩 **[Order a custom bot / feature here](https://forms.gle/XpTQRCrpGdsbPiR48)**  
 > *Fill out a quick form with your specifications and budget. Responses within 48 hours. **Payment via crypto only.** :3*
@@ -49,19 +49,17 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 
 ## 🚀 Key Features
 
-*   **Multi-Provider Support:** Seamlessly switch between cloud APIs (Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude) and local LLMs (Ollama, Llama.cpp).
-*   **⚡ Parallel Model Comparison:** Select multiple models simultaneously. The app triggers parallel API requests and renders side-by-side cards for instant benchmarking.
-*   **💡 Reasoning Model Support:** Native rendering for reasoning models (e.g., DeepSeek-R1). Thoughts are captured and organized into clean, collapsible dropdown blocks.
-*   **👥 AI Debate Mode:** Turn raw ideas into fully analyzed concepts. Run a multi-agent discussion loop with specialized personas (Optimist, Critic, Technologist) cross-examining your thesis over multiple rounds.
-*   **⚡ AI IDE (Integrated Development Environment):** A full-featured in-browser IDE for code generation, editing, and management powered by AI.
-    *   **File Explorer:** Manage project files (HTML, CSS, JS, etc.).
-    *   **Code Editor:** Clean and responsive file editing.
-    *   **Live Preview:** Instant code preview in an isolated iframe.
-    *   **AI Assistant:** Helps build and optimize your project workspace.
-    *   **Project Management:** Download full project archives with a Git-like version control system.
-*   **💻 Built-in Sandbox:** Execute and test generated HTML/JS/CSS code snippet renders directly inside the main chat workspace.
-*   **🏪 Assistant Store:** A marketplace of free and premium pre-configured assistants for specific tasks (polyglot translators, code editors, idea generators, etc.).
-*   **⚙️ Advanced Parameters Control:** Fine-tune system behavior on the fly with adjustable sliders for Temperature, Top P, and Max Tokens.
+* **Multi-provider support:** Quickly switch between cloud APIs (Groq, Google Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude) and local neural networks (Ollama, Llama.cpp).
+* **☁️ Cloud Sync:** Synchronize chats, settings, and presets across all your devices.
+* **🧠 Personal AI:** A section for entering context about yourself—automatically incorporated into all system prompts.
+* **⚡ Multi-Model Setup:** Send a query to multiple models simultaneously and view their responses side by side for quick benchmarking.
+* **👥 AI Group Debate Mode:** Test your ideas with three specialized agents (*Optimist*, *Critic*, *Technologist*) that analyze your hypothesis from different angles.
+* **📝 Built-in Notes (My Notes):** A built-in notepad for quickly jotting down thoughts, drafts, and generated responses.
+* **💻 Sandbox Interpreter:** Safe rendering and execution of generated HTML/JS/CSS code in a separate component right during the conversation.
+* **🏪 Assistant Store:** A catalog of free extensions and ready-made presets for solving specific tasks (polyglot translator, code editor, idea generator, etc.).
+* **🎨 Themes:** Support for multiple visual presets (Default Dark, Cyberpunk, Matrix).
+* **⚙️ Fine-Tuning Parameters:** Control generation “on the fly” using the Temperature, Top P, and Max Tokens sliders.
+* **📦 Import/Export:** Quickly save and load settings and profiles in JSON format.
 
 ---
 
