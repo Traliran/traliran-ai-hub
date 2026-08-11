@@ -22,12 +22,16 @@ A lightweight, serverless, and privacy-first AI web client and sandbox running d
 
 ---
 
-## 🛠️ Need a Custom Bot or Feature?
+## 🛠️ Custom Builds, B2B Deployments & Features
 
-Need a custom AI assistant, specialized integrations, or a unique feature for **Traliran AI Hub**?
+Traliran AI Hub is 100% free and open-source. Need a dedicated, zero-server AI workspace for your team, agency, or Web3 project? I build custom versions!
 
-> 📩 **[Order a custom bot / feature here](https://forms.gle/XpTQRCrpGdsbPiR48)**  
-> *Fill out a quick form with your specifications and budget. Responses within 48 hours. **Payment via crypto only.** :3*
+* **Branded Team Hub:** Custom UI, pre-configured models, and default prompt presets hosted on your domain.
+* **Zero-Server Privacy:** 100% client-side. Prompts and API keys never touch third-party servers.
+* **Custom Integrations:** Specialized sandbox tools, custom APIs, or unique workflow tweaks.
+
+👉 **[Order a Custom Build / B2B Request](https://forms.gle/XpTQRCrpGdsbPiR48)**
+*(Fast delivery, direct developer contact, flexible crypto checkout: USDT / SOL / BTC).*
 
 ---
 
