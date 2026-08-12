@@ -335,6 +335,12 @@ function setupPlaygroundSync() {
     });
 }
 
+window.addEventListener('storage', (e) => {
+    if (e.key === 'gem_rag_kb') {
+        loadKnowledgeBase();
+    }
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
     await STORAGE.ready();
     loadConfig();

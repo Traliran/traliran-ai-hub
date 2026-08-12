@@ -109,6 +109,7 @@ const notePreview = document.getElementById('notePreview');
 const toggleNotePreview = document.getElementById('toggleNotePreview');
 const deleteNoteBtn = document.getElementById('deleteNoteBtn');
 const importNoteBtn = document.getElementById('importNoteBtn');
+const exportToRagBtn = document.getElementById('exportToRagBtn');
 const exportNoteBtn = document.getElementById('exportNoteBtn');
 const noteFileInput = document.getElementById('noteFileInput');
 const noteTagsContainer = document.getElementById('noteTagsContainer');
@@ -971,6 +972,47 @@ function exportNoteToMD() {
     URL.revokeObjectURL(url);
 }
 
+function loadRagKnowledgeBase() {
+    const saved = STORAGE.getItem('gem_rag_kb');
+    if (saved) {
+        try { return JSON.parse(saved); } catch (e) { return []; }
+    }
+    return [];
+}
+
+function saveRagKnowledgeBase(kb) {
+    STORAGE.setItem('gem_rag_kb', JSON.stringify(kb));
+    SYNC_MANAGER.pushToCloud('rag_knowledge');
+}
+
+function exportNoteToRAG() {
+    if (!currentNoteId) return;
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note) return;
+
+    const content = note.content.trim();
+    if (!content) {
+        alert('Note is empty, nothing to export!');
+        return;
+    }
+
+    let name = note.title.trim() || 'Untitled Note';
+    if (!/\.(md|txt)$/i.test(name)) name += '.md';
+
+    const kb = loadRagKnowledgeBase();
+    const entry = { name, content, source: 'notes', noteId: note.id, updatedAt: Date.now() };
+    const existingIndex = kb.findIndex(f => f.name === name);
+    if (existingIndex !== -1) {
+        kb[existingIndex] = entry;
+    } else {
+        kb.push(entry);
+    }
+    saveRagKnowledgeBase(kb);
+
+    exportToRagBtn.textContent = '✅ Added';
+    setTimeout(() => { exportToRagBtn.textContent = '📚 Export to RAG'; }, 2000);
+}
+
 function renderMessageToDOM(role, content, botName, index) {
     welcomeMessage.classList.add('hidden');
     const messageDiv = document.createElement('div');
@@ -1778,6 +1820,7 @@ toggleNotePreview.addEventListener('click', () => {
 });
 aiComplementBtn.addEventListener('click', complementNote);
 importNoteBtn.addEventListener('click', importNoteFromMD);
+exportToRagBtn.addEventListener('click', exportNoteToRAG);
 exportNoteBtn.addEventListener('click', exportNoteToMD);
 
 exportJsonBtn.addEventListener('click', () => {
