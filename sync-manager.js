@@ -69,17 +69,17 @@ const SYNC_MANAGER = {
     if (map.isSettings) {
       const settings = {};
       map.keys.forEach(key => {
-        const val = localStorage.getItem(key);
+        const val = STORAGE.getItem(key);
         if (val !== null) settings[key] = val;
       });
-      Object.keys(localStorage).filter(k => k.startsWith('gem_key_')).forEach(k => {
-        settings[k] = localStorage.getItem(k);
+      STORAGE.keys().filter(k => k.startsWith('gem_key_')).forEach(k => {
+        settings[k] = STORAGE.getItem(k);
       });
       return settings;
     }
 
     if (map.isVFS) {
-      const stored = localStorage.getItem('ide_vfs_files');
+      const stored = STORAGE.getItem('ide_vfs_files');
       if (stored) {
         try { return JSON.parse(stored); } catch { return {}; }
       }
@@ -87,7 +87,7 @@ const SYNC_MANAGER = {
     }
 
     if (map.isCommits) {
-      const stored = localStorage.getItem('ide_vfs_commits');
+      const stored = STORAGE.getItem('ide_vfs_commits');
       if (stored) {
         try { return JSON.parse(stored); } catch { return []; }
       }
@@ -95,7 +95,7 @@ const SYNC_MANAGER = {
     }
 
     if (map.key) {
-      const val = localStorage.getItem(map.key);
+      const val = STORAGE.getItem(map.key);
       if (val !== null) {
         try { return JSON.parse(val); } catch { return val; }
       }
@@ -111,7 +111,7 @@ const SYNC_MANAGER = {
       if (data && typeof data === 'object') {
         Object.entries(data).forEach(([key, val]) => {
           if (key !== 'id' && typeof val === 'string') {
-            localStorage.setItem(key, val);
+            STORAGE.setItem(key, val);
           }
         });
       }
@@ -121,7 +121,7 @@ const SYNC_MANAGER = {
     if (map.isVFS || map.isCommits) {
       const storageKey = collection === 'ide_vfs' ? 'ide_vfs_files' : 'ide_vfs_commits';
       if (data !== null && data !== undefined) {
-        localStorage.setItem(storageKey, JSON.stringify(data));
+        STORAGE.setItem(storageKey, JSON.stringify(data));
         // Dispatch event for UI updates
         if (map.isVFS) {
           window.dispatchEvent(new CustomEvent('vfs:synced-from-cloud', { detail: { files: data } }));
@@ -131,7 +131,7 @@ const SYNC_MANAGER = {
     }
 
     if (map.key && data !== null && data !== undefined) {
-      localStorage.setItem(map.key, typeof data === 'string' ? data : JSON.stringify(data));
+      STORAGE.setItem(map.key, typeof data === 'string' ? data : JSON.stringify(data));
     }
   },
 

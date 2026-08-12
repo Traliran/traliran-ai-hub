@@ -19,7 +19,7 @@
  */
 
 class ProjectDB {
-    constructor(dbName = 'WebAppDB', version = 1) {
+    constructor(dbName = 'WebAppDB', version = 2) {
         this.dbName = dbName;
         this.version = version;
         this.db = null;
@@ -43,6 +43,10 @@ class ProjectDB {
                 // Store for version control commits
                 if (!db.objectStoreNames.contains('commits')) {
                     db.createObjectStore('commits', { keyPath: 'id' });
+                }
+                // Store for generic key/value data (replaces localStorage)
+                if (!db.objectStoreNames.contains('kv')) {
+                    db.createObjectStore('kv', { keyPath: 'key' });
                 }
             };
 
@@ -222,35 +226,249 @@ class ProjectDB {
 // Global instance - accessible by ide.js and other modules
 window.projectDB = new ProjectDB();
 
+/**
+ * KV_STORE - Async key/value access to the IndexedDB 'kv' store.
+ * Backs the STORAGE facade below.
+ */
+const KV_STORE = {
+    async _getDB() {
+        await window.projectDB.initPromise;
+        return window.projectDB.db;
+    },
+
+    async getAll() {
+        const db = await this._getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+        });
+    },
+
+    async get(key) {
+        const db = await this._getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get(key);
+            req.onsuccess = () => resolve(req.result ? req.result.value : null);
+            req.onerror = () => reject(req.error);
+        });
+    },
+
+    async set(key, value) {
+        const db = await this._getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readwrite');
+            const req = tx.objectStore('kv').put({ key, value });
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+        });
+    },
+
+    async remove(key) {
+        const db = await this._getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readwrite');
+            const req = tx.objectStore('kv').delete(key);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+        });
+    }
+};
+
+/**
+ * STORAGE - Synchronous key/value facade over IndexedDB that mirrors the
+ * old localStorage API (getItem/setItem/removeItem/keys/length).
+ *
+ * - Reads/writes go through an in-memory mirror of the IndexedDB 'kv' store,
+ *   so existing synchronous call sites keep working unchanged.
+ * - Every write is persisted to IndexedDB asynchronously.
+ * - On the first load, legacy localStorage data is copied into IndexedDB
+ *   (marked by the '_storage_migrated' record) and the app's own localStorage
+ *   keys are then removed, so no user data is lost and IndexedDB becomes the
+ *   sole source of truth.
+ * - Cross-tab notification (previously provided by the browser 'storage'
+ *   event) is preserved via BroadcastChannel, re-dispatching synthetic
+ *   'storage' events so existing listeners keep working.
+ */
+const MIGRATION_MARKER = '_storage_migrated';
+
+const STORAGE = {
+    _cache: {},
+    _pendingWrites: {},
+    _channel: null,
+    _readyPromise: null,
+    _initialized: false,
+
+    async init() {
+        // Best-effort seed from legacy localStorage (only this app's keys are
+        // managed). It feeds the synchronous startup reads and is the source
+        // for the one-time migration.
+        const legacy = {};
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k !== null && STORAGE._isManagedKey(k)) legacy[k] = localStorage.getItem(k);
+            }
+        } catch (e) {
+            console.error('[STORAGE] Legacy seed error:', e);
+        }
+        this._cache = { ...legacy };
+
+        try {
+            await window.projectDB.initPromise;
+
+            let records = [];
+            try {
+                records = await KV_STORE.getAll();
+            } catch (e) {
+                console.error('[STORAGE] IndexedDB load error:', e);
+            }
+            const idb = {};
+            for (const rec of records) {
+                if (rec && rec.key !== undefined) idb[rec.key] = rec.value;
+            }
+
+            if (idb[MIGRATION_MARKER] === 'true') {
+                // IndexedDB already holds the data and is authoritative.
+                // Ignore legacy seeds so deleted keys are not resurrected.
+                const pendingSnap = { ...this._cache };
+                this._cache = { ...idb };
+                delete this._cache[MIGRATION_MARKER];
+                for (const k of Object.keys(this._pendingWrites)) {
+                    if (pendingSnap[k] === undefined) delete this._cache[k];
+                    else this._cache[k] = pendingSnap[k];
+                }
+            } else {
+                // First migration: overlay any existing IndexedDB values over the
+                // legacy seed, persist the merged cache, and mark migration done.
+                for (const [k, v] of Object.entries(idb)) {
+                    if (!this._pendingWrites[k]) this._cache[k] = v;
+                }
+                for (const k of Object.keys(this._cache)) {
+                    if (this._pendingWrites[k]) continue;
+                    await KV_STORE.set(k, this._cache[k]);
+                }
+                await KV_STORE.set(MIGRATION_MARKER, 'true');
+                // Remove this app's legacy localStorage data only, leaving any
+                // unrelated data on shared origins untouched.
+                for (const k of Object.keys(this._cache)) {
+                    if (STORAGE._isManagedKey(k)) {
+                        try { localStorage.removeItem(k); } catch (e) {}
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[STORAGE] IndexedDB unavailable, using legacy fallback:', e);
+        }
+
+        this._setupChannel();
+        this._pendingWrites = {};
+        this._initialized = true;
+    },
+
+    _isManagedKey(key) {
+        return typeof key === 'string' && (key.startsWith('gem_') || key.startsWith('ide_'));
+    },
+
+    ready() {
+        return this._readyPromise;
+    },
+
+    getItem(key) {
+        return Object.prototype.hasOwnProperty.call(this._cache, key) ? this._cache[key] : null;
+    },
+
+    setItem(key, value) {
+        const val = String(value);
+        const oldValue = this.getItem(key);
+        this._cache[key] = val;
+        if (!this._initialized) this._pendingWrites[key] = true;
+        if (this._channel) {
+            this._channel.postMessage({ type: 'storage', key, newValue: val, oldValue });
+        }
+        KV_STORE.set(key, val).catch(e => console.error('[STORAGE] set error:', e));
+    },
+
+    removeItem(key) {
+        const oldValue = this.getItem(key);
+        delete this._cache[key];
+        if (!this._initialized) this._pendingWrites[key] = true;
+        if (this._channel) {
+            this._channel.postMessage({ type: 'storage', key, newValue: null, oldValue });
+        }
+        KV_STORE.remove(key).catch(e => console.error('[STORAGE] remove error:', e));
+    },
+
+    keys() {
+        return Object.keys(this._cache);
+    },
+
+    get length() {
+        return Object.keys(this._cache).length;
+    },
+
+    _setupChannel() {
+        if (typeof BroadcastChannel === 'undefined') return;
+        try {
+            this._channel = new BroadcastChannel('traliran-ai-hub-storage');
+            this._channel.onmessage = (e) => {
+                const d = e.data || {};
+                if (d.type !== 'storage') return;
+                if (d.newValue === null) {
+                    delete this._cache[d.key];
+                } else {
+                    this._cache[d.key] = d.newValue;
+                }
+                try {
+                    window.dispatchEvent(new StorageEvent('storage', {
+                        key: d.key,
+                        newValue: d.newValue,
+                        oldValue: d.oldValue,
+                        storageArea: localStorage
+                    }));
+                } catch (err) {
+                    window.dispatchEvent(new CustomEvent('storage', { detail: d }));
+                }
+            };
+        } catch (e) {
+            console.error('[STORAGE] BroadcastChannel error:', e);
+        }
+    }
+};
+
+STORAGE._readyPromise = STORAGE.init();
+
 const DB_CONNECTOR = {
   _config: null,
 
   _loadConfig() {
     if (this._config) return this._config;
     this._config = {
-      url: localStorage.getItem('gem_db_url') || '',
-      key: localStorage.getItem('gem_db_key') || '',
-      type: localStorage.getItem('gem_db_type') || '',
-      email: localStorage.getItem('gem_db_email') || '',
-      token: localStorage.getItem('gem_db_token') || '',
-      refreshToken: localStorage.getItem('gem_db_refresh_token') || '',
+      url: STORAGE.getItem('gem_db_url') || '',
+      key: STORAGE.getItem('gem_db_key') || '',
+      type: STORAGE.getItem('gem_db_type') || '',
+      email: STORAGE.getItem('gem_db_email') || '',
+      token: STORAGE.getItem('gem_db_token') || '',
+      refreshToken: STORAGE.getItem('gem_db_refresh_token') || '',
     };
     if (!this._config.type && this._config.url) {
       this._config.type = this.detectType(this._config.url);
-      localStorage.setItem('gem_db_type', this._config.type);
+      STORAGE.setItem('gem_db_type', this._config.type);
     }
     return this._config;
   },
 
   _saveConfig() {
     Object.entries(this._config).forEach(([k, v]) => {
-      localStorage.setItem(`gem_db_${k}`, v || '');
+      STORAGE.setItem(`gem_db_${k}`, v || '');
     });
   },
 
   _clearConfig() {
-    ['url', 'key', 'type', 'email', 'token', 'refresh_token'].forEach(k => {
-      localStorage.removeItem(`gem_db_${k}`);
+    Object.keys(this._config || {}).forEach(k => {
+      STORAGE.removeItem(`gem_db_${k}`);
     });
     this._config = null;
   },
@@ -269,9 +487,9 @@ const DB_CONNECTOR = {
     cfg.url = url;
     cfg.key = key;
     cfg.type = url ? this.detectType(url) : '';
-    localStorage.setItem('gem_db_url', url);
-    localStorage.setItem('gem_db_key', key);
-    localStorage.setItem('gem_db_type', cfg.type);
+    STORAGE.setItem('gem_db_url', url);
+    STORAGE.setItem('gem_db_key', key);
+    STORAGE.setItem('gem_db_type', cfg.type);
     this._config = cfg;
   },
 
@@ -593,3 +811,9 @@ const DB_CONNECTOR = {
     await this.logout();
   }
 };
+
+// Once IndexedDB-backed storage is loaded, re-read the DB config so any
+// values that changed since the synchronous startup window are picked up.
+STORAGE.ready().then(() => {
+  DB_CONNECTOR._config = null;
+}).catch(e => console.error('[DB_CONNECTOR] Config reload error:', e));

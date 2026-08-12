@@ -37,9 +37,9 @@ const refreshConfigBtn = document.getElementById('refreshConfigBtn');
 marked.use({ breaks: true, gfm: true });
 
 function loadConfig() {
-    const provider = localStorage.getItem('gem_provider') || 'groq';
-    const model = localStorage.getItem(`gem_selected_model_${provider}`) || 'unknown';
-    const botName = localStorage.getItem('gem_bot_name') || 'RAG Assistant';
+    const provider = STORAGE.getItem('gem_provider') || 'groq';
+    const model = STORAGE.getItem(`gem_selected_model_${provider}`) || 'unknown';
+    const botName = STORAGE.getItem('gem_bot_name') || 'RAG Assistant';
     
     activeModelDisplay.textContent = `${botName} | ${provider.toUpperCase()} | ${model}`;
     
@@ -47,15 +47,15 @@ function loadConfig() {
         provider,
         model,
         botName,
-        apiKey: localStorage.getItem(`gem_key_${provider}`) || '',
-        endpoint: localStorage.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url,
-        systemPrompt: localStorage.getItem('gem_system_prompt') || 'You are a knowledgeable AI assistant.',
-        personalInfo: localStorage.getItem('gem_personal_info') || ''
+        apiKey: STORAGE.getItem(`gem_key_${provider}`) || '',
+        endpoint: STORAGE.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url,
+        systemPrompt: STORAGE.getItem('gem_system_prompt') || 'You are a knowledgeable AI assistant.',
+        personalInfo: STORAGE.getItem('gem_personal_info') || ''
     };
 }
 
 function loadKnowledgeBase() {
-    const saved = localStorage.getItem('gem_rag_kb');
+    const saved = STORAGE.getItem('gem_rag_kb');
     if (saved) {
         try {
             knowledgeBase = JSON.parse(saved);
@@ -67,7 +67,7 @@ function loadKnowledgeBase() {
 }
 
 function saveKnowledgeBase() {
-    localStorage.setItem('gem_rag_kb', JSON.stringify(knowledgeBase));
+    STORAGE.setItem('gem_rag_kb', JSON.stringify(knowledgeBase));
     renderKbFiles();
 }
 
@@ -335,7 +335,8 @@ function setupPlaygroundSync() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await STORAGE.ready();
     loadConfig();
     loadKnowledgeBase();
     setupPlaygroundSync();

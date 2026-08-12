@@ -290,13 +290,13 @@ const VFS = {
 
     async loadFromStorage() {
         try {
-            const stored = localStorage.getItem('ide_vfs_files');
+            const stored = STORAGE.getItem('ide_vfs_files');
             if (stored) {
                 vfsFiles = JSON.parse(stored);
             }
             
             // Load commits
-            const commitsStored = localStorage.getItem('ide_vfs_commits');
+            const commitsStored = STORAGE.getItem('ide_vfs_commits');
             if (commitsStored) {
                 commitHistory = JSON.parse(commitsStored);
             }
@@ -316,7 +316,7 @@ const VFS = {
 
     async saveToStorage() {
         try {
-            localStorage.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
+            STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
             window.dispatchEvent(new CustomEvent('vfs:saved'));
         } catch (e) {
             console.error('[VFS] Save error:', e);
@@ -467,7 +467,7 @@ const VERSION_CONTROL = {
         };
         
         commitHistory.unshift(commit);
-        localStorage.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+        STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
         
         // Also save to IndexedDB for persistence
         if (typeof projectDB !== 'undefined' && projectDB.saveCommit) {
@@ -506,7 +506,7 @@ const VERSION_CONTROL = {
                 const commits = await projectDB.getAllCommits();
                 if (commits && commits.length > 0) {
                     commitHistory = commits;
-                    localStorage.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+                    STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
                     console.log('[VERSION] Loaded', commits.length, 'commits from IndexedDB');
                     return;
                 }
@@ -515,12 +515,12 @@ const VERSION_CONTROL = {
             }
         }
         
-        // Fallback to localStorage
-        const stored = localStorage.getItem('ide_vfs_commits');
+        // Fallback to persisted storage (IndexedDB-backed)
+        const stored = STORAGE.getItem('ide_vfs_commits');
         if (stored) {
             try {
                 commitHistory = JSON.parse(stored);
-                console.log('[VERSION] Loaded', commitHistory.length, 'commits from localStorage');
+                console.log('[VERSION] Loaded', commitHistory.length, 'commits from storage');
             } catch (e) {
                 commitHistory = [];
             }
@@ -903,9 +903,9 @@ Be helpful, precise, and professional. All communication must be in English.`;
             ];
 
             // Get API config
-            const provider = apiConfig.provider || localStorage.getItem('gem_provider') || 'groq';
-            const apiKey = apiConfig.apiKey || localStorage.getItem('gem_key_' + provider) || '';
-            const model = apiConfig.model || localStorage.getItem('gem_model') || '';
+            const provider = apiConfig.provider || STORAGE.getItem('gem_provider') || 'groq';
+            const apiKey = apiConfig.apiKey || STORAGE.getItem('gem_key_' + provider) || '';
+            const model = apiConfig.model || STORAGE.getItem('gem_model') || '';
             const baseEndpoint = PROVIDERS[provider]?.url || '';
 
             if (!apiKey && PROVIDERS[provider]?.hasKey) {
@@ -1330,7 +1330,7 @@ function openBotEditor(botId = null) {
     
     // Populate model dropdown
     editBotModel.innerHTML = '';
-    const currentModel = localStorage.getItem('gem_model') || apiConfig.model;
+    const currentModel = STORAGE.getItem('gem_model') || apiConfig.model;
     if (currentModel) {
         const opt = document.createElement('option');
         opt.value = currentModel;
@@ -1343,7 +1343,7 @@ function openBotEditor(botId = null) {
 
 function useBot(botId) {
     activeBotId = botId;
-    localStorage.setItem('ide_active_bot_id', botId);
+    STORAGE.setItem('ide_active_bot_id', botId);
     renderBotStore();
     
     // Show notification
@@ -1393,7 +1393,7 @@ function saveBot() {
         customBots.push(newBot);
     }
     
-    localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+    STORAGE.setItem('ide_custom_bots', JSON.stringify(customBots));
     botEditorModal.classList.add('hidden');
     renderBotStore();
 }
@@ -1407,10 +1407,10 @@ function deleteBot() {
     
     if (activeBotId === editingBotId) {
         activeBotId = null;
-        localStorage.removeItem('ide_active_bot_id');
+        STORAGE.removeItem('ide_active_bot_id');
     }
     
-    localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+    STORAGE.setItem('ide_custom_bots', JSON.stringify(customBots));
     botEditorModal.classList.add('hidden');
     renderBotStore();
 }
@@ -1438,7 +1438,7 @@ function importBots(event) {
             const imported = JSON.parse(e.target.result);
             if (Array.isArray(imported)) {
                 customBots = [...customBots, ...imported];
-                localStorage.setItem('ide_custom_bots', JSON.stringify(customBots));
+                STORAGE.setItem('ide_custom_bots', JSON.stringify(customBots));
                 renderBotStore();
                 alert(`Imported ${imported.length} assistant(s)!`);
             } else {
@@ -1610,10 +1610,10 @@ async function saveApiSettings() {
     }
 
     try {
-        localStorage.setItem('gem_provider', provider);
-        localStorage.setItem('gem_key_' + provider, apiKey);
-        localStorage.setItem('gem_model', model);
-        if (baseUrl) localStorage.setItem('gem_endpoint', baseUrl);
+        STORAGE.setItem('gem_provider', provider);
+        STORAGE.setItem('gem_key_' + provider, apiKey);
+        STORAGE.setItem('gem_model', model);
+        if (baseUrl) STORAGE.setItem('gem_endpoint', baseUrl);
 
         apiConfig.provider = provider;
         apiConfig.apiKey = apiKey;
@@ -1640,10 +1640,10 @@ window.fetchActiveModels = fetchActiveModels;
 // ==================== AUTH & SETTINGS SYNC ====================
 
 function loadApiConfig() {
-    apiConfig.provider = localStorage.getItem('gem_provider') || 'groq';
-    apiConfig.apiKey = localStorage.getItem('gem_key_' + apiConfig.provider) || '';
-    apiConfig.endpoint = localStorage.getItem('gem_endpoint') || '';
-    apiConfig.model = localStorage.getItem('gem_model') || '';
+    apiConfig.provider = STORAGE.getItem('gem_provider') || 'groq';
+    apiConfig.apiKey = STORAGE.getItem('gem_key_' + apiConfig.provider) || '';
+    apiConfig.endpoint = STORAGE.getItem('gem_endpoint') || '';
+    apiConfig.model = STORAGE.getItem('gem_model') || '';
     
     if (agentModelDisplay) {
         agentModelDisplay.textContent = `Model: ${apiConfig.model || '--'}`;
@@ -1679,8 +1679,8 @@ async function handleLogin(email, password) {
         
         // Save DB config first
         DB_CONNECTOR.setConfig(dbUrl, dbKey);
-        localStorage.setItem('gem_db_url', dbUrl);
-        localStorage.setItem('gem_db_key', dbKey);
+        STORAGE.setItem('gem_db_url', dbUrl);
+        STORAGE.setItem('gem_db_key', dbKey);
         
         loginStatus.textContent = 'Logging in...';
         await DB_CONNECTOR.login(email, password);
@@ -1707,8 +1707,8 @@ async function handleRegister(email, password) {
         
         // Save DB config first
         DB_CONNECTOR.setConfig(dbUrl, dbKey);
-        localStorage.setItem('gem_db_url', dbUrl);
-        localStorage.setItem('gem_db_key', dbKey);
+        STORAGE.setItem('gem_db_url', dbUrl);
+        STORAGE.setItem('gem_db_key', dbKey);
         
         loginStatus.textContent = 'Registering...';
         await DB_CONNECTOR.register(email, password);
@@ -1890,6 +1890,9 @@ async function deleteFileOrFolder(path) {
 async function init() {
     console.log('[IDE] Initializing...');
     
+    // Ensure IndexedDB-backed storage is loaded before reading any persisted state
+    await STORAGE.ready();
+    
     // Get DOM elements
     filesTabBtn = document.getElementById('filesTabBtn');
     versionControlTabBtn = document.getElementById('versionControlTabBtn');
@@ -1953,15 +1956,15 @@ async function init() {
     loginStatus = document.getElementById('loginStatus');
     
     // Load saved DB config
-    const savedDbUrl = localStorage.getItem('gem_db_url') || '';
-    const savedDbKey = localStorage.getItem('gem_db_key') || '';
+    const savedDbUrl = STORAGE.getItem('gem_db_url') || '';
+    const savedDbKey = STORAGE.getItem('gem_db_key') || '';
     if (savedDbUrl && loginDbUrl) loginDbUrl.value = savedDbUrl;
     if (savedDbKey && loginDbKey) loginDbKey.value = savedDbKey;
     
     // Initialize VFS
     await VFS.init();
     
-    // Load commits from storage (IndexedDB or localStorage)
+    // Load commits from storage (IndexedDB-backed)
     await VERSION_CONTROL.loadCommitsFromStorage();
     
     // Initialize Monaco
@@ -1977,7 +1980,7 @@ async function init() {
     }
     
     // Load custom bots
-    const savedBots = localStorage.getItem('ide_custom_bots');
+    const savedBots = STORAGE.getItem('ide_custom_bots');
     if (savedBots) {
         try {
             customBots = JSON.parse(savedBots);
@@ -1986,7 +1989,7 @@ async function init() {
         }
     }
     
-    const savedActiveBot = localStorage.getItem('ide_active_bot_id');
+    const savedActiveBot = STORAGE.getItem('ide_active_bot_id');
     activeBotId = savedActiveBot;
     
     // Load API config

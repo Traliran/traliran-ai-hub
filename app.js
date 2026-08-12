@@ -242,7 +242,7 @@ summarizeChatBtn.addEventListener('click', async () => {
                 : `--- Conversation Summary ---\n${summary}`;
             
             personalInfoInput.value = newInfo;
-            localStorage.setItem('gem_personal_info', newInfo);
+            STORAGE.setItem('gem_personal_info', newInfo);
             
             summarizeChatBtn.innerHTML = '✅ <span class="hidden sm:inline">Done!</span>';
             setTimeout(() => {
@@ -362,26 +362,26 @@ openStoreBtn.addEventListener('click', () => {
 closeStoreModal.addEventListener('click', () => { storeModal.classList.add('hidden'); });
 
 function loadApiSettings() {
-    const provider = localStorage.getItem('gem_provider') || 'groq';
+    const provider = STORAGE.getItem('gem_provider') || 'groq';
     apiProvider.value = provider;
     handleProviderChange(provider);
 
-    apiKeyValue.value = localStorage.getItem(`gem_key_${provider}`) || '';
-    apiEndpoint.value = localStorage.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url;
-    botNameInput.value = localStorage.getItem('gem_bot_name') || 'System AI';
-    botPromptInput.value = localStorage.getItem('gem_system_prompt') || '';
-    personalInfoInput.value = localStorage.getItem('gem_personal_info') || '';
+    apiKeyValue.value = STORAGE.getItem(`gem_key_${provider}`) || '';
+    apiEndpoint.value = STORAGE.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url;
+    botNameInput.value = STORAGE.getItem('gem_bot_name') || 'System AI';
+    botPromptInput.value = STORAGE.getItem('gem_system_prompt') || '';
+    personalInfoInput.value = STORAGE.getItem('gem_personal_info') || '';
 
-    const savedTemp = localStorage.getItem('gem_temp') || '0.7';
+    const savedTemp = STORAGE.getItem('gem_temp') || '0.7';
     tempInput.value = savedTemp; tempValue.textContent = savedTemp;
 
-    const savedTopP = localStorage.getItem('gem_topp') || '1.0';
+    const savedTopP = STORAGE.getItem('gem_topp') || '1.0';
     topPInput.value = savedTopP; topPValue.textContent = savedTopP;
 
-    const savedTokens = localStorage.getItem('gem_tokens') || '2048';
+    const savedTokens = STORAGE.getItem('gem_tokens') || '2048';
     tokensInput.value = savedTokens; tokensValue.textContent = savedTokens;
 
-    const savedTheme = localStorage.getItem('gem_theme') || 'default';
+    const savedTheme = STORAGE.getItem('gem_theme') || 'default';
     themeSelector.value = savedTheme;
     applyTheme(savedTheme);
 
@@ -390,15 +390,15 @@ function loadApiSettings() {
 
 function saveApiSettings() {
     const provider = apiProvider.value;
-    localStorage.setItem('gem_provider', provider);
-    localStorage.setItem(`gem_key_${provider}`, apiKeyValue.value.trim());
-    localStorage.setItem(`gem_endpoint_${provider}`, apiEndpoint.value.trim());
-    localStorage.setItem('gem_bot_name', botNameInput.value.trim());
-    localStorage.setItem('gem_system_prompt', botPromptInput.value.trim());
-    localStorage.setItem('gem_personal_info', personalInfoInput.value.trim());
-    localStorage.setItem('gem_temp', tempInput.value);
-    localStorage.setItem('gem_topp', topPInput.value);
-    localStorage.setItem('gem_tokens', tokensInput.value);
+    STORAGE.setItem('gem_provider', provider);
+    STORAGE.setItem(`gem_key_${provider}`, apiKeyValue.value.trim());
+    STORAGE.setItem(`gem_endpoint_${provider}`, apiEndpoint.value.trim());
+    STORAGE.setItem('gem_bot_name', botNameInput.value.trim());
+    STORAGE.setItem('gem_system_prompt', botPromptInput.value.trim());
+    STORAGE.setItem('gem_personal_info', personalInfoInput.value.trim());
+    STORAGE.setItem('gem_temp', tempInput.value);
+    STORAGE.setItem('gem_topp', topPInput.value);
+    STORAGE.setItem('gem_tokens', tokensInput.value);
     updateStatusCard();
 }
 
@@ -407,7 +407,7 @@ function applyTheme(theme) {
     if (theme === 'default') {
         document.body.classList.remove('theme-cyberpunk', 'theme-matrix', 'theme-light');
     }
-    localStorage.setItem('gem_theme', theme);
+    STORAGE.setItem('gem_theme', theme);
 }
 
 themeSelector.addEventListener('change', (e) => {
@@ -423,8 +423,8 @@ function handleProviderChange(provider) {
         apiKeyContainer.classList.add('hidden');
         endpointContainer.classList.remove('hidden');
     }
-    apiEndpoint.value = localStorage.getItem(`gem_endpoint_${provider}`) || details.url;
-    apiKeyValue.value = localStorage.getItem(`gem_key_${provider}`) || '';
+    apiEndpoint.value = STORAGE.getItem(`gem_endpoint_${provider}`) || details.url;
+    apiKeyValue.value = STORAGE.getItem(`gem_key_${provider}`) || '';
     selectedMultiModels = [];
     updateMultiModelUI();
 }
@@ -474,7 +474,7 @@ function updateMultiModelUI() {
 }
 
 function loadSessions() {
-    const saved = localStorage.getItem('gem_sessions');
+    const saved = STORAGE.getItem('gem_sessions');
     if (saved) {
         try { sessions = JSON.parse(saved); } catch (e) { sessions = []; }
     }
@@ -488,7 +488,7 @@ function loadSessions() {
 }
 
 function saveSessionsToStorage() {
-    localStorage.setItem('gem_sessions', JSON.stringify(sessions));
+    STORAGE.setItem('gem_sessions', JSON.stringify(sessions));
 }
 
 function createNewSession() {
@@ -604,7 +604,7 @@ async function fetchActiveModels() {
             botModelSelect.innerHTML = '';
             fallbackModels.forEach(model => botModelSelect.add(new Option(model, model)));
             botModelSelect.selectedIndex = 0;
-            localStorage.setItem(`gem_selected_model_${provider}`, botModelSelect.value);
+            STORAGE.setItem(`gem_selected_model_${provider}`, botModelSelect.value);
             updateStatusCard();
             return;
         }
@@ -628,7 +628,7 @@ async function fetchActiveModels() {
             return;
         }
 
-        const savedSelected = localStorage.getItem(`gem_selected_model_${provider}`);
+        const savedSelected = STORAGE.getItem(`gem_selected_model_${provider}`);
         botModelSelect.innerHTML = '';
         models.forEach(m => {
             const modelId = m.id || m.name;
@@ -640,7 +640,7 @@ async function fetchActiveModels() {
         } else {
             botModelSelect.selectedIndex = 0;
         }
-        localStorage.setItem(`gem_selected_model_${provider}`, botModelSelect.value);
+        STORAGE.setItem(`gem_selected_model_${provider}`, botModelSelect.value);
         updateStatusCard();
     } catch (err) {
         console.error(err);
@@ -762,7 +762,7 @@ function showIntroStep() {
 startIntroBtn.addEventListener('click', startIntro);
 
 function loadNotes() {
-    const saved = localStorage.getItem('gem_notes');
+    const saved = STORAGE.getItem('gem_notes');
     if (saved) {
         try { notes = JSON.parse(saved); } catch (e) { notes = []; }
     }
@@ -773,7 +773,7 @@ function loadNotes() {
 }
 
 function saveNotesToStorage() {
-    localStorage.setItem('gem_notes', JSON.stringify(notes));
+    STORAGE.setItem('gem_notes', JSON.stringify(notes));
 }
 function createNewNote() {
     const id = 'note_' + Date.now();
@@ -1600,7 +1600,7 @@ botNameInput.addEventListener('input', saveApiSettings);
 botPromptInput.addEventListener('input', saveApiSettings);
 personalInfoInput.addEventListener('input', saveApiSettings);
 botModelSelect.addEventListener('change', () => {
-    localStorage.setItem(`gem_selected_model_${apiProvider.value}`, botModelSelect.value);
+    STORAGE.setItem(`gem_selected_model_${apiProvider.value}`, botModelSelect.value);
     updateStatusCard();
 });
 
@@ -1820,7 +1820,7 @@ importJsonInput.addEventListener('change', (e) => {
             if (config.topP !== undefined) { topPInput.value = config.topP; topPValue.textContent = config.topP; }
             if (config.maxTokens !== undefined) { tokensInput.value = config.maxTokens; tokensValue.textContent = config.maxTokens; }
             saveApiSettings();
-            if (config.selectedModel) localStorage.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
+            if (config.selectedModel) STORAGE.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
             fetchActiveModels();
             alert('Configuration Loaded!');
             closeSidebarUniversal();
@@ -1867,8 +1867,8 @@ function updateSyncStatus(text, isError) {
     indicator.textContent = text || 'Not connected';
     indicator.style.color = isError ? '#f87171' : (SYNC_MANAGER.isLoggedIn() ? '#34d399' : '#6b7280');
 
-    if (dbUrl) dbUrl.value = localStorage.getItem('gem_db_url') || '';
-    if (dbKey) dbKey.value = localStorage.getItem('gem_db_key') || '';
+    if (dbUrl) dbUrl.value = STORAGE.getItem('gem_db_url') || '';
+    if (dbKey) dbKey.value = STORAGE.getItem('gem_db_key') || '';
     if (connectBtn && disconnectBtn) {
         if (SYNC_MANAGER.isLoggedIn()) {
             connectBtn.classList.add('hidden');
@@ -2016,10 +2016,13 @@ SYNC_MANAGER.setStatusCallback(updateSyncStatus);
 updateLoginButton();
 updateSyncStatus();
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await STORAGE.ready();
     loadApiSettings();
     loadSessions();
     loadNotes();
+    updateLoginButton();
+    updateSyncStatus();
 
     if (SYNC_MANAGER.isLoggedIn()) {
         SYNC_MANAGER.pullAndMerge().then(() => {
