@@ -48,17 +48,19 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 
 ## 🚀 Key Features
 
-* **Multi-provider support:** Quickly switch between cloud APIs (Groq, Google Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude) and local neural networks (Ollama, Llama.cpp).
-* **☁️ Cloud Sync:** Synchronize chats, settings, and presets across all your devices.
-* **🧠 Personal AI:** A section for entering context about yourself—automatically incorporated into all system prompts.
-* **⚡ Multi-Model Setup:** Send a query to multiple models simultaneously and view their responses side by side for quick benchmarking.
-* **👥 AI Group Debate Mode:** Test your ideas with three specialized agents (*Optimist*, *Critic*, *Technologist*) that analyze your hypothesis from different angles.
-* **📝 Built-in Notes (My Notes):** A built-in notepad for quickly jotting down thoughts, drafts, and generated responses.
-* **💻 Sandbox Interpreter:** Safe rendering and execution of generated HTML/JS/CSS code in a separate component right during the conversation.
-* **🏪 Assistant Store:** A catalog of free extensions and ready-made presets for solving specific tasks (polyglot translator, code editor, idea generator, etc.).
-* **🎨 Themes:** Support for multiple visual presets (Default Dark, Cyberpunk, Matrix).
-* **⚙️ Fine-Tuning Parameters:** Control generation “on the fly” using the Temperature, Top P, and Max Tokens sliders.
-* **📦 Import/Export:** Quickly save and load settings and profiles in JSON format.
+*   **Multi-Provider Support:** Seamlessly switch between top cloud APIs (Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude) and local LLMs (Ollama, Llama.cpp).
+*   **⚡ Multi-Model Setup & Compare:** Select multiple models simultaneously — including across different providers (Groq + OpenAI + Claude, local models, etc.), each using its own configured API key. The app triggers parallel requests and renders side-by-side comparative cards with per-model and per-provider labels for instant benchmarking.
+*   **💡 Model Thinking Support:** Native rendering for reasoning models (like DeepSeek-R1). Structural thoughts are captured and organized into a clean, collapsible hidden dropdown block.
+*   **👥 AI Group Debate Mode:** Turn your raw ideas into fully analyzed concepts. Run a multi-agent discussion loop where specialized personas (Optimist, Critic, and Technologist) cross-examine your thesis over multiple rounds.
+*   **⚡ AI IDE - Integrated Development Environment:** A full-fledged in-browser IDE for code generation, editing, and project management, powered by your chosen AI model.
+    *   **File Explorer:** Manage multiple project files (HTML, CSS, JS, etc.).
+    *   **Code Editor:** Edit files with a monospaced code editor.
+    *   **Live Preview:** Instantly preview HTML/JS/CSS code changes in an isolated iframe.
+    *   **AI:** Utilize AI for quick actions like `Create Layout`, `Optimize / Clean`, `Explain Code`, and `Debug & Fix` based on your active file or prompt.
+    *   **Project Management:** Download your entire workspace as a `.zip` or reset it.
+*   **💻 Built-in Sandbox Interpreter:** Execute, preview, and test generated HTML/JS/CSS code snippets securely in an isolated iframe without leaving the main chat workspace.
+*   **🏪 Assistant Store:** Access a marketplace of free and premium, highly-optimized AI assistant presets and custom prompts for various tasks (e.g., Polyglot Translator, Code & Text Editor, Ideation Generator).
+*   **⚙️ Advanced Parameters Control:** Fine-tune system behaviors with on-the-fly adjustable sliders for Temperature, Top P, and Max Tokens configuration.
 
 ---
 
