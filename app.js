@@ -430,22 +430,129 @@ function handleProviderChange(provider) {
     updateMultiModelUI();
 }
 
-openMultiModelBtn.addEventListener('click', () => {
-    multiModelList.innerHTML = '';
-    const options = Array.from(botModelSelect.options);
-    if (options.length === 0 || options[0].value === '') {
-        multiModelList.innerHTML = '<p class="text-xs text-gray-500">Please fetch models using a valid API key first.</p>';
-    } else {
-        options.forEach(opt => {
-            const modelId = opt.value;
+function getProviderConfig(providerName) {
+    const details = PROVIDERS[providerName] || PROVIDERS.openai;
+    return {
+        providerName,
+        endpoint: STORAGE.getItem(`gem_endpoint_${providerName}`) || details.url,
+        apiKey: STORAGE.getItem(`gem_key_${providerName}`) || '',
+        hasKey: details.hasKey,
+        type: details.type
+    };
+}
+
+async function fetchProviderModels(providerName) {
+    const cfg = getProviderConfig(providerName);
+    if (cfg.hasKey && !cfg.apiKey) return [];
+
+    if (providerName === 'claude') {
+        return ['claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest'];
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (cfg.hasKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
+
+    const response = await fetch(`${cfg.endpoint}/models`, { method: 'GET', headers });
+    if (!response.ok) throw new Error(`Status Error: ${response.status}`);
+
+    const json = await response.json();
+    let models = json.data && Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+
+    return models
+        .filter(m => {
+            const id = (m.id || m.name || '').toLowerCase();
+            return !id.includes('whisper') && !id.includes('tts') && !id.includes('embed') && !id.includes('guard');
+        })
+        .map(m => m.id || m.name)
+        .filter(Boolean);
+}
+
+async function populateMultiModelList() {
+    multiModelList.innerHTML = '<p class="text-xs text-gray-500 animate-pulse">Fetching models across providers...</p>';
+
+    let totalModels = 0;
+    const sections = [];
+
+    for (const providerName of Object.keys(PROVIDERS)) {
+        const cfg = getProviderConfig(providerName);
+
+        const section = document.createElement('div');
+        section.className = 'mb-2';
+        const header = document.createElement('div');
+        header.className = 'text-[11px] font-bold text-indigo-300 uppercase tracking-wider mb-1 flex items-center justify-between';
+        header.innerHTML = `<span>${providerName}</span><span class="text-gray-600 font-mono normal-case text-[10px] truncate ml-2">${cfg.endpoint}</span>`;
+        section.appendChild(header);
+
+        let models = [];
+        try {
+            models = await fetchProviderModels(providerName);
+        } catch (e) {
+            const errNote = document.createElement('p');
+            errNote.className = 'text-[11px] text-rose-400/70';
+            errNote.textContent = 'Failed to fetch models: ' + e.message;
+            section.appendChild(errNote);
+            sections.push(section);
+            continue;
+        }
+
+        if (cfg.hasKey && !cfg.apiKey) {
+            const note = document.createElement('p');
+            note.className = 'text-[11px] text-gray-500';
+            note.textContent = 'No API key configured for this provider.';
+            section.appendChild(note);
+            sections.push(section);
+            continue;
+        }
+
+        if (models.length === 0) {
+            const note = document.createElement('p');
+            note.className = 'text-[11px] text-gray-500';
+            note.textContent = 'No models found.';
+            section.appendChild(note);
+            sections.push(section);
+            continue;
+        }
+
+        totalModels += models.length;
+        models.forEach(modelId => {
             const item = document.createElement('label');
             item.className = 'flex items-center gap-2 p-1.5 hover:bg-gray-900 rounded text-xs text-gray-300 cursor-pointer';
-            const isChecked = selectedMultiModels.includes(modelId);
-            item.innerHTML = `<input type="checkbox" value="${modelId}" ${isChecked ? 'checked' : ''} class="accent-indigo-500"> <span>${modelId}</span>`;
-            multiModelList.appendChild(item);
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'accent-indigo-500';
+            checkbox.dataset.provider = providerName;
+            checkbox.dataset.model = modelId;
+            checkbox.checked = selectedMultiModels.some(s => s.provider === providerName && s.model === modelId);
+
+            const span = document.createElement('span');
+            span.textContent = modelId;
+            span.className = 'truncate';
+
+            const badge = document.createElement('span');
+            badge.className = 'ml-auto shrink-0 text-[10px] text-gray-600 font-mono';
+            badge.textContent = providerName;
+
+            item.appendChild(checkbox);
+            item.appendChild(span);
+            item.appendChild(badge);
+            section.appendChild(item);
         });
+
+        sections.push(section);
     }
+
+    multiModelList.innerHTML = '';
+    sections.forEach(sec => multiModelList.appendChild(sec));
+
+    if (totalModels === 0) {
+        multiModelList.innerHTML = '<p class="text-xs text-gray-500">No models available. Configure API keys (or local endpoints) for the providers you want to compare.</p>';
+    }
+}
+
+openMultiModelBtn.addEventListener('click', () => {
     multiModelModal.classList.remove('hidden');
+    populateMultiModelList();
 });
 
 closeMultiModelModal.addEventListener('click', () => multiModelModal.classList.add('hidden'));
@@ -457,14 +564,17 @@ clearMultiModelsBtn.addEventListener('click', () => {
 
 saveMultiModelsBtn.addEventListener('click', () => {
     const checkboxes = multiModelList.querySelectorAll('input[type="checkbox"]:checked');
-    selectedMultiModels = Array.from(checkboxes).map(cb => cb.value);
+    selectedMultiModels = Array.from(checkboxes).map(cb => ({ provider: cb.dataset.provider, model: cb.dataset.model }));
     updateMultiModelUI();
     multiModelModal.classList.add('hidden');
 });
 
 function updateMultiModelUI() {
     if (selectedMultiModels.length > 0) {
-        multiModelBadge.textContent = `⚡ Parallel Mode Active: ${selectedMultiModels.length} models`;
+        const providerCount = new Set(selectedMultiModels.map(s => s.provider)).size;
+        multiModelBadge.textContent = providerCount > 1
+            ? `⚡ Cross-Provider Compare: ${selectedMultiModels.length} models (${providerCount} providers)`
+            : `⚡ Parallel Mode Active: ${selectedMultiModels.length} models`;
         multiModelBadge.classList.remove('hidden');
         botModelSelect.disabled = true;
     } else {
@@ -883,7 +993,7 @@ async function complementNote() {
 
     console.log('AI Config:', { providerName, model, hasKey });
 
-    if (hasKey && !apiKey) {
+if (hasKey && !apiKey) {
         alert('Please enter your API key first!');
         openSidebarUniversal();
         return;
@@ -1338,7 +1448,7 @@ async function triggerAiResponse(session) {
     const topP = parseFloat(topPInput.value);
     const maxTokens = parseInt(tokensInput.value);
 
-    if (hasKey && !apiKey) {
+    if (selectedMultiModels.length === 0 && hasKey && !apiKey) {
         alert('Please enter your API key!');
         openSidebarUniversal();
         return;
@@ -1365,7 +1475,8 @@ async function triggerAiResponse(session) {
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'text-xs text-gray-500 italic px-1 animate-pulse';
     loadingDiv.id = 'apiLoading';
-    loadingDiv.innerText = `Connecting to endpoints [${activeModels.join(', ')}]...`;
+    const modelLabels = activeModels.map(m => typeof m === 'string' ? m : `${m.model} (${m.provider})`).join(', ');
+    loadingDiv.innerText = `Connecting to endpoints [${modelLabels}]...`;
     chatWindow.appendChild(loadingDiv);
     chatWindow.scrollTop = chatWindow.scrollHeight;
 
@@ -1414,19 +1525,20 @@ async function triggerAiResponse(session) {
             renderMessageToDOM('assistant', content, session.botName, session.messages.length - 1);
             updateSummarizeButtonVisibility();
         } else {
-            const requests = activeModels.map(modelId => {
+            const requests = activeModels.map(entry => {
+                const cfg = getProviderConfig(entry.provider);
                 const payload = {
-                    model: modelId,
+                    model: entry.model,
                     messages: messagesToSend,
                     temperature,
                     top_p: topP,
                     max_tokens: maxTokens
                 };
-                return fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName, currentAbortController.signal)
-                    .then(res => ({ success: true, model: modelId, data: res }))
+                return fetchSingleCompletion(cfg.endpoint, cfg.apiKey, cfg.hasKey, payload, entry.provider, currentAbortController.signal)
+                    .then(res => ({ success: true, model: entry.model, provider: entry.provider, data: res }))
                     .catch(err => {
                         if (err.name === 'AbortError') throw err;
-                        return { success: false, model: modelId, error: err.message };
+                        return { success: false, model: entry.model, provider: entry.provider, error: err.message };
                     });
             });
 
@@ -1435,9 +1547,9 @@ async function triggerAiResponse(session) {
 
             let multiMarkdown = '### 📊 Multi-Model Performance Comparison\n\n';
             results.forEach(res => {
-                multiMarkdown += `#### 🤖 Model: \`${res.model}\`\n`;
+                multiMarkdown += `#### 🤖 Model: \`${res.model}\`\n##### 🔌 Provider: \`${res.provider}\`\n`;
                 if (res.success) {
-                    const parsed = extractAssistantContent(res.data, providerName);
+                    const parsed = extractAssistantContent(res.data, res.provider);
                     let text = parsed.content || '';
                     const thinking = parsed.reasoning_content || '';
                     if (thinking) {

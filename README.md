@@ -44,7 +44,7 @@ Inside, you can unlock exclusive, highly-optimized Premium Bots (advanced custom
 ## 🚀 Key Features
 
 *   **Multi-Provider Support:** Seamlessly switch between top cloud APIs (Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude) and local LLMs (Ollama, Llama.cpp).
-*   **⚡ Multi-Model Setup & Compare:** Select multiple models simultaneously. The app triggers parallel API requests and renders side-by-side comparative cards for instant benchmarking.
+*   **⚡ Multi-Model Setup & Compare:** Select multiple models simultaneously — including across different providers (Groq + OpenAI + Claude, local models, etc.), each using its own configured API key. The app triggers parallel requests and renders side-by-side comparative cards with per-model and per-provider labels for instant benchmarking.
 *   **💡 Model Thinking Support:** Native rendering for reasoning models (like DeepSeek-R1). Structural thoughts are captured and organized into a clean, collapsible hidden dropdown block.
 *   **👥 AI Group Debate Mode:** Turn your raw ideas into fully analyzed concepts. Run a multi-agent discussion loop where specialized personas (Optimist, Critic, and Technologist) cross-examine your thesis over multiple rounds.
 *   **⚡ AI IDE - Integrated Development Environment:** A full-fledged in-browser IDE for code generation, editing, and project management, powered by your chosen AI model.
