@@ -528,6 +528,7 @@ function loadApiSettings() {
     themeSelector.value = savedTheme;
     applyTheme(savedTheme);
 
+    renderMcpToolsList();
     fetchActiveModels();
 }
 
@@ -1780,6 +1781,18 @@ async function sendMessage() {
             ? `${fullSystemPrompt}\n\n[About the user]:\n${personalInfo}`
             : `[About the user]:\n${personalInfo}`;
     }
+    
+    // Add MCP tools instructions to system prompt
+    if (customMcpTools.length > 0) {
+        const mcpInstructions = customMcpTools.map(tool => {
+            return `## Tool: ${tool.name}\n${tool.description ? `Description: ${tool.description}\n` : ''}Instructions: ${tool.prompt}`;
+        }).join('\n\n');
+        
+        fullSystemPrompt = fullSystemPrompt
+            ? `${fullSystemPrompt}\n\n[Available Tools]:\nYou have access to the following custom tools. Use them when appropriate based on their descriptions:\n\n${mcpInstructions}`
+            : `[Available Tools]:\nYou have access to the following custom tools. Use them when appropriate based on their descriptions:\n\n${mcpInstructions}`;
+    }
+    
     session.systemPrompt = fullSystemPrompt
         ? `${fullSystemPrompt}\n\n${userLanguageHint}`
         : userLanguageHint;
