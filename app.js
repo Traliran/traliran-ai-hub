@@ -73,17 +73,6 @@ let attachedFileName = "";
 let attachedFileType = "";
 let selectedMultiModels = [];
 let currentAbortController = null;
-let customMcpTools = [];
-
-// Load custom MCP tools from storage
-try {
-    const savedTools = STORAGE.getItem('hub_mcp_tools');
-    if (savedTools) {
-        customMcpTools = JSON.parse(savedTools);
-    }
-} catch (e) {
-    console.error('Error loading MCP tools:', e);
-}
 
 const apiProvider = document.getElementById('apiProvider');
 const apiKeyValue = document.getElementById('apiKeyValue');
@@ -167,19 +156,6 @@ const streamingStatus = document.getElementById('streamingStatus');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggleSidebar');
 const closeSidebarBtn = document.getElementById('closeSidebar');
-
-// MCP Tools DOM Elements
-const mcpToolsSection = document.getElementById('mcpToolsSection');
-const mcpToolsList = document.getElementById('mcpToolsList');
-const addMcpToolBtn = document.getElementById('addMcpToolBtn');
-const mcpToolModal = document.getElementById('mcpToolModal');
-const closeMcpToolModal = document.getElementById('closeMcpToolModal');
-const mcpToolName = document.getElementById('mcpToolName');
-const mcpToolDescription = document.getElementById('mcpToolDescription');
-const mcpToolPrompt = document.getElementById('mcpToolPrompt');
-const saveMcpToolBtn = document.getElementById('saveMcpToolBtn');
-const deleteMcpToolBtn = document.getElementById('deleteMcpToolBtn');
-let editingMcpToolId = null;
 
 const TOKEN_COST_PER_1K = 0.03; // Approximate cost estimate for user-facing display
 const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -380,129 +356,11 @@ window.installFreeAssistant = function(name, promptText) {
     alert(`Assistant Profile "${name}" is now online!`);
 };
 
-// MCP Tools Management Functions
-function renderMcpToolsList() {
-    if (!mcpToolsList) return;
-    
-    mcpToolsList.innerHTML = '';
-    
-    if (customMcpTools.length === 0) {
-        mcpToolsList.innerHTML = `
-            <div class="text-center py-6 text-gray-500 text-xs">
-                <div class="text-2xl mb-2">🔧</div>
-                <p>No custom MCP tools configured.</p>
-                <p class="mt-1">Click "Add Tool" to create your first tool preset.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    customMcpTools.forEach((tool, index) => {
-        const toolCard = document.createElement('div');
-        toolCard.className = 'bg-gray-800/50 border border-gray-700 rounded-lg p-3 flex items-center justify-between gap-2';
-        toolCard.innerHTML = `
-            <div class="flex-1 min-w-0">
-                <div class="font-semibold text-xs text-emerald-400 truncate">${escapeHtml(tool.name)}</div>
-                <div class="text-[10px] text-gray-500 truncate">${escapeHtml(tool.description || '')}</div>
-            </div>
-            <div class="flex gap-1 shrink-0">
-                <button onclick="editMcpTool(${index})" class="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition" title="Edit">✏️</button>
-                <button onclick="deleteMcpTool(${index})" class="p-1.5 bg-rose-900/50 hover:bg-rose-900 rounded text-rose-300 transition" title="Delete">🗑️</button>
-            </div>
-        `;
-        mcpToolsList.appendChild(toolCard);
-    });
-}
-
-window.editMcpTool = function(index) {
-    if (index < 0 || index >= customMcpTools.length) return;
-    
-    editingMcpToolId = index;
-    const tool = customMcpTools[index];
-    
-    mcpToolName.value = tool.name || '';
-    mcpToolDescription.value = tool.description || '';
-    mcpToolPrompt.value = tool.prompt || '';
-    
-    mcpToolModal.classList.remove('hidden');
-};
-
-window.deleteMcpTool = function(index) {
-    if (index < 0 || index >= customMcpTools.length) return;
-    
-    if (confirm('Are you sure you want to delete this MCP tool preset?')) {
-        customMcpTools.splice(index, 1);
-        saveApiSettings();
-        renderMcpToolsList();
-    }
-};
-
-function openMcpToolEditor(toolId = null) {
-    editingMcpToolId = toolId;
-    
-    if (toolId !== null && customMcpTools[toolId]) {
-        const tool = customMcpTools[toolId];
-        mcpToolName.value = tool.name || '';
-        mcpToolDescription.value = tool.description || '';
-        mcpToolPrompt.value = tool.prompt || '';
-    } else {
-        editingMcpToolId = null;
-        mcpToolName.value = '';
-        mcpToolDescription.value = '';
-        mcpToolPrompt.value = '';
-    }
-    
-    mcpToolModal.classList.remove('hidden');
-}
-
-function saveMcpTool() {
-    const toolData = {
-        id: Date.now().toString(),
-        name: mcpToolName.value.trim(),
-        description: mcpToolDescription.value.trim(),
-        prompt: mcpToolPrompt.value.trim()
-    };
-    
-    if (!toolData.name || !toolData.prompt) {
-        alert('Please fill in at least the tool name and prompt.');
-        return;
-    }
-    
-    if (editingMcpToolId !== null && customMcpTools[editingMcpToolId]) {
-        customMcpTools[editingMcpToolId] = toolData;
-    } else {
-        customMcpTools.push(toolData);
-    }
-    
-    saveApiSettings();
-    renderMcpToolsList();
-    mcpToolModal.classList.add('hidden');
-}
-
 openStoreBtn.addEventListener('click', () => {
     renderPaidStoreBots();
     storeModal.classList.remove('hidden');
 });
 closeStoreModal.addEventListener('click', () => { storeModal.classList.add('hidden'); });
-
-// MCP Tools Event Listeners
-if (addMcpToolBtn) {
-    addMcpToolBtn.addEventListener('click', () => openMcpToolEditor());
-}
-if (closeMcpToolModal) {
-    closeMcpToolModal.addEventListener('click', () => mcpToolModal.classList.add('hidden'));
-}
-if (saveMcpToolBtn) {
-    saveMcpToolBtn.addEventListener('click', saveMcpTool);
-}
-if (deleteMcpToolBtn) {
-    deleteMcpToolBtn.addEventListener('click', () => {
-        if (editingMcpToolId !== null && customMcpTools[editingMcpToolId]) {
-            window.deleteMcpTool(editingMcpToolId);
-            mcpToolModal.classList.add('hidden');
-        }
-    });
-}
 
 function loadApiSettings() {
     const provider = STORAGE.getItem('gem_provider') || 'groq';
@@ -542,7 +400,6 @@ function saveApiSettings() {
     STORAGE.setItem('gem_temp', tempInput.value);
     STORAGE.setItem('gem_topp', topPInput.value);
     STORAGE.setItem('gem_tokens', tokensInput.value);
-    STORAGE.setItem('hub_mcp_tools', JSON.stringify(customMcpTools));
     updateStatusCard();
 }
 
