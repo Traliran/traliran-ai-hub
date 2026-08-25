@@ -80,6 +80,9 @@
                     <button id="toggleSandboxBtn" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
                         <span>💻</span> Sandbox
                     </button>
+                    <button id="openMcpBtn" class="flex bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 border border-fuchsia-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
+                        <span>🧩</span> MCP Servers
+                    </button>
                 </div>
             </div>
         </div>
@@ -297,6 +300,11 @@
         </div>
 
                 <div class="p-4 bg-gray-900/40 border-t border-gray-900 flex flex-col gap-2">
+                    <div id="mcpBadge" class="max-w-4xl w-full mx-auto hidden items-center gap-2 bg-fuchsia-950/40 border border-fuchsia-800 px-3 py-1.5 rounded-lg text-xs text-fuchsia-200">
+                        <span>🧩</span>
+                        <span id="mcpBadgeText">MCP tools ready</span>
+                    </div>
+
                     <div id="fileIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs">
                         <div class="flex items-center gap-2 text-emerald-400 truncate">
                             <span>📎</span>
@@ -610,8 +618,35 @@
         </div>
     </div>
 
+    <!-- MCP Servers Modal -->
+    <div id="mcpModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative flex flex-col max-h-[88vh]">
+            <button id="closeMcpModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+            <div>
+                <h2 class="text-xl font-bold text-fuchsia-400">🧩 MCP Servers</h2>
+                <p class="text-xs text-gray-400 mt-0.5">Connect remote Model Context Protocol servers. Their tools become available to the AI through tool-calling (like an IDE agent). Works with any Streamable HTTP MCP endpoint.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input type="text" id="mcpName" placeholder="Server name (e.g. Files)" class="bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500">
+                <input type="text" id="mcpUrl" placeholder="https://host/mcp" class="bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500 font-mono">
+                <input type="text" id="mcpAuth" placeholder="Auth header (optional): Bearer xxx" class="bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500 font-mono">
+            </div>
+            <div class="flex justify-end gap-2">
+                <button id="mcpAddBtn" class="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold py-2 px-4 rounded-lg transition cursor-pointer">➕ Add & Connect</button>
+            </div>
+
+            <div id="mcpList" class="flex-1 overflow-y-auto chat-scroll space-y-2 border border-gray-800 p-3 rounded-xl bg-gray-950 min-h-[120px]"></div>
+
+            <div class="text-[11px] text-gray-500 border-t border-gray-800 pt-2">
+                Tip: run a local MCP server with <span class="font-mono text-gray-400">npx -y mcp-remote https://your-server/sse</span> or any HTTP MCP endpoint. The browser must be allowed by CORS on the server.
+            </div>
+        </div>
+    </div>
+
     <script src="db-connector.js"></script>
     <script src="sync-manager.js"></script>
+    <script src="mcp.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
