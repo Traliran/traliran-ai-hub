@@ -77,7 +77,7 @@ const entry = MCP_MANAGER.add({ name: 'MyServer', url: 'https://host/mcp', authH
 await MCP_MANAGER.connectOne(entry.id);
 ```
 
-**Write your own server:** implement a `POST` endpoint handling `initialize`, `notifications/initialized`, `tools/list`, and `tools/call`, return an `Mcp-Session-Id` header, and emit CORS. See [`~/Работа/MCP_TraliranAIHub.md`](../../../../../../home/traliran/Работа/MCP_TraliranAIHub.md) for full examples (Node.js / Python) and the tool-response format.
+**Write your own server:** implement a `POST` endpoint handling `initialize`, `notifications/initialized`, `tools/list`, and `tools/call`, return an `Mcp-Session-Id` header, and emit CORS. 
 
 > Note: the agentic MCP mode runs only when a **single** model is selected (it is disabled in multi-model compare mode), and your server must allow CORS from the app's domain.
 
