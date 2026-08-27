@@ -166,6 +166,17 @@ const exportJsonBtn = document.getElementById('exportJson');
 const importJsonInput = document.getElementById('importJson');
 const activeStatusText = document.getElementById('activeStatusText');
 
+const openMcpBtn = document.getElementById('openMcpBtn');
+const mcpModal = document.getElementById('mcpModal');
+const closeMcpModal = document.getElementById('closeMcpModal');
+const mcpNameInput = document.getElementById('mcpName');
+const mcpUrlInput = document.getElementById('mcpUrl');
+const mcpAuthInput = document.getElementById('mcpAuth');
+const mcpAddBtn = document.getElementById('mcpAddBtn');
+const mcpList = document.getElementById('mcpList');
+const mcpBadge = document.getElementById('mcpBadge');
+const mcpBadgeText = document.getElementById('mcpBadgeText');
+
 function countAssistantMessages() {
     const session = sessions.find(s => s.id === currentSessionId);
     if (!session) return 0;
@@ -361,6 +372,92 @@ openStoreBtn.addEventListener('click', () => {
     storeModal.classList.remove('hidden');
 });
 closeStoreModal.addEventListener('click', () => { storeModal.classList.add('hidden'); });
+
+if (openMcpBtn) openMcpBtn.addEventListener('click', () => { MCP_MANAGER.load(); renderMcpList(); mcpModal.classList.remove('hidden'); });
+if (closeMcpModal) closeMcpModal.addEventListener('click', () => mcpModal.classList.add('hidden'));
+
+function renderMcpList() {
+    mcpList.innerHTML = '';
+    const servers = MCP_MANAGER.connectedServers();
+    if (servers.length === 0) {
+        mcpList.innerHTML = '<p class="text-xs text-gray-500">No MCP servers configured. Add one above to expose its tools to the AI.</p>';
+        return;
+    }
+    servers.forEach(s => {
+        const card = document.createElement('div');
+        card.className = 'bg-gray-950 border border-gray-800 rounded-lg p-3 flex flex-col gap-2';
+        const status = s.connected
+            ? `<span class="text-emerald-400">● connected (${s.tools.length} tools)</span>`
+            : `<span class="text-rose-400">● disconnected</span>`;
+        const toolsHtml = (s.connected && s.tools.length)
+            ? s.tools.map(t => `<li class="text-[10px] text-fuchsia-300 font-mono truncate">🔧 ${escapeHtml(t.name)}</li>`).join('')
+            : '';
+        card.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <div class="text-sm font-bold text-fuchsia-300 truncate">${escapeHtml(s.name)}</div>
+                    <div class="text-[10px] text-gray-500 font-mono truncate">${escapeHtml(s.url)}</div>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                    <button data-id="${s.id}" class="mcp-reconnect bg-gray-800 hover:bg-gray-700 text-xs px-2 py-1 rounded cursor-pointer" title="Reconnect">↻</button>
+                    <button data-id="${s.id}" class="mcp-remove bg-rose-800 hover:bg-rose-700 text-xs px-2 py-1 rounded cursor-pointer" title="Remove">🗑</button>
+                </div>
+            </div>
+            <div class="text-[10px]">${status}</div>
+            <ul class="flex flex-col gap-0.5">${toolsHtml}</ul>
+        `;
+        mcpList.appendChild(card);
+    });
+
+    mcpList.querySelectorAll('.mcp-remove').forEach(b => b.addEventListener('click', () => {
+        const target = MCP_MANAGER.servers.find(x => x.id === b.dataset.id);
+        if (confirm(`Remove MCP server "${target?.name || ''}"?`)) {
+            MCP_MANAGER.remove(b.dataset.id);
+            renderMcpList();
+            updateMcpBadge();
+        }
+    }));
+    mcpList.querySelectorAll('.mcp-reconnect').forEach(b => b.addEventListener('click', async () => {
+        b.textContent = '…';
+        try { await MCP_MANAGER.connectOne(b.dataset.id); }
+        catch (e) { alert('Connect failed: ' + e.message); }
+        renderMcpList();
+        updateMcpBadge();
+    }));
+}
+
+mcpAddBtn.addEventListener('click', async () => {
+    const name = mcpNameInput.value.trim();
+    const url = mcpUrlInput.value.trim();
+    if (!name || !url) { alert('Please enter a server name and URL.'); return; }
+    mcpAddBtn.disabled = true;
+    mcpAddBtn.textContent = 'Connecting…';
+    try {
+        const entry = MCP_MANAGER.add({ name, url, authHeader: mcpAuthInput.value });
+        await MCP_MANAGER.connectOne(entry.id);
+        mcpNameInput.value = ''; mcpUrlInput.value = ''; mcpAuthInput.value = '';
+        renderMcpList();
+        updateMcpBadge();
+    } catch (e) {
+        alert('Failed to connect MCP server: ' + e.message);
+    } finally {
+        mcpAddBtn.disabled = false;
+        mcpAddBtn.textContent = '➕ Add & Connect';
+    }
+});
+
+function updateMcpBadge() {
+    const count = MCP_MANAGER.toolCount();
+    const servers = MCP_MANAGER.connectedCount();
+    if (count > 0) {
+        mcpBadgeText.textContent = `${count} MCP tool${count > 1 ? 's' : ''} ready from ${servers} server${servers > 1 ? 's' : ''}`;
+        mcpBadge.classList.remove('hidden');
+        mcpBadge.classList.add('flex');
+    } else {
+        mcpBadge.classList.add('hidden');
+        mcpBadge.classList.remove('flex');
+    }
+}
 
 function loadApiSettings() {
     const provider = STORAGE.getItem('gem_provider') || 'groq';
@@ -1321,6 +1418,7 @@ async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, p
     const decoder = new TextDecoder();
     let accumulated = '';
     let buffer = '';
+    const toolCallsMap = {};
 
     while (true) {
         const { done, value } = await reader.read();
@@ -1339,9 +1437,22 @@ async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, p
                 if (!payload) continue;
                 try {
                     const eventData = JSON.parse(payload);
-                    const delta = eventData.choices?.[0]?.delta?.content || '';
+                    const choice = eventData.choices?.[0];
+                    const delta = choice?.delta?.content || '';
                     accumulated += delta;
                     if (delta) onDelta(delta);
+
+                    const tcDeltas = choice?.delta?.tool_calls;
+                    if (Array.isArray(tcDeltas)) {
+                        for (const tc of tcDeltas) {
+                            const idx = tc.index != null ? tc.index : 0;
+                            if (!toolCallsMap[idx]) toolCallsMap[idx] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+                            if (tc.id) toolCallsMap[idx].id = tc.id;
+                            if (tc.type) toolCallsMap[idx].type = tc.type;
+                            if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name;
+                            if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments;
+                        }
+                    }
                 } catch (error) {
                     // ignore parse errors for partial chunks
                 }
@@ -1349,7 +1460,8 @@ async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, p
         }
     }
 
-    return { content: accumulated };
+    const toolCalls = Object.keys(toolCallsMap).map(k => toolCallsMap[k]);
+    return { content: accumulated, toolCalls };
 }
 
 function getEstimatedCostFromText(promptText, outputText) {
@@ -1439,6 +1551,170 @@ async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, prov
     return response.json();
 }
 
+function buildMcpSystemNote() {
+    const servers = MCP_MANAGER.connectedServers().filter(s => s.connected && s.tools.length);
+    if (!servers.length) return '';
+    let note = '\n\n[Available MCP tools]\nYou have access to external tools from connected MCP servers. Use the function-calling interface to invoke them whenever they help fulfill the user request:\n';
+    for (const s of servers) {
+        note += `\n## Server: ${s.name}\n`;
+        for (const t of s.tools) {
+            note += `- ${t.name}: ${t.description || '(no description)'}\n`;
+        }
+    }
+    note += '\nWhen you need data or an action from a tool, call the matching function. After the tool returns a result, continue reasoning and answer the user. Never fabricate tool results.';
+    return note;
+}
+
+function renderMcpToolActivity(toolName, status) {
+    const div = document.createElement('div');
+    div.className = 'flex flex-col items-start w-full';
+    div.innerHTML = `<div class="max-w-[90%] rounded-2xl px-4 py-2 text-xs shadow-md bg-fuchsia-950/40 border border-fuchsia-800 text-fuchsia-200"><span class="font-mono">🔧 ${escapeHtml(toolName)}</span> — <span class="mcp-status">${escapeHtml(status)}</span></div>`;
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+    return div;
+}
+
+function updateMcpToolActivity(div, resultText) {
+    const statusEl = div.querySelector('.mcp-status');
+    if (statusEl) statusEl.textContent = 'done';
+    const preview = resultText.length > 500 ? resultText.slice(0, 500) + '…' : resultText;
+    const details = document.createElement('details');
+    details.className = 'mt-1 text-[10px] text-fuchsia-300/80';
+    details.innerHTML = `<summary class="cursor-pointer select-none">View result</summary><pre class="whitespace-pre-wrap break-words mt-1 bg-fuchsia-950/30 rounded p-2">${escapeHtml(preview)}</pre>`;
+    div.querySelector('div').appendChild(details);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+async function fetchAnthropicWithTools(endpoint, apiKey, modelId, conv, tools, maxTokens, temperature, topP, signal) {
+    const systemText = conv.find(m => m.role === 'system')?.content || '';
+    const anthropicMessages = [];
+    for (const m of conv) {
+        if (m.role === 'system') continue;
+        if (m.role === 'user') {
+            anthropicMessages.push({ role: 'user', content: normalizeContentToText(m.content) });
+        } else if (m.role === 'assistant') {
+            if (m.tool_calls && m.tool_calls.length) {
+                const blocks = [];
+                if (m.content) blocks.push({ type: 'text', text: m.content });
+                for (const tc of m.tool_calls) {
+                    let input = {};
+                    try { input = tc.function.arguments ? JSON.parse(tc.function.arguments) : {}; } catch (_) {}
+                    blocks.push({ type: 'tool_use', id: tc.id, name: tc.function.name, input });
+                }
+                anthropicMessages.push({ role: 'assistant', content: blocks });
+            } else {
+                anthropicMessages.push({ role: 'assistant', content: m.content });
+            }
+        } else if (m.role === 'tool') {
+            anthropicMessages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: m.content }] });
+        }
+    }
+
+    const anthropicTools = tools.map(t => ({
+        name: t.function.name,
+        description: t.function.description,
+        input_schema: t.function.parameters
+    }));
+
+    const body = {
+        model: modelId,
+        max_tokens: maxTokens,
+        system: systemText,
+        messages: anthropicMessages,
+        tools: anthropicTools,
+        temperature,
+        top_p: topP
+    };
+
+    const headers = { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
+    const response = await fetch(`${endpoint}/messages`, { method: 'POST', headers, body: JSON.stringify(body), signal });
+    if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    let text = '';
+    const toolCalls = [];
+    for (const block of (data.content || [])) {
+        if (block.type === 'text') text += block.text;
+        else if (block.type === 'tool_use') {
+            toolCalls.push({ id: block.id, type: 'function', function: { name: block.name, arguments: JSON.stringify(block.input || {}) } });
+        }
+    }
+    return { content: text, toolCalls };
+}
+
+async function runAgenticSingleModel(session, modelId, providerName, endpoint, apiKey, hasKey, temperature, topP, maxTokens, signal) {
+    const provider = PROVIDERS[providerName] || PROVIDERS.openai;
+    const { tools } = MCP_MANAGER.buildToolSet();
+    const loadingDiv = document.getElementById('apiLoading');
+    if (loadingDiv) loadingDiv.remove();
+
+    const placeholderData = createAssistantStreamingPlaceholder(session.botName);
+    updateUsageIndicator({ streaming: true });
+
+    const sysPrompt = (session.systemPrompt || '') + buildMcpSystemNote();
+    const conv = [{ role: 'system', content: sysPrompt }];
+    session.messages.forEach(m => conv.push({ role: m.role, content: m.content }));
+
+    let finalContent = '';
+    const MAX_ITER = 8;
+
+    for (let iter = 0; iter < MAX_ITER; iter++) {
+        let result;
+        if (provider.type === 'openai') {
+            const payload = { model: modelId, messages: conv, temperature, top_p: topP, max_tokens: maxTokens, tools, tool_choice: 'auto' };
+            const streamResult = await fetchStreamingCompletion(
+                endpoint, apiKey, hasKey, payload, providerName, signal,
+                delta => {
+                    placeholderData.current = (placeholderData.current || '') + delta;
+                    updateStreamingPlaceholder(placeholderData, placeholderData.current);
+                }
+            );
+            result = { content: streamResult.content, toolCalls: streamResult.toolCalls };
+        } else {
+            result = await fetchAnthropicWithTools(endpoint, apiKey, modelId, conv, tools, maxTokens, temperature, topP, signal);
+            if (result.content) {
+                placeholderData.current = result.content;
+                updateStreamingPlaceholder(placeholderData, result.content);
+            }
+        }
+
+        if (!result.toolCalls || result.toolCalls.length === 0) {
+            finalContent = result.content || '';
+            break;
+        }
+
+        conv.push({ role: 'assistant', content: result.content || null, tool_calls: result.toolCalls });
+
+        for (const tc of result.toolCalls) {
+            const fnName = tc.function.name;
+            let args = {};
+            try { args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {}; } catch (_) { args = {}; }
+            const activityDiv = renderMcpToolActivity(fnName, 'calling…');
+            let toolResult;
+            try {
+                toolResult = await MCP_MANAGER.callTool(fnName, args);
+            } catch (e) {
+                toolResult = 'MCP tool error: ' + e.message;
+            }
+            updateMcpToolActivity(activityDiv, toolResult);
+            conv.push({ role: 'tool', tool_call_id: tc.id, content: toolResult });
+        }
+    }
+
+    placeholderData.placeholder.remove();
+    if (!finalContent) finalContent = '(No response)';
+
+    session.messages.push({ role: 'assistant', content: finalContent });
+    saveSessionsToStorage();
+    renderMessageToDOM('assistant', finalContent, session.botName, session.messages.length - 1);
+    updateSummarizeButtonVisibility();
+
+    const promptText = buildPromptText(conv);
+    updateUsageIndicator({ tokens: estimateTokenCount(promptText), cost: (estimateTokenCount(promptText) / 1000) * TOKEN_COST_PER_1K, streaming: false });
+}
+
 async function triggerAiResponse(session) {
     const providerName = apiProvider.value;
     const hasKey = PROVIDERS[providerName].hasKey;
@@ -1483,6 +1759,10 @@ async function triggerAiResponse(session) {
     try {
         if (activeModels.length === 1) {
             const modelId = activeModels[0];
+            const mcpReady = MCP_MANAGER.connectedCount() > 0 && MCP_MANAGER.toolCount() > 0;
+            if (mcpReady) {
+                await runAgenticSingleModel(session, modelId, providerName, endpoint, apiKey, hasKey, temperature, topP, maxTokens, currentAbortController.signal);
+            } else {
             const payload = {
                 model: modelId,
                 messages: messagesToSend,
@@ -1524,6 +1804,7 @@ async function triggerAiResponse(session) {
             placeholderData.placeholder.remove();
             renderMessageToDOM('assistant', content, session.botName, session.messages.length - 1);
             updateSummarizeButtonVisibility();
+            }
         } else {
             const requests = activeModels.map(entry => {
                 const cfg = getProviderConfig(entry.provider);
@@ -2176,6 +2457,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadApiSettings();
     loadSessions();
     loadNotes();
+    MCP_MANAGER.load();
+    try { await MCP_MANAGER.connectAll(); } catch (e) { console.error('MCP auto-connect error:', e); }
+    updateMcpBadge();
     updateLoginButton();
     updateSyncStatus();
 

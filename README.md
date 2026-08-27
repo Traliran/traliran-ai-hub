@@ -4,6 +4,7 @@
 
 A lightweight, serverless, and privacy-first AI web client and sandbox running directly in your browser. Features a built-in code execution environment, a full-fledged AI IDE, and a parallel model benchmarking tool. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) without middlemen.
 
+
 <img width="1813" height="957" alt="screenshot" src="https://github.com/user-attachments/assets/87805692-7415-4572-b783-4fd258bbabf9" />
 
 <img width="1809" height="958" alt="screenshot" src="https://github.com/user-attachments/assets/d2d6c3c9-cb5a-4371-9a2f-22a0fb9506c9" />
@@ -61,6 +62,24 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 *   **💻 Built-in Sandbox Interpreter:** Execute, preview, and test generated HTML/JS/CSS code snippets securely in an isolated iframe without leaving the main chat workspace.
 *   **🏪 Assistant Store:** Access a marketplace of free and premium, highly-optimized AI assistant presets and custom prompts for various tasks (e.g., Polyglot Translator, Code & Text Editor, Ideation Generator).
 *   **⚙️ Advanced Parameters Control:** Fine-tune system behaviors with on-the-fly adjustable sliders for Temperature, Top P, and Max Tokens configuration.
+*   **🧩 MCP (Model Context Protocol):** Connect remote MCP servers over Streamable HTTP and expose their tools to the AI as function-calling tools — just like an IDE agent. The model decides when to call a tool, the hub proxies the call, feeds the result back, and repeats. Works with any Streamable HTTP MCP endpoint; configure servers in the **🧩 MCP Servers** modal.
+
+---
+
+## 🧩 MCP (Model Context Protocol)
+
+MCP lets you plug external tools into the chat. The client (`mcp.js`) speaks JSON-RPC 2.0 over Streamable HTTP to any remote MCP server and turns its tools into OpenAI-style function tools used by the agentic loop.
+
+**Connect a server:** open **🧩 MCP Servers**, enter a name + URL (and an optional `Bearer` auth header), hit **Add & Connect**. Servers are saved in `LocalStorage` and auto-reconnect on startup. You can also add one from the console:
+
+```js
+const entry = MCP_MANAGER.add({ name: 'MyServer', url: 'https://host/mcp', authHeader: '' });
+await MCP_MANAGER.connectOne(entry.id);
+```
+
+**Write your own server:** implement a `POST` endpoint handling `initialize`, `notifications/initialized`, `tools/list`, and `tools/call`, return an `Mcp-Session-Id` header, and emit CORS. 
+
+> Note: the agentic MCP mode runs only when a **single** model is selected (it is disabled in multi-model compare mode), and your server must allow CORS from the app's domain.
 
 ---
 
