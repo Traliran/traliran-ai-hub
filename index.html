@@ -234,12 +234,9 @@
                             class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     </div>
                     <div>
-                        <div class="flex justify-between text-xs text-gray-400 mb-1">
-                            <span>Max Tokens:</span>
-                            <span id="tokensValue" class="font-mono text-emerald-400">2048</span>
-                        </div>
-                        <input type="range" id="botMaxTokens" min="256" max="16384" step="256" value="2048" 
-                            class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Max Tokens:</label>
+                        <input type="number" id="botMaxTokens" placeholder="2048" value="2048" step="1"
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 font-mono">
                     </div>
                 </div>
             </div>
