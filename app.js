@@ -90,7 +90,14 @@ const tempValue = document.getElementById('tempValue');
 const topPInput = document.getElementById('botTopP');
 const topPValue = document.getElementById('topPValue');
 const tokensInput = document.getElementById('botMaxTokens');
-const tokensValue = document.getElementById('tokensValue');
+const tokensValue = document.getElementById('tokensValue'); // may be null after UI change to number input (kept for backward compatibility)
+
+// Helper to get max tokens as unrestricted integer with fallback for compatibility
+function getMaxTokens() {
+    const parsed = parseInt(tokensInput.value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    return 2048;
+}
 const themeSelector = document.getElementById('themeSelector');
 const helpModal = document.getElementById('helpModal');
 const openHelpBtn = document.getElementById('openHelpBtn');
@@ -477,7 +484,8 @@ function loadApiSettings() {
     topPInput.value = savedTopP; topPValue.textContent = savedTopP;
 
     const savedTokens = STORAGE.getItem('gem_tokens') || '2048';
-    tokensInput.value = savedTokens; tokensValue.textContent = savedTokens;
+    tokensInput.value = savedTokens;
+    if (tokensValue) tokensValue.textContent = savedTokens;
 
     const savedTheme = STORAGE.getItem('gem_theme') || 'default';
     themeSelector.value = savedTheme;
@@ -1722,7 +1730,7 @@ async function triggerAiResponse(session) {
     const endpoint = apiEndpoint.value.trim();
     const temperature = parseFloat(tempInput.value);
     const topP = parseFloat(topPInput.value);
-    const maxTokens = parseInt(tokensInput.value);
+    const maxTokens = getMaxTokens();
 
     if (selectedMultiModels.length === 0 && hasKey && !apiKey) {
         alert('Please enter your API key!');
@@ -1992,7 +2000,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
             session.messages.forEach(m => currentContext.push({ role: m.role, content: m.content }));
 
             try {
-                const maxTokens = Math.max(1500, parseInt(tokensInput.value, 10) || 2048);
+                const maxTokens = Math.max(1500, getMaxTokens());
                 const payload = {
                     model,
                     messages: currentContext,
@@ -2041,7 +2049,8 @@ botModelSelect.addEventListener('change', () => {
 
 tempInput.addEventListener('input', (e) => { tempValue.textContent = e.target.value; saveApiSettings(); });
 topPInput.addEventListener('input', (e) => { topPValue.textContent = e.target.value; saveApiSettings(); });
-tokensInput.addEventListener('input', (e) => { tokensValue.textContent = e.target.value; saveApiSettings(); });
+tokensInput.addEventListener('input', () => { if (tokensValue) tokensValue.textContent = tokensInput.value; saveApiSettings(); });
+tokensInput.addEventListener('change', () => { if (tokensValue) tokensValue.textContent = tokensInput.value; saveApiSettings(); });
 
 refreshModelsBtn.addEventListener('click', fetchActiveModels);
 newChatBtn.addEventListener('click', createNewSession);
@@ -2227,7 +2236,7 @@ exportJsonBtn.addEventListener('click', () => {
         selectedModel: botModelSelect.value,
         temperature: parseFloat(tempInput.value),
         topP: parseFloat(topPInput.value),
-        maxTokens: parseInt(tokensInput.value)
+        maxTokens: getMaxTokens()
     };
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(config, null, 2));
     const downloadAnchor = document.createElement('a');
@@ -2254,7 +2263,7 @@ importJsonInput.addEventListener('change', (e) => {
             if (config.personalInfo !== undefined) personalInfoInput.value = config.personalInfo;
             if (config.temperature !== undefined) { tempInput.value = config.temperature; tempValue.textContent = config.temperature; }
             if (config.topP !== undefined) { topPInput.value = config.topP; topPValue.textContent = config.topP; }
-            if (config.maxTokens !== undefined) { tokensInput.value = config.maxTokens; tokensValue.textContent = config.maxTokens; }
+            if (config.maxTokens !== undefined) { tokensInput.value = config.maxTokens; if (tokensValue) tokensValue.textContent = config.maxTokens; }
             saveApiSettings();
             if (config.selectedModel) STORAGE.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
             fetchActiveModels();
