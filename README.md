@@ -4,6 +4,14 @@
 
 A lightweight, serverless, and privacy-first AI web client and sandbox running directly in your browser. Features a built-in code execution environment, a full-fledged AI IDE, and a parallel model benchmarking tool. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) without middlemen.
 
+## ⚠️ Warning! ⚠️
+
+> When you export a custom bot configuration that you've created, **your API keys are also exported**.
+> 
+> So before sharing your configuration, **REMOVE YOUR API KEYS FROM THE .json FILE**
+> 
+> P.S. This was designed to make it easy to import or restore your session later.
+
 
 <img width="1813" height="957" alt="screenshot" src="https://github.com/user-attachments/assets/87805692-7415-4572-b783-4fd258bbabf9" />
 
