@@ -1,6 +1,7 @@
 # 💎 Traliran AI Hub
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Traliran AI Hub on StartupScores](https://startupscores.com/badge/traliran-ai-hub.svg?style=shield&v=combo&theme=dark)](https://startupscores.com/open-source/traliran-ai-hub)
 
 A lightweight, serverless, and privacy-first AI web client and sandbox running directly in your browser. Features a built-in code execution environment, a full-fledged AI IDE, and a parallel model benchmarking tool. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) without middlemen.
 
