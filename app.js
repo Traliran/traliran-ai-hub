@@ -2198,11 +2198,68 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Shared attachment reader: supports text, PDF, image and video files.
-// Used by both the desktop file picker and the mobile camera input.
-async function handleAttachedFile(file) {
+// Used by the file picker, mobile camera input and clipboard paste (Ctrl+V).
+function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
+// Downscale large pasted/screenshot images so base64 stays small enough
+// for localStorage and chat/completions vision payloads.
+async function compressImageFile(file, maxDim = 1600, quality = 0.85) {
+    const dataUrl = await readFileAsDataURL(file);
+    try {
+        const bitmap = await createImageBitmap(file);
+        const { width, height } = bitmap;
+        bitmap.close();
+        const scale = Math.min(1, maxDim / Math.max(width, height));
+        if (scale >= 1 && (file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp') && file.size < 1024 * 1024) {
+            return dataUrl;
+        }
+        const targetW = Math.max(1, Math.round(width * scale));
+        const targetH = Math.max(1, Math.round(height * scale));
+        const img = await new Promise((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = reject;
+            el.src = dataUrl;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        canvas.getContext('2d').drawImage(img, 0, 0, targetW, targetH);
+        const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        return canvas.toDataURL(outType, quality);
+    } catch (e) {
+        return dataUrl;
+    }
+}
+
+function resolveAttachmentName(file, fallbackPrefix = 'image') {
+    if (file && file.name) return file.name;
+    const ext = (file && file.type === 'image/png') ? 'png'
+        : (file && file.type === 'image/jpeg') ? 'jpg'
+        : (file && file.type === 'image/webp') ? 'webp'
+        : (file && file.type === 'image/gif') ? 'gif'
+        : 'png';
+    return `${fallbackPrefix}-${Date.now()}.${ext}`;
+}
+
+async function handleAttachedFile(file, options = {}) {
     if (!file) return;
-    attachedFileName = file.name || 'camera-photo.jpg';
+    const fallbackPrefix = options.fallbackPrefix || 'pasted-image';
+    attachedFileName = resolveAttachmentName(file, file.type && file.type.startsWith('image/') ? fallbackPrefix : 'camera-photo');
+    if (!attachedFileName.includes('.') && file.type) {
+        if (file.type === 'image/png') attachedFileName += '.png';
+        else if (file.type === 'image/jpeg') attachedFileName += '.jpg';
+    }
     attachedFileType = file.type || '';
+    if (!attachedFileType && /\.png$/i.test(attachedFileName)) attachedFileType = 'image/png';
+    if (!attachedFileType && /\.jpe?g$/i.test(attachedFileName)) attachedFileType = 'image/jpeg';
 
     fileNameDisplay.textContent = attachedFileName;
     fileIndicator.classList.remove('hidden');
@@ -2219,7 +2276,9 @@ async function handleAttachedFile(file) {
         }
     };
 
-    if (file.type === 'application/pdf' || attachedFileName.toLowerCase().endsWith('.pdf')) {
+    const fileType = file.type || attachedFileType || '';
+
+    if (fileType === 'application/pdf' || attachedFileName.toLowerCase().endsWith('.pdf')) {
         if (filePreviewThumb) filePreviewThumb.classList.add('hidden');
         try {
             const arrayBuffer = await file.arrayBuffer();
@@ -2237,7 +2296,21 @@ async function handleAttachedFile(file) {
         return;
     }
 
-    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+    if (fileType.startsWith('image/') || attachedFileType.startsWith('image/')) {
+        if (fileType === 'image/gif') {
+            attachedFileContent = await readFileAsDataURL(file);
+        } else {
+            try {
+                attachedFileContent = await compressImageFile(file);
+            } catch (e) {
+                attachedFileContent = await readFileAsDataURL(file);
+            }
+        }
+        showPreview(attachedFileContent);
+        return;
+    }
+
+    if (fileType.startsWith('video/')) {
         const reader = new FileReader();
         reader.onload = function(event) {
             attachedFileContent = event.target.result;
@@ -2265,6 +2338,41 @@ if (cameraInput) {
         cameraInput.value = '';
     });
 }
+
+// Paste images from clipboard with Ctrl+V (screenshots, copied files/photos).
+// Text from clipboard keeps the default textarea behavior.
+function extractImageFileFromClipboard(e) {
+    const clipboard = e.clipboardData;
+    if (!clipboard) return null;
+    if (clipboard.files && clipboard.files.length > 0) {
+        for (const f of clipboard.files) {
+            if (f.type && f.type.startsWith('image/')) return f;
+        }
+    }
+    if (clipboard.items) {
+        for (const item of clipboard.items) {
+            if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+                const f = item.getAsFile();
+                if (f) return f;
+            }
+        }
+    }
+    return null;
+}
+
+userInput.addEventListener('paste', async (e) => {
+    const imageFile = extractImageFileFromClipboard(e);
+    if (!imageFile) return;
+    e.preventDefault();
+    try {
+        await handleAttachedFile(imageFile, { fallbackPrefix: 'pasted-image' });
+        notifySuccess('Image pasted from clipboard!');
+        userInput.focus();
+    } catch (err) {
+        console.error(err);
+        notifyError('Failed to paste image: ' + err.message);
+    }
+});
 
 function removeAttachedFile() {
     attachedFileContent = null;
