@@ -98,7 +98,7 @@ function getMaxTokens() {
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
     return 2048;
 }
-const themeSelector = document.getElementById('themeSelector');
+// Single pure-black dark theme is applied via styles.css. No theme presets.
 const helpModal = document.getElementById('helpModal');
 const openHelpBtn = document.getElementById('openHelpBtn');
 const closeHelpModal = document.getElementById('closeHelpModal');
@@ -238,7 +238,7 @@ summarizeChatBtn.addEventListener('click', async () => {
     const messagesToSend = [summarizationPrompt, ...conversationMessages];
     
     summarizeChatBtn.disabled = true;
-    summarizeChatBtn.innerHTML = '⏳ <span class="hidden sm:inline">Summarizing...</span>';
+    summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarizing...</span>';
     
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => abortController.abort(), 60000);
@@ -263,18 +263,18 @@ summarizeChatBtn.addEventListener('click', async () => {
             personalInfoInput.value = newInfo;
             STORAGE.setItem('gem_personal_info', newInfo);
             
-            summarizeChatBtn.innerHTML = '✅ <span class="hidden sm:inline">Done!</span>';
+            summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Done!</span>';
             setTimeout(() => {
-                summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+                summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarize</span>';
             }, 2000);
         } else {
-            summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+            summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarize</span>';
         }
     } catch (error) {
         console.error('Summarization error:', error);
         const message = error.name === 'AbortError' ? 'Request timed out after 60s' : error.message;
         alert('Failed to summarize conversation: ' + message);
-        summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+        summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarize</span>';
     } finally {
         clearTimeout(timeoutId);
         summarizeChatBtn.disabled = false;
@@ -336,11 +336,11 @@ function buildMediaHtmlFromContent(content) {
         if (!source) return '';
 
         if (part.type === 'image_url' || part.type === 'image' || part.type === 'input_image') {
-            return `<div class="media-block my-3"><img src="${escapeHtml(source)}" alt="Generated image" class="rounded-lg border border-gray-700 max-w-full h-auto shadow-lg"></div>`;
+            return `<div class="media-block my-3"><img src="${escapeHtml(source)}" alt="Generated image" class="rounded-2xl border border-gray-700 max-w-full h-auto shadow-lg"></div>`;
         }
 
         if (part.type === 'video_url' || part.type === 'video' || part.type === 'input_video') {
-            return `<div class="media-block my-3"><video controls preload="metadata" class="rounded-lg border border-gray-700 max-w-full bg-black shadow-lg"><source src="${escapeHtml(source)}"></video></div>`;
+            return `<div class="media-block my-3"><video controls preload="metadata" class="rounded-2xl border border-gray-700 max-w-full bg-black shadow-lg"><source src="${escapeHtml(source)}"></video></div>`;
         }
 
         return '';
@@ -351,14 +351,14 @@ function renderPaidStoreBots() {
     paidBotsContainer.innerHTML = '';
     PAID_ASSISTANTS_CONFIG.forEach(bot => {
         const botCard = document.createElement('div');
-        botCard.className = 'bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group';
+        botCard.className = 'bg-gray-950 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group';
         botCard.innerHTML = `
             <div>
                 <h4 class="font-bold text-amber-400 text-sm">${bot.name}</h4>
                 <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">${bot.description}</p>
             </div>
             <div class="flex justify-end mt-2">
-                <a href="${bot.link}" target="_blank" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition text-center min-w-[70px]">Buy</a>
+                <a href="${bot.link}" target="_blank" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-1.5 rounded-2xl transition text-center min-w-[70px]">Buy</a>
             </div>
         `;
         paidBotsContainer.appendChild(botCard);
@@ -392,12 +392,12 @@ function renderMcpList() {
     }
     servers.forEach(s => {
         const card = document.createElement('div');
-        card.className = 'bg-gray-950 border border-gray-800 rounded-lg p-3 flex flex-col gap-2';
+        card.className = 'bg-gray-950 border border-gray-800 rounded-2xl p-3 flex flex-col gap-2';
         const status = s.connected
             ? `<span class="text-emerald-400">● connected (${s.tools.length} tools)</span>`
             : `<span class="text-rose-400">● disconnected</span>`;
         const toolsHtml = (s.connected && s.tools.length)
-            ? s.tools.map(t => `<li class="text-[10px] text-fuchsia-300 font-mono truncate">🔧 ${escapeHtml(t.name)}</li>`).join('')
+            ? s.tools.map(t => `<li class="text-[10px] text-fuchsia-300 font-mono truncate">[tool] ${escapeHtml(t.name)}</li>`).join('')
             : '';
         card.innerHTML = `
             <div class="flex items-center justify-between gap-2">
@@ -406,8 +406,8 @@ function renderMcpList() {
                     <div class="text-[10px] text-gray-500 font-mono truncate">${escapeHtml(s.url)}</div>
                 </div>
                 <div class="flex gap-1 shrink-0">
-                    <button data-id="${s.id}" class="mcp-reconnect bg-gray-800 hover:bg-gray-700 text-xs px-2 py-1 rounded cursor-pointer" title="Reconnect">↻</button>
-                    <button data-id="${s.id}" class="mcp-remove bg-rose-800 hover:bg-rose-700 text-xs px-2 py-1 rounded cursor-pointer" title="Remove">🗑</button>
+                    <button data-id="${s.id}" class="mcp-reconnect bg-gray-800 hover:bg-gray-700 text-xs px-2 py-1 rounded-xl cursor-pointer" title="Reconnect">Reconnect</button>
+                    <button data-id="${s.id}" class="mcp-remove bg-rose-800 hover:bg-rose-700 text-xs px-2 py-1 rounded-xl cursor-pointer" title="Remove">Remove</button>
                 </div>
             </div>
             <div class="text-[10px]">${status}</div>
@@ -449,7 +449,7 @@ mcpAddBtn.addEventListener('click', async () => {
         alert('Failed to connect MCP server: ' + e.message);
     } finally {
         mcpAddBtn.disabled = false;
-        mcpAddBtn.textContent = '➕ Add & Connect';
+        mcpAddBtn.textContent = 'Add & Connect';
     }
 });
 
@@ -487,11 +487,8 @@ function loadApiSettings() {
     tokensInput.value = savedTokens;
     if (tokensValue) tokensValue.textContent = savedTokens;
 
-    const savedTheme = STORAGE.getItem('gem_theme') || 'default';
-    themeSelector.value = savedTheme;
-    applyTheme(savedTheme);
-
     fetchActiveModels();
+    updateWelcomeModelInfo();
 }
 
 function saveApiSettings() {
@@ -508,17 +505,20 @@ function saveApiSettings() {
     updateStatusCard();
 }
 
-function applyTheme(theme) {
-    document.body.className = `bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden theme-${theme}`;
-    if (theme === 'default') {
-        document.body.classList.remove('theme-cyberpunk', 'theme-matrix', 'theme-light');
+// Single fixed pure-black theme. No theme switching.
+// Shows the currently selected provider and model in the empty chat state.
+function updateWelcomeModelInfo() {
+    const badgeText = document.getElementById('activeModelBadgeText');
+    if (!badgeText) return;
+    const provider = apiProvider.value || 'no provider';
+    let model = 'no model selected';
+    if (selectedMultiModels.length > 0) {
+        model = selectedMultiModels.length + ' models (multi-model mode)';
+    } else if (botModelSelect.value) {
+        model = botModelSelect.value;
     }
-    STORAGE.setItem('gem_theme', theme);
+    badgeText.textContent = provider + ' / ' + model;
 }
-
-themeSelector.addEventListener('change', (e) => {
-    applyTheme(e.target.value);
-});
 
 function handleProviderChange(provider) {
     const details = PROVIDERS[provider];
@@ -678,8 +678,8 @@ function updateMultiModelUI() {
     if (selectedMultiModels.length > 0) {
         const providerCount = new Set(selectedMultiModels.map(s => s.provider)).size;
         multiModelBadge.textContent = providerCount > 1
-            ? `⚡ Cross-Provider Compare: ${selectedMultiModels.length} models (${providerCount} providers)`
-            : `⚡ Parallel Mode Active: ${selectedMultiModels.length} models`;
+            ? `Cross-Provider Compare: ${selectedMultiModels.length} models (${providerCount} providers)`
+            : `Parallel Mode Active: ${selectedMultiModels.length} models`;
         multiModelBadge.classList.remove('hidden');
         botModelSelect.disabled = true;
     } else {
@@ -760,7 +760,7 @@ function renderSessionsList() {
     sessions.forEach(session => {
         const isActive = session.id === currentSessionId;
         const itemDiv = document.createElement('div');
-        itemDiv.className = `group flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
+        itemDiv.className = `group flex items-center justify-between p-2 rounded-2xl cursor-pointer transition ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
         itemDiv.onclick = () => selectSession(session.id);
 
         const nameSpan = document.createElement('span');
@@ -769,7 +769,7 @@ function renderSessionsList() {
 
         const renameBtn = document.createElement('button');
         renameBtn.className = 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white px-1 text-[11px] transition';
-        renameBtn.textContent = '✏️';
+        renameBtn.textContent = 'Rename';
         renameBtn.onclick = (e) => {
             e.stopPropagation();
             const promptName = prompt('Enter new chat name:', session.name);
@@ -778,7 +778,7 @@ function renderSessionsList() {
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-300 px-1 text-[11px] transition';
-        deleteBtn.textContent = '🗑️';
+        deleteBtn.textContent = 'Delete';
         deleteBtn.onclick = (e) => deleteSession(session.id, e);
 
         itemDiv.appendChild(nameSpan);
@@ -791,8 +791,10 @@ function renderSessionsList() {
 function loadActiveSessionChat() {
     const session = sessions.find(s => s.id === currentSessionId);
     chatWindow.innerHTML = '';
+    updateWelcomeModelInfo();
     if (!session || session.messages.length === 0) {
         welcomeMessage.classList.remove('hidden');
+        chatWindow.appendChild(welcomeMessage);
         return;
     }
     welcomeMessage.classList.add('hidden');
@@ -810,6 +812,7 @@ async function fetchActiveModels() {
 
     if (hasKey && !key) {
         botModelSelect.innerHTML = '<option value="">(Provide API key for models)</option>';
+        updateWelcomeModelInfo();
         return;
     }
     botModelSelect.innerHTML = '<option value="">Loading models...</option>';
@@ -841,6 +844,7 @@ async function fetchActiveModels() {
 
         if (models.length === 0) {
             botModelSelect.innerHTML = '<option value="">No models found</option>';
+            updateWelcomeModelInfo();
             return;
         }
 
@@ -861,6 +865,7 @@ async function fetchActiveModels() {
     } catch (err) {
         console.error(err);
         botModelSelect.innerHTML = '<option value="">Error fetching model list</option>';
+        updateWelcomeModelInfo();
     }
 }
 
@@ -1224,14 +1229,14 @@ function exportNoteToRAG() {
     }
     saveRagKnowledgeBase(kb);
 
-    exportToRagBtn.textContent = '✅ Added';
-    setTimeout(() => { exportToRagBtn.textContent = '📚 Export to RAG'; }, 2000);
+    exportToRagBtn.textContent = 'Added';
+    setTimeout(() => { exportToRagBtn.textContent = 'Export to RAG'; }, 2000);
 }
 
 function renderMessageToDOM(role, content, botName, index) {
     welcomeMessage.classList.add('hidden');
     const messageDiv = document.createElement('div');
-    messageDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full group/msg`;
+    messageDiv.className = `msg-enter flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full group/msg`;
 
     const senderName = role === 'user' ? 'You' : botName;
     const bgClass = role === 'user' ? 'bg-emerald-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-100';
@@ -1257,7 +1262,7 @@ function renderMessageToDOM(role, content, botName, index) {
                 thinkingHtml = `
                     <details class="thinking-block w-full mb-3 bg-gray-950/60 border border-gray-800 rounded-lg p-2.5 transition">
                         <summary class="text-xs text-amber-400/80 font-medium select-none cursor-pointer hover:text-amber-300 flex items-center justify-between">
-                            <span class="flex items-center gap-1.5">💡 Model Thinking...</span>
+                            <span class="flex items-center gap-1.5">Model Thinking...</span>
                             <span class="text-[10px] text-gray-500 uppercase tracking-wider">Expand</span>
                         </summary>
                         <div class="mt-2 text-xs text-gray-400 border-t border-gray-900 pt-2 whitespace-pre-wrap leading-relaxed italic font-sans">
@@ -1280,8 +1285,8 @@ function renderMessageToDOM(role, content, botName, index) {
             return `
                 <div class="relative group/code my-4">
                     <div class="absolute right-2 top-2 z-10 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity">
-                        <button onclick="copyTextToClipboard(decodeURIComponent('${encodedCode}'), 'Code copied!')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded border border-gray-700 cursor-pointer transition">📋 Copy</button>
-                        ${isRunnable ? `<button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded cursor-pointer transition">▶ Sandbox</button>` : ''}
+                        <button onclick="copyTextToClipboard(decodeURIComponent('${encodedCode}'), 'Code copied!')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-xl border border-gray-700 cursor-pointer transition">Copy</button>
+                        ${isRunnable ? `<button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded-xl cursor-pointer transition">Sandbox</button>` : ''}
                     </div>
                     <div class="text-[11px] bg-gray-950/80 px-4 py-1 text-gray-400 rounded-t-lg font-mono border-t border-x border-gray-800">${codeLang || 'code'}</div>
                     <pre class="!mt-0 !rounded-t-none"><code class="language-${codeLang}">${escapeHtml(codeText)}</code></pre>
@@ -1295,19 +1300,19 @@ function renderMessageToDOM(role, content, botName, index) {
 
     const encodedText = safeEncode(typeof content === 'string' ? content : normalizeContentToText(content));
     const regenerateBtnHtml = (role !== 'user' && index !== undefined) ? `
-        <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">🔄 Regenerate</button>
+        <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">Regenerate</button>
     ` : '';
 
     const copyResponseButton = role !== 'user' ? `
         <div class="flex justify-end mt-2 opacity-0 group-hover/msg:opacity-100 transition-opacity gap-3">
-            <button onclick="copyTextToClipboard(decodeURIComponent('${encodedText}'), 'Response copied!')" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">📋 Copy Response</button>
+            <button onclick="copyTextToClipboard(decodeURIComponent('${encodedText}'), 'Response copied!')" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">Copy Response</button>
             ${regenerateBtnHtml}
         </div>
     ` : '';
 
     messageDiv.innerHTML = `
         <span class="text-xs text-gray-500 mb-1 px-1">${senderName}</span>
-        <div class="max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
+        <div class="max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
             ${formattedContent}
             ${copyResponseButton}
         </div>
@@ -1372,13 +1377,13 @@ function buildPromptText(messages) {
 function createAssistantStreamingPlaceholder(botName) {
     welcomeMessage.classList.add('hidden');
     const placeholder = document.createElement('div');
-    placeholder.className = 'flex flex-col items-start w-full group/msg';
+    placeholder.className = 'msg-enter flex flex-col items-start w-full group/msg';
     const senderName = document.createElement('span');
     senderName.className = 'text-xs text-gray-500 mb-1 px-1';
     senderName.textContent = botName;
 
     const bubble = document.createElement('div');
-    bubble.className = 'max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words';
+    bubble.className = 'max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words';
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'whitespace-pre-wrap break-words text-sm';
@@ -1576,7 +1581,7 @@ function buildMcpSystemNote() {
 function renderMcpToolActivity(toolName, status) {
     const div = document.createElement('div');
     div.className = 'flex flex-col items-start w-full';
-    div.innerHTML = `<div class="max-w-[90%] rounded-2xl px-4 py-2 text-xs shadow-md bg-fuchsia-950/40 border border-fuchsia-800 text-fuchsia-200"><span class="font-mono">🔧 ${escapeHtml(toolName)}</span> — <span class="mcp-status">${escapeHtml(status)}</span></div>`;
+    div.innerHTML = `<div class="max-w-[95%] rounded-3xl px-5 py-2 text-xs shadow-md bg-fuchsia-950/40 border border-fuchsia-800 text-fuchsia-200"><span class="font-mono">[tool] ${escapeHtml(toolName)}</span> — <span class="mcp-status">${escapeHtml(status)}</span></div>`;
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
     return div;
@@ -1588,7 +1593,7 @@ function updateMcpToolActivity(div, resultText) {
     const preview = resultText.length > 500 ? resultText.slice(0, 500) + '…' : resultText;
     const details = document.createElement('details');
     details.className = 'mt-1 text-[10px] text-fuchsia-300/80';
-    details.innerHTML = `<summary class="cursor-pointer select-none">View result</summary><pre class="whitespace-pre-wrap break-words mt-1 bg-fuchsia-950/30 rounded p-2">${escapeHtml(preview)}</pre>`;
+    details.innerHTML = `<summary class="cursor-pointer select-none">View result</summary><pre class="whitespace-pre-wrap break-words mt-1 bg-fuchsia-950/30 rounded-2xl p-2">${escapeHtml(preview)}</pre>`;
     div.querySelector('div').appendChild(details);
     chatWindow.scrollTop = chatWindow.scrollHeight;
 }
@@ -1834,19 +1839,19 @@ async function triggerAiResponse(session) {
             const results = await Promise.all(requests);
             if (loadingDiv) loadingDiv.remove();
 
-            let multiMarkdown = '### 📊 Multi-Model Performance Comparison\n\n';
+            let multiMarkdown = '### Multi-Model Performance Comparison\n\n';
             results.forEach(res => {
-                multiMarkdown += `#### 🤖 Model: \`${res.model}\`\n##### 🔌 Provider: \`${res.provider}\`\n`;
+                multiMarkdown += `#### Model: \`${res.model}\`\n##### Provider: \`${res.provider}\`\n`;
                 if (res.success) {
                     const parsed = extractAssistantContent(res.data, res.provider);
                     let text = parsed.content || '';
                     const thinking = parsed.reasoning_content || '';
                     if (thinking) {
-                        multiMarkdown += `<details class="mb-2"><summary class="text-amber-400 text-xs cursor-pointer">View Reasoning Log</summary><div class="p-2 bg-gray-950 text-xs italic text-gray-400 border border-gray-800 rounded mt-1">${thinking}</div></details>\n`;
+                        multiMarkdown += `<details class="mb-2"><summary class="text-amber-400 text-xs cursor-pointer">View Reasoning Log</summary><div class="p-2 bg-gray-950 text-xs italic text-gray-400 border border-gray-800 rounded-2xl mt-1">${thinking}</div></details>\n`;
                     }
                     multiMarkdown += `${text}\n\n---\n`;
                 } else {
-                    multiMarkdown += `❌ *API Error Encountered:* \`${res.error}\`\n\n---\n`;
+                    multiMarkdown += `Error: *API Error Encountered:* \`${res.error}\`\n\n---\n`;
                 }
             });
 
@@ -1868,7 +1873,7 @@ async function triggerAiResponse(session) {
             chatWindow.appendChild(stopDiv);
         } else {
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-lg text-xs max-w-xl';
+            errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-2xl text-xs max-w-2xl';
             errorDiv.innerText = `Execution Interrupted: ${error.message}`;
             chatWindow.appendChild(errorDiv);
         }
@@ -1971,7 +1976,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
     groupChatModal.classList.add('hidden');
     createNewSession();
     let session = sessions[0];
-    session.name = '👥 Debate: ' + idea.slice(0, 20) + '...';
+    session.name = 'Debate: ' + idea.slice(0, 20) + '...';
     renderSessionsList();
 
     renderMessageToDOM('user', `**[Initiating AI Panel Evaluation]** For the following proposition:\n> ${idea}`, 'System Operator');
@@ -1979,9 +1984,9 @@ startGroupDebateBtn.addEventListener('click', async () => {
 
     const languageHint = 'Answer in the same language as the user\'s proposition. If the proposition is in Russian, respond in Russian; if it is in English, respond in English. Do not switch languages and keep your output complete, avoiding cut-off fragments.';
     const agents = [
-        { name: '🌟 Agent Optimist', prompt: `You are an optimistic market strategist. Analyze the given idea, highlight its strongest disruptive potentials, hidden opportunities, and scalable micro-advantages. Keep your response brief, targeted, and focused entirely on potential success vectors. ${languageHint}` },
-        { name: '🛡️ Agent Critic', prompt: `You are a ruthless risk analyst and security architect. Deconstruct the user\'s idea to find conceptual faults, operational vulnerabilities, security pitfalls, and hidden execution expenses. Be brutally honest. ${languageHint}` },
-        { name: '🔧 Agent Technologist', prompt: `You are a pragmatic solutions engineer. Evaluate the architectural feasibility of the idea, map out a realistic software/hardware stack layout, data handling structures, and step-by-step developer pipeline roadmap. ${languageHint}` }
+        { name: 'Agent Optimist', prompt: `You are an optimistic market strategist. Analyze the given idea, highlight its strongest disruptive potentials, hidden opportunities, and scalable micro-advantages. Keep your response brief, targeted, and focused entirely on potential success vectors. ${languageHint}` },
+        { name: 'Agent Critic', prompt: `You are a ruthless risk analyst and security architect. Deconstruct the user\'s idea to find conceptual faults, operational vulnerabilities, security pitfalls, and hidden execution expenses. Be brutally honest. ${languageHint}` },
+        { name: 'Agent Technologist', prompt: `You are a pragmatic solutions engineer. Evaluate the architectural feasibility of the idea, map out a realistic software/hardware stack layout, data handling structures, and step-by-step developer pipeline roadmap. ${languageHint}` }
     ];
 
     userInput.disabled = true;
@@ -2096,6 +2101,18 @@ function closeSidebarUniversal() {
         sidebarOverlay.classList.add('hidden');
     }
 }
+
+// Light UX: close drawers and popups with Escape, keep focus safe on mobile.
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    chatsPanel.classList.add('-translate-x-full');
+    chatsOverlay.classList.add('hidden');
+    closeSidebarUniversal();
+    if (collapsedButtons) {
+        collapsedButtons.classList.add('hidden');
+        collapsedButtons.classList.remove('flex');
+    }
+});
 
 attachmentInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -2212,7 +2229,7 @@ toggleNotePreview.addEventListener('click', () => {
     if (isPreview) {
         notePreview.classList.add('hidden');
         noteContent.classList.remove('hidden');
-        toggleNotePreview.textContent = '👁️ Preview';
+        toggleNotePreview.textContent = 'Preview';
     } else {
         notePreview.classList.remove('hidden');
         noteContent.classList.add('hidden');
@@ -2287,6 +2304,7 @@ function updateStatusCard() {
     } else {
         activeStatusText.innerHTML = `<strong class="text-emerald-400">${name}</strong><br><span class="text-gray-400 block truncate text-[11px]">${prompt}</span><span class="text-[10px] text-gray-500 font-mono block">Provider: ${provider} | ${model}</span>`;
     }
+    updateWelcomeModelInfo();
 }
 
 function updateLoginButton() {

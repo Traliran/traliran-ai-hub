@@ -24,7 +24,7 @@ const SYNC_MANAGER = {
   COLLECTION_MAP: {
     hub_sessions: { key: 'gem_sessions' },
     hub_notes: { key: 'gem_notes' },
-    hub_settings: { keys: ['gem_provider', 'gem_bot_name', 'gem_system_prompt', 'gem_temp', 'gem_topp', 'gem_tokens', 'gem_theme'], isSettings: true },
+    hub_settings: { keys: ['gem_provider', 'gem_bot_name', 'gem_system_prompt', 'gem_temp', 'gem_topp', 'gem_tokens'], isSettings: true },
     rag_knowledge: { key: 'gem_rag_kb' },
     hub_personal: { key: 'gem_personal_info' },
     ide_vfs: { key: 'ide_vfs_files', isVFS: true },
