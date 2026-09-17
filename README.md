@@ -12,6 +12,13 @@ A lightweight, serverless, and privacy-first AI web client and sandbox running d
 > 
 > P.S. This was designed to make it easy to import or restore your session later.
 
+
+> When you export a custom bot configuration that you've created, **your API keys are also exported**.
+> 
+> So before sharing your configuration, **REMOVE YOUR API KEYS FROM THE .json FILE**
+> 
+> P.S. This was designed to make it easy to import or restore your session later.
+
 <img width="1866" height="1032" alt="image" src="https://github.com/user-attachments/assets/9a5bc0a3-eea5-4027-a76a-03c72e10bbc6" />
 
 <img width="1873" height="1030" alt="image" src="https://github.com/user-attachments/assets/7ee56e9d-e4bd-4cac-b466-afe62f79816b" />
