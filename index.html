@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
     <title>Traliran AI Hub</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -11,42 +12,42 @@
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
 
-    <header class="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-20 shadow-md">
-        <div class="max-w-[1600px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-            <div class="flex items-center justify-between w-full md:w-auto gap-4">
-                <div class="flex items-center gap-2">
-                    <span class="text-2xl">💎</span>
-                    <h1 class="text-xl font-black text-emerald-400 tracking-wide bg-clip-text">Traliran AI Hub</h1>
+    <header class="bg-gray-900 border-b border-gray-800 p-3 sm:p-4 sticky top-0 z-20 shadow-md">
+        <div class="max-w-[1920px] mx-auto flex flex-col md:flex-row items-center justify-between gap-2 sm:gap-4">
+            <div class="flex items-center justify-between w-full md:w-auto gap-2 sm:gap-4">
+                <div class="flex items-center gap-2 min-w-0">
+                    <svg class="h-6 w-6 text-emerald-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.9 6.26 6.6.57-5 4.4 1.5 6.47L12 16.9 5.99 19.7l1.5-6.47-5-4.4 6.6-.57L12 2z"/></svg>
+                    <h1 class="text-lg sm:text-xl font-black text-emerald-400 tracking-wide bg-clip-text truncate">Traliran AI Hub</h1>
                 </div>
                 <div class="flex gap-2">
                     <button id="toggleChats" class="bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded transition cursor-pointer" title="Chat History">
-                        💬 <span class="hidden sm:inline">Chats</span>
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg> <span class="hidden sm:inline">Chats</span>
                     </button>
                     <button id="toggleSidebar" class="bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded transition cursor-pointer" title="API Settings">
-                        ⚙️ <span class="hidden sm:inline">Settings</span>
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> <span class="hidden sm:inline">Settings</span>
                     </button>
                     <button id="summarizeChatBtn" class="hidden bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded transition cursor-pointer" title="Summarize conversation to Personal AI">
-                        📝 <span class="hidden sm:inline">Summarize</span>
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg> <span class="hidden sm:inline">Summarize</span>
                     </button>
                 </div>
             </div>
             
-            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                <button id="openStoreBtn" class="flex bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1">
-                    <span>🏪</span> Assistant Store
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto justify-end">
+                <button id="openStoreBtn" class="flex bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-lg text-sm transition cursor-pointer font-medium flex items-center gap-1 min-h-[40px]">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg> Assistant Store
                 </button>
 
-                <button id="loginBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition cursor-pointer text-sm font-medium" title="Login / Cloud Sync">
-                    🔑 <span id="loginBtnText" class="hidden sm:inline">Login</span>
+                <button id="loginBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition cursor-pointer text-sm font-medium min-h-[40px] min-w-[40px] flex items-center justify-center" title="Login / Cloud Sync">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> <span id="loginBtnText" class="hidden sm:inline">Login</span>
                 </button>
 
-                <button id="expandHeaderBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition cursor-pointer text-sm font-medium" title="More buttons">
-                    ☰ <span class="hidden sm:inline">More</span>
+                <button id="expandHeaderBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 sm:py-1.5 rounded-lg transition cursor-pointer text-sm font-medium min-h-[40px]" title="More buttons">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg> <span class="hidden sm:inline">More</span>
                 </button>
 
-                <div id="collapsedButtons" class="hidden absolute top-full right-0 mt-2 bg-gray-900 border border-gray-800 rounded-xl p-2 flex-col gap-1 shadow-2xl z-50 min-w-[200px]">
+                <div id="collapsedButtons" class="hidden absolute top-full right-2 sm:right-0 left-2 sm:left-auto mt-2 bg-gray-900 border border-gray-800 rounded-xl p-2 flex-col gap-1 shadow-2xl z-50 min-w-[200px] max-h-[70dvh] overflow-y-auto chat-scroll">
                     <a href="https://dev.to/traliran" target="_blank" id="blogBtn" class="flex bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1.5 w-full">
-                        <span>📝</span> Blog
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg> Blog
                     </a>
 <a href="https://github.com/traliran/traliran-ai-hub/" target="_blank" rel="noopener noreferrer" id="blogBtn" class="flex items-center justify-center gap-2 w-full px-3.5 py-2 rounded-lg border border-sky-500/30 bg-sky-600/20 text-sm font-medium text-sky-300 transition hover:bg-sky-600/30 cursor-pointer">
     <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
@@ -59,38 +60,38 @@
    rel="noopener noreferrer" 
    id="wikiBtn" 
    class="flex items-center gap-1.5 w-full px-3.5 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-sm font-medium rounded-lg transition cursor-pointer">
-  <span>📖</span>
+  <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
   <span>Wiki</span>
 </a>
                     <button id="openGroupChatBtn" class="flex bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
-                        <span>👥</span> AI Group Debate
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> AI Group Debate
                     </button>
                     <button id="openHelpBtn" class="flex bg-gray-800 hover:bg-gray-700 text-gray-300 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
-                        ❓ Help
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg> Help
                     </button>
                     <button id="openNotesBtn" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
-                        <span>📝</span> Notes
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg> Notes
                     </button>
                     <a href="playground.html" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
-                        <span>📚</span> RAG Playground
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> RAG Playground
                     </a>
                     <a href="ide.html" class="flex bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
-                        <span>⚡</span> AI IDE
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> AI IDE
                     </a>
                     <button id="toggleSandboxBtn" class="flex bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
-                        <span>💻</span> Sandbox
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg> Sandbox
                     </button>
                     <button id="openMcpBtn" class="flex bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 border border-fuchsia-500/30 px-3.5 py-2 rounded-lg text-sm transition cursor-pointer font-medium items-center gap-1 w-full">
-                        <span>🧩</span> MCP Servers
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 7V5a2 2 0 00-4 0v2H7a2 2 0 00-2 2v3h2a2 2 0 110 4H5v3a2 2 0 002 2h3v-2a2 2 0 114 0v2h3a2 2 0 002-2v-3h-2a2 2 0 110-4h2V9a2 2 0 00-2-2h-3z"/></svg> MCP Servers
                     </button>
                 </div>
             </div>
         </div>
     </header>
 
-    <main class="flex-1 max-w-[1600px] w-full mx-auto flex relative overflow-hidden">
+    <main class="flex-1 max-w-[1920px] w-full mx-auto flex relative overflow-hidden">
         
-        <section id="chatsPanel" class="absolute inset-y-0 left-0 w-72 bg-gray-900 border-r border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto chat-scroll transition-transform duration-300 -translate-x-full md:translate-x-0 md:static md:w-64 lg:w-72 z-30">
+        <section id="chatsPanel" class="absolute inset-y-0 left-0 w-[86vw] max-w-[320px] bg-gray-900 border-r border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto chat-scroll transition-transform duration-300 -translate-x-full md:translate-x-0 md:static md:w-64 lg:w-72 z-30">
             <div class="flex justify-between items-center border-b border-gray-800 pb-2">
                 <h2 class="font-bold text-gray-300 text-sm uppercase tracking-wider">Chat History</h2>
                 <button id="newChatBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-1 px-2.5 rounded transition cursor-pointer">
@@ -103,7 +104,7 @@
 
         <div id="chatsOverlay" class="hidden absolute inset-0 bg-black/60 z-25 md:hidden"></div>
 
-        <section id="sidebar" class="absolute inset-y-0 right-0 w-80 bg-gray-900 border-l lg:border-l-0 lg:border-r border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto chat-scroll transition-transform duration-300 translate-x-full lg:translate-x-0 lg:static lg:w-80 z-30">
+        <section id="sidebar" class="absolute inset-y-0 right-0 w-[86vw] max-w-[320px] bg-gray-900 border-l lg:border-l-0 lg:border-r border-gray-800 p-4 flex flex-col gap-4 overflow-y-auto chat-scroll transition-transform duration-300 translate-x-full lg:translate-x-0 lg:static lg:w-80 z-30">
             <div class="border-b border-gray-800 pb-3 space-y-3">
                 <div class="flex justify-between items-center">
                     <h2 class="font-semibold text-emerald-400 text-sm">Cloud Sync</h2>
@@ -130,7 +131,7 @@
                     <h2 class="font-semibold text-emerald-400 text-base">API Configuration</h2>
                     <p class="text-xs text-gray-400 mt-1">Switch providers on the fly</p>
                 </div>
-                <button id="closeSidebar" class="text-gray-400 hover:text-white font-bold p-1">✕</button>
+                <button id="closeSidebar" class="text-gray-400 hover:text-white font-bold p-1" title="Close" aria-label="Close"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             </div>
 
             <div class="flex flex-col gap-3">
@@ -162,8 +163,8 @@
                         class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition font-mono">
                 </div>
 
-                <button id="refreshModelsBtn" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold py-2 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1">
-                    🔄 Refresh Model List
+                <button id="refreshModelsBtn" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold py-2 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                    Refresh Model List
                 </button>
 
                 <div>
@@ -172,7 +173,7 @@
                         <option value="">(Enter API key to load models)</option>
                     </select>
                     <button id="openMultiModelBtn" class="w-full bg-indigo-600/30 border border-indigo-500/40 hover:bg-indigo-600/50 text-indigo-300 font-medium py-1.5 rounded-lg text-xs transition flex items-center justify-center gap-1">
-                        ⚙️ Multi-Model Setup / Compare
+                        Multi-Model Setup / Compare
                     </button>
                     <div id="multiModelBadge" class="hidden mt-1.5 p-1.5 bg-indigo-950/40 border border-indigo-900 rounded text-[11px] text-indigo-300"></div>
                 </div>
@@ -202,17 +203,6 @@
                             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 resize-none"></textarea>
                     </div>
                 </div>
-
-                <div class="border-t border-gray-800 pt-3 mt-1 space-y-3">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Appearance</h3>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-400 mb-1">Theme Preset</label>
-                        <select id="themeSelector" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition">
-                            <option value="default">Default Dark</option>
-                            <option value="cyberpunk">Cyberpunk</option>
-                            <option value="matrix">Matrix</option>
-                        </select>
-                    </div>
                 </div>
 
                 <div class="border-t border-gray-800 pt-3 space-y-3">
@@ -265,9 +255,9 @@
         <section class="flex-1 flex flex-col md:flex-row h-full bg-gray-950 overflow-hidden w-full relative">
             
             <div id="chatColumn" class="flex-1 flex flex-col h-full overflow-hidden">
-                <div id="chatWindow" class="flex-1 p-4 overflow-y-auto space-y-4 chat-scroll">
-                    <div id="welcomeMessage" class="bg-gray-900 border border-gray-800 p-6 rounded-xl max-w-2xl mx-auto text-center mt-8 space-y-4">
-                        <span class="text-4xl">🚀</span>
+                <div id="chatWindow" class="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 chat-scroll">
+                    <div id="welcomeMessage" class="bg-gray-900 border border-gray-800 p-4 sm:p-6 rounded-2xl max-w-4xl mx-auto text-center mt-4 sm:mt-8 space-y-4">
+                        <svg class="svg-icon-lg mx-auto text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09zM12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
                         <h3 class="font-bold text-xl text-emerald-400">Welcome to Traliran AI Hub!</h3>
                         <p class="text-sm text-gray-300 leading-relaxed">
                             This is an advanced sandbox environment for managing workflows with neural networks. It seamlessly connects to **Groq, Google Gemini, OpenRouter, OpenAI, DeepSeek, Qwen, GLM, Claude** services, as well as local backend nodes running **Ollama/Llama.cpp**.
@@ -290,47 +280,59 @@
                                 Click the top right button to open the store where you can test integrated free features or access custom presets!
                             </div>
                         </div>
-                        <button id="startIntroBtn" class="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-5 rounded-lg text-sm transition cursor-pointer">
-                            Launch Interface Guide 🎓
+                        <div class="pt-2">
+                            <div id="activeModelBadge" class="active-model-badge mx-auto">
+                                <span class="dot"></span>
+                                <span>Active model: <code id="activeModelBadgeText">No model selected</code></span>
+                            </div>
+                        </div>
+                        <button id="startIntroBtn" class="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-5 rounded-2xl text-sm transition cursor-pointer">
+                            Launch Interface Guide
                 </button>
             </div>
         </div>
 
-                <div class="p-4 bg-gray-900/40 border-t border-gray-900 flex flex-col gap-2">
-                    <div id="mcpBadge" class="max-w-4xl w-full mx-auto hidden items-center gap-2 bg-fuchsia-950/40 border border-fuchsia-800 px-3 py-1.5 rounded-lg text-xs text-fuchsia-200">
-                        <span>🧩</span>
+                <div class="composer-bar p-3 sm:p-4 bg-gray-900/40 border-t border-gray-900 flex flex-col gap-2">
+                    <div id="mcpBadge" class="max-w-6xl w-full mx-auto hidden items-center gap-2 bg-fuchsia-950/40 border border-fuchsia-800 px-3 py-1.5 rounded-lg text-xs text-fuchsia-200">
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 7V5a2 2 0 00-4 0v2H7a2 2 0 00-2 2v3h2a2 2 0 110 4H5v3a2 2 0 002 2h3v-2a2 2 0 114 0v2h3a2 2 0 002-2v-3h-2a2 2 0 110-4h2V9a2 2 0 00-2-2h-3z"/></svg>
                         <span id="mcpBadgeText">MCP tools ready</span>
                     </div>
 
-                    <div id="fileIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs">
-                        <div class="flex items-center gap-2 text-emerald-400 truncate">
-                            <span>📎</span>
+                    <div id="fileIndicator" class="max-w-6xl w-full mx-auto hidden items-center justify-between gap-2 bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs">
+                        <div class="flex items-center gap-2 text-emerald-400 truncate min-w-0">
+                            <svg class="svg-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                            <img id="filePreviewThumb" class="hidden w-10 h-10 rounded-lg object-cover border border-gray-700 shrink-0" alt="Attachment preview">
                             <span id="fileNameDisplay" class="truncate font-mono">file.txt</span>
                         </div>
-                        <button id="removeFileBtn" class="text-rose-400 hover:text-rose-300 cursor-pointer px-1 font-bold">✕</button>
+                        <button id="removeFileBtn" class="text-rose-400 hover:text-rose-300 cursor-pointer px-1 font-bold shrink-0" aria-label="Remove file"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
                     </div>
-                    <div id="usageIndicator" class="max-w-4xl w-full mx-auto hidden items-center justify-between bg-gray-900/80 border border-gray-800 px-3 py-2 rounded-lg text-xs text-gray-400">
+                    <div id="usageIndicator" class="max-w-6xl w-full mx-auto hidden items-center justify-between bg-gray-900/80 border border-gray-800 px-3 py-2 rounded-lg text-xs text-gray-400">
                         <span id="usageInfo">Tokens: 0</span>
                         <span id="streamingStatus"></span>
                     </div>
 
-                    <div class="max-w-4xl w-full mx-auto flex flex-col sm:flex-row gap-2 items-end">
-                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text, image, video or PDF">
-                            <span>📎</span>
+                    <div class="max-w-6xl w-full mx-auto flex flex-row gap-2 items-end">
+                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[44px] h-[44px]" title="Attach text, image, video or PDF">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
                             <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,.pdf,image/*,video/*">
                         </label>
+                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[44px] h-[44px]" title="Take a photo (mobile camera)">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                            <input type="file" id="cameraInput" class="hidden" accept="image/*" capture="environment">
+                        </label>
 
-                        <textarea id="userInput" rows="1" placeholder="Ask a question..." 
-                            class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none max-h-32 chat-scroll min-h-[42px]"></textarea>
+                        <textarea id="userInput" rows="1" placeholder="Ask a question... (Ctrl+V to paste an image)"
+                            title="You can paste an image from clipboard with Ctrl+V"
+                            class="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none max-h-32 chat-scroll min-h-[42px]"></textarea>
                         
-                        <div class="flex gap-2 w-full sm:w-auto">
-                            <button id="sendBtn" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                        <div class="flex gap-2 w-auto shrink-0">
+                            <button id="sendBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-2xl text-sm transition flex items-center justify-center cursor-pointer h-[44px] min-w-[44px] shrink-0">
                                 <span class="sm:inline hidden">Send</span>
-                                <span class="inline sm:hidden">➤</span>
+                                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                             </button>
-                            <button id="stopBtn" class="hidden w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-lg text-sm transition flex items-center justify-center cursor-pointer h-[42px] shrink-0">
+                            <button id="stopBtn" class="hidden bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 sm:px-5 py-2.5 rounded-2xl text-sm transition flex items-center justify-center cursor-pointer h-[44px] min-w-[44px] shrink-0">
                                 <span class="sm:inline hidden">Stop</span>
-                                <span class="inline sm:hidden">⏹</span>
+                                <svg class="svg-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                             </button>
                         </div>
                     </div>
@@ -340,14 +342,14 @@
             <div id="sandboxColumn" class="hidden w-full md:w-[45%] bg-gray-900 border-t md:border-t-0 md:border-l border-gray-800 flex flex-col h-full overflow-hidden absolute md:static inset-0 z-40">
                 <div class="p-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                        <span>💻</span>
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
                         <h3 class="font-bold text-sm text-emerald-400">Sandbox Interpreter</h3>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button id="runCodeBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-2.5 py-1 rounded transition cursor-pointer">
-                            Run ▶
+                        <button id="runCodeBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-2.5 py-1 rounded-xl transition cursor-pointer">
+                            Run
                         </button>
-                        <button id="closeSandboxBtn" class="text-gray-400 hover:text-white font-bold p-1 text-sm">✕</button>
+                        <button id="closeSandboxBtn" class="text-gray-400 hover:text-white font-bold p-1 text-sm" aria-label="Close sandbox"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
                     </div>
                 </div>
                 
@@ -369,16 +371,16 @@
         </section>
     </main>
 
-    <!-- Модалка конфигуратора мульти-моделей -->
+    <!-- Multi-model configuration modal -->
     <div id="multiModelModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative flex flex-col max-h-[85vh]">
-            <button id="closeMultiModelModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <button id="closeMultiModelModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg" aria-label="Close"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             <div>
-                <h2 class="text-xl font-bold text-indigo-400">🤖 Multi-Model Setup</h2>
+                <h2 class="text-xl font-bold text-indigo-400 flex items-center gap-2"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> Multi-Model Setup</h2>
                 <p class="text-xs text-gray-400 mt-0.5">Select models across different providers to compare their answers side-by-side.</p>
             </div>
             <div id="multiModelList" class="flex-1 overflow-y-auto chat-scroll space-y-2 border border-gray-800 p-3 rounded-xl bg-gray-950">
-                <!-- Заполняется динамически -->
+                <!-- Populated dynamically -->
             </div>
             <div class="flex justify-end gap-2 pt-2 border-t border-gray-800">
                 <button id="clearMultiModels" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded-lg transition">Reset</button>
@@ -387,12 +389,12 @@
         </div>
     </div>
 
-    <!-- Модалка Группового Чат Дебатов -->
+    <!-- Group chat debate modal -->
     <div id="groupChatModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl relative">
-            <button id="closeGroupChatModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <button id="closeGroupChatModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg" aria-label="Close"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             <div>
-                <h2 class="text-xl font-black text-indigo-400">👥 AI Group Debate Panel</h2>
+                <h2 class="text-xl font-black text-indigo-400 flex items-center gap-2"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> AI Group Debate Panel</h2>
                 <p class="text-xs text-gray-400 mt-1">Submit your idea. Three specialized AI agents will review it from multiple perspectives (Optimist, Critic, Technologist).</p>
             </div>
             <div class="space-y-2">
@@ -401,7 +403,7 @@
             </div>
             <div class="flex justify-end">
                 <button id="startGroupDebateBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-5 rounded-lg text-sm transition cursor-pointer">
-                    Initiate Multi-Agent Analysis 🚀
+                    Initiate Multi-Agent Analysis
                 </button>
             </div>
         </div>
@@ -409,16 +411,16 @@
 
     <div id="storeModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative flex flex-col max-h-[90vh]">
-            <button id="closeStoreModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+            <button id="closeStoreModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer" aria-label="Close"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             
             <div>
-                <h2 class="text-2xl font-black text-amber-400 tracking-wide">🏪 Assistant Store</h2>
+                <h2 class="text-2xl font-black text-amber-400 tracking-wide flex items-center gap-2"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg> Assistant Store</h2>
                 <p class="text-xs text-gray-400 mt-1">Get built-in standard extensions or expand library with custom presets.</p>
             </div>
 
             <div class="flex-1 overflow-y-auto chat-scroll space-y-6 pr-2">
                 <div class="bg-gradient-to-r from-indigo-950 to-purple-950 border border-indigo-500/40 rounded-xl p-4 flex items-start gap-3 relative overflow-hidden">
-                    <div class="text-2xl">✨</div>
+                    <div class="text-indigo-300"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.88 5.76a2 2 0 001.36 1.36L21 12l-5.76 1.88a2 2 0 00-1.36 1.36L12 21l-1.88-5.76a2 2 0 00-1.36-1.36L3 12l5.76-1.88a2 2 0 001.36-1.36L12 3z"/></svg></div>
                     <div class="text-sm text-indigo-100 flex-1">
                         <span class="font-bold text-white">Need a custom bot or feature?</span> If you would like me to build a custom assistant or functionality for the hub just for you, please fill out <a href="https://docs.google.com/forms/d/e/1FAIpQLScw0LuQ_06jXy-JUX_-GjHRv36CiQI-YcgKsCol7vVwW-YVsw/viewform" target="_blank" rel="noopener" class="text-amber-300 underline hover:text-amber-200 font-semibold">this form</a>.
                     </div>
@@ -429,7 +431,7 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group">
                             <div>
-                                <h4 class="font-bold text-emerald-400 text-sm">🔤 Polyglot Translator</h4>
+                                <h4 class="font-bold text-emerald-400 text-sm flex items-center gap-1.5"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h7"/></svg> Polyglot Translator</h4>
                                 <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">Translates incoming texts into target language systems maintaining proper cultural idioms.</p>
                             </div>
                             <div class="flex justify-end mt-2">
@@ -439,7 +441,7 @@
 
                         <div class="bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group">
                             <div>
-                                <h4 class="font-bold text-emerald-400 text-sm">✍️ Code & Text Editor</h4>
+                                <h4 class="font-bold text-emerald-400 text-sm flex items-center gap-1.5"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg> Code & Text Editor</h4>
                                 <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">Corrects syntax structural flaws, styles code, or fixes grammar blocks instantly.</p>
                             </div>
                             <div class="flex justify-end mt-2">
@@ -449,7 +451,7 @@
 
                         <div class="bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group">
                             <div>
-                                <h4 class="font-bold text-emerald-400 text-sm">💡 Ideation Generator</h4>
+                                <h4 class="font-bold text-emerald-400 text-sm flex items-center gap-1.5"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4.9 12c.8.8 1.4 1.77 1.72 2.83.12.4.47.67.88.67h4.6c.41 0 .76-.27.88-.67.32-1.06.92-2.03 1.72-2.83A7 7 0 0012 2z"/></svg> Ideation Generator</h4>
                                 <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">Brainstorms creative concepts, scripts, plot designs, and mechanics loops.</p>
                             </div>
                             <div class="flex justify-end mt-2">
@@ -470,47 +472,47 @@
 
     <div id="helpModal" class="hidden fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-xl max-w-xl w-full p-6 space-y-4 shadow-2xl relative">
-            <button id="closeHelpModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <button id="closeHelpModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg" aria-label="Close"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             <h3 class="text-lg font-bold text-emerald-400 flex items-center gap-2">
-                <span>🎓</span> Help & Provider Setup
+                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg> Help & Provider Setup
             </h3>
             
             <div class="space-y-3 text-sm text-gray-300 max-h-[70vh] overflow-y-auto chat-scroll pr-2">
                 <div>
-                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Groq Cloud</h4>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">Groq Cloud</h4>
                     <p class="text-xs text-gray-400">Requires an API key from console.groq.com. Delivers the fastest inference speed on the market.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Google Gemini</h4>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">Google Gemini</h4>
                     <p class="text-xs text-gray-400">Operates via official OpenAI-compliant base route. Requires an API token from Google AI Studio.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 OpenRouter</h4>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">OpenRouter</h4>
                     <p class="text-xs text-gray-400">Unified entry portal accessing hundreds of variants (Claude, GPT, DeepSeek). Requires token routing from openrouter.ai.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 OpenAI</h4>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">OpenAI</h4>
                     <p class="text-xs text-gray-400">Standard direct infrastructure connections to mainline GPT models. Setup authorization key at platform.openai.com.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 DeepSeek / Qwen / GLM</h4>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">DeepSeek / Qwen / GLM</h4>
                     <p class="text-xs text-gray-400">Use compatible OpenAI-style endpoints with your API key. These providers can handle multimodal prompts and rich media-aware conversations.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Claude</h4>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">Claude</h4>
                     <p class="text-xs text-gray-400">Anthropic's Claude models support direct API access with an Anthropic-compatible endpoint and can be used for text and media-oriented workflows.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Local Ollama</h4>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">Local Ollama</h4>
                     <p class="text-xs text-gray-400">Verify your daemon is active locally (`ollama run ...`). Standard fallback routing endpoint: `http://localhost:11434/v1`.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-emerald-300 mb-0.5">🟢 Local Llama.cpp</h4>
+                    <h4 class="font-bold text-emerald-300 mb-0.5">Local Llama.cpp</h4>
                     <p class="text-xs text-gray-400">Ideal when utilizing internal standard web server packaging setups. Standard fallback mapping endpoint: `http://localhost:8080/v1`.</p>
                 </div>
 
                 <div class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs mt-4">
-                    <span class="font-bold text-yellow-400 block mb-1">⚠️ Please note:</span>
+                    <span class="font-bold text-yellow-400 flex items-center gap-1.5 mb-1"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg> Please note:</span>
                     When initiating queries to local servers (Ollama / Llama.cpp), your browser runtime may block transactions due to structural browser CORS security constraints. Ensure to deploy Ollama with standard origin flag variables enabled: `OLLAMA_ORIGINS="*"`.
                 </div>
             </div>
@@ -523,14 +525,18 @@
         </div>
     </div>
 
-    <!-- Notes Page -->
+    <!-- Notes page -->
     <div id="notesPage" class="hidden fixed inset-0 bg-gray-950 text-gray-100 z-40 flex overflow-hidden">
-        <aside class="w-64 md:w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
+        <div id="notesOverlay" class="hidden absolute inset-0 bg-black/60 z-30 md:hidden"></div>
+        <aside id="notesSidebar" class="absolute inset-y-0 left-0 w-[86vw] max-w-[320px] md:w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-40 transition-transform duration-300 -translate-x-full md:translate-x-0 md:static">
             <div class="p-4 border-b border-gray-800 flex justify-between items-center">
                 <h2 class="font-bold text-emerald-400">My Notes</h2>
-                <button id="newNoteBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1 px-2 rounded transition cursor-pointer">
-                    + New
-                </button>
+                <div class="flex items-center gap-2">
+                    <button id="newNoteBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1 px-2 rounded transition cursor-pointer">
+                        + New
+                    </button>
+                    <button id="closeNotesSidebar" class="md:hidden text-gray-400 hover:text-white p-1" title="Close notes list" aria-label="Close notes list"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                </div>
             </div>
             <div class="p-3">
                 <input type="text" id="notesSearch" placeholder="Search notes or #tags..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-500 transition">
@@ -540,17 +546,20 @@
             </div>
         </aside>
 
-        <main class="flex-1 flex flex-col h-full relative bg-gray-950">
-            <div class="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
-                <input type="text" id="noteTitle" placeholder="Note Title..." class="bg-transparent text-xl font-bold text-gray-100 focus:outline-none w-full mr-4">
-                <div class="flex gap-2">
-                    <button id="importNoteBtn" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer" title="Import MD file">📥 Import</button>
-                    <button id="exportToRagBtn" class="text-xs bg-emerald-700/30 hover:bg-emerald-700/50 text-emerald-300 px-3 py-1 rounded border border-emerald-600/30 transition cursor-pointer" title="Export this note to the RAG knowledge base">📚 Export to RAG</button>
-                    <button id="exportNoteBtn" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer" title="Export as MD file">📤 Export</button>
+        <main class="flex-1 flex flex-col h-full min-w-0 relative bg-gray-950">
+            <div class="p-3 sm:p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-2 bg-gray-900/50">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <button id="toggleNotesSidebar" class="md:hidden bg-gray-800 hover:bg-gray-700 text-gray-200 p-2 rounded-lg transition shrink-0" title="Notes list" aria-label="Toggle notes list"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+                    <input type="text" id="noteTitle" placeholder="Note Title..." class="bg-transparent text-lg sm:text-xl font-bold text-gray-100 focus:outline-none w-full min-w-0">
+                </div>
+                <div class="flex gap-2 flex-wrap items-center max-w-full overflow-x-auto chat-scroll">
+                    <button id="importNoteBtn" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer" title="Import MD file"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Import</button>
+                    <button id="exportToRagBtn" class="text-xs bg-emerald-700/30 hover:bg-emerald-700/50 text-emerald-300 px-3 py-1 rounded border border-emerald-600/30 transition cursor-pointer" title="Export this note to the RAG knowledge base"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> Export to RAG</button>
+                    <button id="exportNoteBtn" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer" title="Export as MD file"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Export</button>
                     <input type="file" id="noteFileInput" accept=".md" class="hidden">
-                    <button id="toggleNotePreview" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer">👁️ Preview</button>
-                    <button id="deleteNoteBtn" class="text-xs bg-rose-900/30 hover:bg-rose-900/50 text-rose-400 px-3 py-1 rounded border border-rose-800/50 transition cursor-pointer">🗑️ Delete</button>
-                    <button id="closeNotesPage" class="text-gray-400 hover:text-white p-1 text-xl">✕</button>
+                    <button id="toggleNotePreview" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview</button>
+                    <button id="deleteNoteBtn" class="text-xs bg-rose-900/30 hover:bg-rose-900/50 text-rose-400 px-3 py-1 rounded border border-rose-800/50 transition cursor-pointer"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg> Delete</button>
+                    <button id="closeNotesPage" class="text-gray-400 hover:text-white p-1 text-xl" aria-label="Close notes"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
                 </div>
             </div>
 
@@ -564,18 +573,17 @@
             </div>
 
             <!-- AI Complement Button -->
-            <button id="aiComplementBtn" class="fixed bottom-8 right-8 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-lg flex items-center justify-center text-2xl transition-transform active:scale-90 z-50 cursor-pointer" title="AI Complement">
-                ✨
+            <button id="aiComplementBtn" class="fixed bottom-8 right-8 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-90 z-50 cursor-pointer" title="AI Complement"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.88 5.76a2 2 0 001.36 1.36L21 12l-5.76 1.88a2 2 0 00-1.36 1.36L12 21l-1.88-5.76a2 2 0 00-1.36-1.36L3 12l5.76-1.88a2 2 0 001.36-1.36L12 3z"/></svg>
             </button>
         </main>
     </div>
 
-    <!-- Auth Modal -->
+    <!-- Auth modal -->
     <div id="authModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button id="closeAuthModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg">✕</button>
+            <button id="closeAuthModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg" aria-label="Close"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             <div>
-                <h2 class="text-xl font-bold text-emerald-400">🔑 Cloud Sync Login</h2>
+                <h2 class="text-xl font-bold text-emerald-400 flex items-center gap-2"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> Cloud Sync Login</h2>
                 <p class="text-xs text-gray-400 mt-1">Sign in to sync your data across devices.</p>
             </div>
 
@@ -615,12 +623,12 @@
         </div>
     </div>
 
-    <!-- MCP Servers Modal -->
+    <!-- MCP servers modal -->
     <div id="mcpModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative flex flex-col max-h-[88vh]">
-            <button id="closeMcpModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+            <button id="closeMcpModal" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-lg cursor-pointer" aria-label="Close"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             <div>
-                <h2 class="text-xl font-bold text-fuchsia-400">🧩 MCP Servers</h2>
+                <h2 class="text-xl font-bold text-fuchsia-400 flex items-center gap-2"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 7V5a2 2 0 00-4 0v2H7a2 2 0 00-2 2v3h2a2 2 0 110 4H5v3a2 2 0 002 2h3v-2a2 2 0 114 0v2h3a2 2 0 002-2v-3h-2a2 2 0 110-4h2V9a2 2 0 00-2-2h-3z"/></svg> MCP Servers</h2>
                 <p class="text-xs text-gray-400 mt-0.5">Connect remote Model Context Protocol servers. Their tools become available to the AI through tool-calling (like an IDE agent). Works with any Streamable HTTP MCP endpoint.</p>
             </div>
 
@@ -630,7 +638,7 @@
                 <input type="text" id="mcpAuth" placeholder="Auth header (optional): Bearer xxx" class="bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500 font-mono">
             </div>
             <div class="flex justify-end gap-2">
-                <button id="mcpAddBtn" class="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold py-2 px-4 rounded-lg transition cursor-pointer">➕ Add & Connect</button>
+                <button id="mcpAddBtn" class="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold py-2 px-4 rounded-lg transition cursor-pointer">Add & Connect</button>
             </div>
 
             <div id="mcpList" class="flex-1 overflow-y-auto chat-scroll space-y-2 border border-gray-800 p-3 rounded-xl bg-gray-950 min-h-[120px]"></div>
@@ -644,6 +652,7 @@
     <script src="db-connector.js"></script>
     <script src="sync-manager.js"></script>
     <script src="mcp.js"></script>
+    <script src="ui-dialogs.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

@@ -20,6 +20,13 @@ const PROVIDERS = {
 const kbUpload = document.getElementById('kbUpload');
 const kbFileList = document.getElementById('kbFileList');
 const clearKbBtn = document.getElementById('clearKbBtn');
+const kbPanel = document.getElementById('kbPanel');
+const kbOverlay = document.getElementById('kbOverlay');
+const toggleKbBtn = document.getElementById('toggleKbBtn');
+const closeKbBtn = document.getElementById('closeKbBtn');
+const kbUploadModal = document.getElementById('kbUploadModal');
+const kbFileListModal = document.getElementById('kbFileListModal');
+const clearKbModalBtn = document.getElementById('clearKbModalBtn');
 const chatWindow = document.getElementById('chatWindow');
 const welcomeMessage = document.getElementById('welcomeMessage');
 const userInput = document.getElementById('userInput');
@@ -72,37 +79,97 @@ function saveKnowledgeBase() {
 }
 
 function renderKbFiles() {
-    kbFileList.innerHTML = '';
+    renderKbListInto(kbFileList);
+    renderKbListInto(kbFileListModal);
+}
+
+function renderKbListInto(container) {
+    if (!container) return;
+    container.innerHTML = '';
     if (knowledgeBase.length === 0) {
-        kbFileList.innerHTML = '<p class="text-[10px] text-gray-600 italic">No files loaded.</p>';
+        container.innerHTML = '<p class="text-[10px] text-gray-600 italic">No files loaded.</p>';
         return;
     }
     knowledgeBase.forEach((file, index) => {
         const div = document.createElement('div');
         div.className = 'flex items-center justify-between p-2 bg-gray-800 border border-gray-700 rounded-lg text-xs group';
-        div.innerHTML = `
-            <span class="truncate pr-2 text-gray-300">${file.name}</span>
-            <button class="text-rose-400 opacity-0 group-hover:opacity-100 hover:text-rose-300 transition cursor-pointer" data-index="${index}">✕</button>
-        `;
-        div.querySelector('button').onclick = () => {
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'truncate pr-2 text-gray-300';
+        nameSpan.textContent = file.name;
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'text-rose-400 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 hover:text-rose-300 transition cursor-pointer shrink-0';
+        removeBtn.textContent = 'Remove';
+        removeBtn.setAttribute('aria-label', 'Remove ' + file.name);
+        removeBtn.onclick = () => {
             knowledgeBase.splice(index, 1);
             saveKnowledgeBase();
         };
-        kbFileList.appendChild(div);
+        div.appendChild(nameSpan);
+        div.appendChild(removeBtn);
+        container.appendChild(div);
     });
 }
 
-kbUpload.addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files);
+// Knowledge base drawer: hidden slide-over on phones, static column on desktop.
+function openKbDrawer() {
+    if (!kbPanel) return;
+    if (window.innerWidth >= 1024) return;
+    kbPanel.classList.remove('-translate-x-full');
+    if (kbOverlay) kbOverlay.classList.remove('hidden');
+}
+
+function closeKbDrawer() {
+    if (!kbPanel) return;
+    if (window.innerWidth >= 1024) return;
+    kbPanel.classList.add('-translate-x-full');
+    if (kbOverlay) kbOverlay.classList.add('hidden');
+}
+
+if (toggleKbBtn) toggleKbBtn.addEventListener('click', openKbDrawer);
+if (closeKbBtn) closeKbBtn.addEventListener('click', closeKbDrawer);
+if (kbOverlay) kbOverlay.addEventListener('click', closeKbDrawer);
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeKbDrawer();
+});
+
+async function addFilesToKnowledgeBase(fileList) {
+    const files = Array.from(fileList || []);
     for (const file of files) {
         const content = await file.text();
         knowledgeBase.push({ name: file.name, content });
     }
-    saveKnowledgeBase();
+    if (files.length) saveKnowledgeBase();
+}
+
+kbUpload.addEventListener('change', async (e) => {
+    await addFilesToKnowledgeBase(e.target.files);
+    e.target.value = '';
 });
 
-clearKbBtn.addEventListener('click', () => {
-    if (confirm('Clear all knowledge base files?')) {
+if (kbUploadModal) kbUploadModal.addEventListener('change', async (e) => {
+    await addFilesToKnowledgeBase(e.target.files);
+    e.target.value = '';
+});
+
+clearKbBtn.addEventListener('click', async () => {
+    const confirmed = await showAppConfirm('Clear all knowledge base files?', {
+        title: 'Clear knowledge base',
+        confirmText: 'Clear',
+        danger: true
+    });
+    if (confirmed) {
+        knowledgeBase = [];
+        saveKnowledgeBase();
+    }
+});
+
+if (clearKbModalBtn) clearKbModalBtn.addEventListener('click', async () => {
+    const confirmed = await showAppConfirm('Clear all knowledge base files?', {
+        title: 'Clear knowledge base',
+        confirmText: 'Clear',
+        danger: true
+    });
+    if (confirmed) {
         knowledgeBase = [];
         saveKnowledgeBase();
     }
@@ -196,7 +263,7 @@ async function sendMessage() {
 
     const config = loadConfig();
     if (PROVIDERS[config.provider].hasKey && !config.apiKey) {
-        alert('API Key missing! Please configure it in the Hub.');
+        notifyWarning('API Key missing! Please configure it in the Hub.');
         return;
     }
 

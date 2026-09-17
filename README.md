@@ -13,21 +13,21 @@ A lightweight, serverless, and privacy-first AI web client and sandbox running d
 > P.S. This was designed to make it easy to import or restore your session later.
 
 
-<img width="1813" height="957" alt="screenshot" src="https://github.com/user-attachments/assets/87805692-7415-4572-b783-4fd258bbabf9" />
+> When you export a custom bot configuration that you've created, **your API keys are also exported**.
+> 
+> So before sharing your configuration, **REMOVE YOUR API KEYS FROM THE .json FILE**
+> 
+> P.S. This was designed to make it easy to import or restore your session later.
 
-<img width="1809" height="958" alt="screenshot" src="https://github.com/user-attachments/assets/d2d6c3c9-cb5a-4371-9a2f-22a0fb9506c9" />
+<img width="1866" height="1032" alt="image" src="https://github.com/user-attachments/assets/9a5bc0a3-eea5-4027-a76a-03c72e10bbc6" />
 
-<img width="1818" height="940" alt="screenshot" src="https://github.com/user-attachments/assets/6560a1ab-4095-4072-8869-3e8478405840" />
+<img width="1873" height="1030" alt="image" src="https://github.com/user-attachments/assets/7ee56e9d-e4bd-4cac-b466-afe62f79816b" />
 
-<img width="1825" height="952" alt="screenshot" src="https://github.com/user-attachments/assets/41d3ffd2-51b4-4bf4-a6e4-283919442bab" />
+<img width="1873" height="1033" alt="image" src="https://github.com/user-attachments/assets/9b8c7d1e-9ead-4435-913e-3c638d9077c1" />
 
-<img width="1815" height="947" alt="screenshot" src="https://github.com/user-attachments/assets/c823d773-2106-4a45-af79-a545802ad75e" />
+<img width="1876" height="1030" alt="image" src="https://github.com/user-attachments/assets/26a26954-dbe2-448a-84a9-279bc44f8495" />
 
-<img width="1780" height="941" alt="screenshot" src="https://github.com/user-attachments/assets/b1d30427-c26b-4c9c-8aaf-88f460bcdd9e" />
-
-<img width="1820" height="944" alt="screenshot" src="https://github.com/user-attachments/assets/71f20574-06a6-48d1-9c19-583329fcc6a4" />
-
-<img width="1820" height="940" alt="screenshot" src="https://github.com/user-attachments/assets/8ac7e713-b684-4d01-85a9-adcd8ef127d6" />
+<img width="1878" height="1036" alt="image" src="https://github.com/user-attachments/assets/513f0060-f5e7-414b-883a-5e651124a529" />
 
 ---
 

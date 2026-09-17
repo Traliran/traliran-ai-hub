@@ -98,7 +98,7 @@ function getMaxTokens() {
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
     return 2048;
 }
-const themeSelector = document.getElementById('themeSelector');
+// Single pure-black dark theme is applied via styles.css. No theme presets.
 const helpModal = document.getElementById('helpModal');
 const openHelpBtn = document.getElementById('openHelpBtn');
 const closeHelpModal = document.getElementById('closeHelpModal');
@@ -155,8 +155,10 @@ const stopBtn = document.getElementById('stopBtn');
 const chatsList = document.getElementById('chatsList');
 const newChatBtn = document.getElementById('newChatBtn');
 const attachmentInput = document.getElementById('attachmentInput');
+const cameraInput = document.getElementById('cameraInput');
 const fileIndicator = document.getElementById('fileIndicator');
 const fileNameDisplay = document.getElementById('fileNameDisplay');
+const filePreviewThumb = document.getElementById('filePreviewThumb');
 const removeFileBtn = document.getElementById('removeFileBtn');
 const usageInfo = document.getElementById('usageInfo');
 const streamingStatus = document.getElementById('streamingStatus');
@@ -200,7 +202,7 @@ summarizeChatBtn.addEventListener('click', async () => {
     if (!session) return;
     
     if (countAssistantMessages() < 2) {
-        alert('Need at least 2 AI responses to summarize.');
+        notifyWarning('Need at least 2 AI responses to summarize.');
         return;
     }
     
@@ -211,14 +213,14 @@ summarizeChatBtn.addEventListener('click', async () => {
     const topP = parseFloat(topPInput.value);
     
     if (hasKey && !apiKey) {
-        alert('Please enter your API key!');
+        notifyWarning('Please enter your API key!');
         openSidebarUniversal();
         return;
     }
     
     const modelId = botModelSelect.value;
     if (!modelId) {
-        alert('Please select an AI model!');
+        notifyWarning('Please select an AI model!');
         openSidebarUniversal();
         return;
     }
@@ -227,7 +229,7 @@ summarizeChatBtn.addEventListener('click', async () => {
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({
             role: m.role,
-            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+            content: normalizeContentToText(m.content)
         }));
     
     const summarizationPrompt = {
@@ -238,7 +240,7 @@ summarizeChatBtn.addEventListener('click', async () => {
     const messagesToSend = [summarizationPrompt, ...conversationMessages];
     
     summarizeChatBtn.disabled = true;
-    summarizeChatBtn.innerHTML = '⏳ <span class="hidden sm:inline">Summarizing...</span>';
+    summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarizing...</span>';
     
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => abortController.abort(), 60000);
@@ -263,18 +265,18 @@ summarizeChatBtn.addEventListener('click', async () => {
             personalInfoInput.value = newInfo;
             STORAGE.setItem('gem_personal_info', newInfo);
             
-            summarizeChatBtn.innerHTML = '✅ <span class="hidden sm:inline">Done!</span>';
+            summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Done!</span>';
             setTimeout(() => {
-                summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+                summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarize</span>';
             }, 2000);
         } else {
-            summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+            summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarize</span>';
         }
     } catch (error) {
         console.error('Summarization error:', error);
         const message = error.name === 'AbortError' ? 'Request timed out after 60s' : error.message;
-        alert('Failed to summarize conversation: ' + message);
-        summarizeChatBtn.innerHTML = '📝 <span class="hidden sm:inline">Summarize</span>';
+        notifyError('Failed to summarize conversation: ' + message);
+        summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarize</span>';
     } finally {
         clearTimeout(timeoutId);
         summarizeChatBtn.disabled = false;
@@ -313,6 +315,7 @@ function escapeHtml(value) {
 }
 
 function normalizeContentToText(content) {
+    content = unwrapMessageContent(content);
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
         return content.map(part => {
@@ -326,21 +329,60 @@ function normalizeContentToText(content) {
     return '';
 }
 
+// Unwrap legacy double-wrapped content: some stored messages keep the shape
+// { role: 'user', content: [...] } inside the message content field.
+function unwrapMessageContent(content) {
+    if (content && typeof content === 'object' && !Array.isArray(content) && Array.isArray(content.content)) {
+        return content.content;
+    }
+    return content;
+}
+
+// Convert stored content to the standard OpenAI chat format:
+// [{ type: 'text', text }, { type: 'image_url', image_url: { url } }].
+// Legacy parts stored as { type: 'image_url', url } are migrated here.
+function normalizeContentForApi(content) {
+    content = unwrapMessageContent(content);
+    if (typeof content === 'string' || !Array.isArray(content)) return content;
+    return content.map(part => {
+        if (typeof part === 'string') return { type: 'text', text: part };
+        if (part?.type === 'text') return { type: 'text', text: part.text || part.content || '' };
+        if (part?.type === 'image_url') {
+            const url = typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url || part.url || '');
+            if (!url) return { type: 'text', text: '[Image attachment]' };
+            return { type: 'image_url', image_url: { url } };
+        }
+        if (part?.type === 'video_url' || part?.type === 'video') {
+            return { type: 'text', text: `[Video attachment: ${part.url || part.video_url?.url || 'video'} — video bytes are not sent, describe it in text instead.]` };
+        }
+        if (part?.type === 'image' || part?.type === 'input_image') {
+            const url = part.url || part.src || '';
+            if (!url) return { type: 'text', text: '[Image attachment]' };
+            return { type: 'image_url', image_url: { url } };
+        }
+        if (part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
+        return { type: 'text', text: part?.text || part?.content || '' };
+    });
+}
+
 function buildMediaHtmlFromContent(content) {
+    content = unwrapMessageContent(content);
     if (!Array.isArray(content)) return '';
 
     return content.map(part => {
         if (typeof part === 'string' || !part) return '';
 
-        const source = part.image_url?.url || part.video_url?.url || part.url || part.src || '';
+        const imageUrl = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url;
+        const videoUrl = typeof part.video_url === 'string' ? part.video_url : part.video_url?.url;
+        const source = imageUrl || videoUrl || part.url || part.src || '';
         if (!source) return '';
 
         if (part.type === 'image_url' || part.type === 'image' || part.type === 'input_image') {
-            return `<div class="media-block my-3"><img src="${escapeHtml(source)}" alt="Generated image" class="rounded-lg border border-gray-700 max-w-full h-auto shadow-lg"></div>`;
+            return `<div class="media-block my-3"><img src="${escapeHtml(source)}" alt="Generated image" class="rounded-2xl border border-gray-700 max-w-full h-auto shadow-lg"></div>`;
         }
 
         if (part.type === 'video_url' || part.type === 'video' || part.type === 'input_video') {
-            return `<div class="media-block my-3"><video controls preload="metadata" class="rounded-lg border border-gray-700 max-w-full bg-black shadow-lg"><source src="${escapeHtml(source)}"></video></div>`;
+            return `<div class="media-block my-3"><video controls preload="metadata" class="rounded-2xl border border-gray-700 max-w-full bg-black shadow-lg"><source src="${escapeHtml(source)}"></video></div>`;
         }
 
         return '';
@@ -351,14 +393,14 @@ function renderPaidStoreBots() {
     paidBotsContainer.innerHTML = '';
     PAID_ASSISTANTS_CONFIG.forEach(bot => {
         const botCard = document.createElement('div');
-        botCard.className = 'bg-gray-950 border border-gray-800 rounded-xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group';
+        botCard.className = 'bg-gray-950 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between h-36 relative overflow-hidden group';
         botCard.innerHTML = `
             <div>
                 <h4 class="font-bold text-amber-400 text-sm">${bot.name}</h4>
                 <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">${bot.description}</p>
             </div>
             <div class="flex justify-end mt-2">
-                <a href="${bot.link}" target="_blank" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition text-center min-w-[70px]">Buy</a>
+                <a href="${bot.link}" target="_blank" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-1.5 rounded-2xl transition text-center min-w-[70px]">Buy</a>
             </div>
         `;
         paidBotsContainer.appendChild(botCard);
@@ -371,7 +413,7 @@ window.installFreeAssistant = function(name, promptText) {
     saveApiSettings();
     storeModal.classList.add('hidden');
     createNewSession();
-    alert(`Assistant Profile "${name}" is now online!`);
+    notifySuccess(`Assistant Profile "${name}" is now online!`);
 };
 
 openStoreBtn.addEventListener('click', () => {
@@ -392,12 +434,12 @@ function renderMcpList() {
     }
     servers.forEach(s => {
         const card = document.createElement('div');
-        card.className = 'bg-gray-950 border border-gray-800 rounded-lg p-3 flex flex-col gap-2';
+        card.className = 'bg-gray-950 border border-gray-800 rounded-2xl p-3 flex flex-col gap-2';
         const status = s.connected
             ? `<span class="text-emerald-400">● connected (${s.tools.length} tools)</span>`
             : `<span class="text-rose-400">● disconnected</span>`;
         const toolsHtml = (s.connected && s.tools.length)
-            ? s.tools.map(t => `<li class="text-[10px] text-fuchsia-300 font-mono truncate">🔧 ${escapeHtml(t.name)}</li>`).join('')
+            ? s.tools.map(t => `<li class="text-[10px] text-fuchsia-300 font-mono truncate">[tool] ${escapeHtml(t.name)}</li>`).join('')
             : '';
         card.innerHTML = `
             <div class="flex items-center justify-between gap-2">
@@ -406,8 +448,8 @@ function renderMcpList() {
                     <div class="text-[10px] text-gray-500 font-mono truncate">${escapeHtml(s.url)}</div>
                 </div>
                 <div class="flex gap-1 shrink-0">
-                    <button data-id="${s.id}" class="mcp-reconnect bg-gray-800 hover:bg-gray-700 text-xs px-2 py-1 rounded cursor-pointer" title="Reconnect">↻</button>
-                    <button data-id="${s.id}" class="mcp-remove bg-rose-800 hover:bg-rose-700 text-xs px-2 py-1 rounded cursor-pointer" title="Remove">🗑</button>
+                    <button data-id="${s.id}" class="mcp-reconnect bg-gray-800 hover:bg-gray-700 text-xs px-2 py-1 rounded-xl cursor-pointer" title="Reconnect">Reconnect</button>
+                    <button data-id="${s.id}" class="mcp-remove bg-rose-800 hover:bg-rose-700 text-xs px-2 py-1 rounded-xl cursor-pointer" title="Remove">Remove</button>
                 </div>
             </div>
             <div class="text-[10px]">${status}</div>
@@ -416,9 +458,14 @@ function renderMcpList() {
         mcpList.appendChild(card);
     });
 
-    mcpList.querySelectorAll('.mcp-remove').forEach(b => b.addEventListener('click', () => {
+    mcpList.querySelectorAll('.mcp-remove').forEach(b => b.addEventListener('click', async () => {
         const target = MCP_MANAGER.servers.find(x => x.id === b.dataset.id);
-        if (confirm(`Remove MCP server "${target?.name || ''}"?`)) {
+        const confirmed = await showAppConfirm(`Remove MCP server "${target?.name || ''}"?`, {
+            title: 'Remove MCP server',
+            confirmText: 'Remove',
+            danger: true
+        });
+        if (confirmed) {
             MCP_MANAGER.remove(b.dataset.id);
             renderMcpList();
             updateMcpBadge();
@@ -427,7 +474,7 @@ function renderMcpList() {
     mcpList.querySelectorAll('.mcp-reconnect').forEach(b => b.addEventListener('click', async () => {
         b.textContent = '…';
         try { await MCP_MANAGER.connectOne(b.dataset.id); }
-        catch (e) { alert('Connect failed: ' + e.message); }
+        catch (e) { notifyError('Connect failed: ' + e.message); }
         renderMcpList();
         updateMcpBadge();
     }));
@@ -436,7 +483,7 @@ function renderMcpList() {
 mcpAddBtn.addEventListener('click', async () => {
     const name = mcpNameInput.value.trim();
     const url = mcpUrlInput.value.trim();
-    if (!name || !url) { alert('Please enter a server name and URL.'); return; }
+    if (!name || !url) { notifyWarning('Please enter a server name and URL.'); return; }
     mcpAddBtn.disabled = true;
     mcpAddBtn.textContent = 'Connecting…';
     try {
@@ -446,10 +493,10 @@ mcpAddBtn.addEventListener('click', async () => {
         renderMcpList();
         updateMcpBadge();
     } catch (e) {
-        alert('Failed to connect MCP server: ' + e.message);
+        notifyError('Failed to connect MCP server: ' + e.message);
     } finally {
         mcpAddBtn.disabled = false;
-        mcpAddBtn.textContent = '➕ Add & Connect';
+        mcpAddBtn.textContent = 'Add & Connect';
     }
 });
 
@@ -487,11 +534,8 @@ function loadApiSettings() {
     tokensInput.value = savedTokens;
     if (tokensValue) tokensValue.textContent = savedTokens;
 
-    const savedTheme = STORAGE.getItem('gem_theme') || 'default';
-    themeSelector.value = savedTheme;
-    applyTheme(savedTheme);
-
     fetchActiveModels();
+    updateWelcomeModelInfo();
 }
 
 function saveApiSettings() {
@@ -508,17 +552,20 @@ function saveApiSettings() {
     updateStatusCard();
 }
 
-function applyTheme(theme) {
-    document.body.className = `bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden theme-${theme}`;
-    if (theme === 'default') {
-        document.body.classList.remove('theme-cyberpunk', 'theme-matrix', 'theme-light');
+// Single fixed pure-black theme. No theme switching.
+// Shows the currently selected provider and model in the empty chat state.
+function updateWelcomeModelInfo() {
+    const badgeText = document.getElementById('activeModelBadgeText');
+    if (!badgeText) return;
+    const provider = apiProvider.value || 'no provider';
+    let model = 'no model selected';
+    if (selectedMultiModels.length > 0) {
+        model = selectedMultiModels.length + ' models (multi-model mode)';
+    } else if (botModelSelect.value) {
+        model = botModelSelect.value;
     }
-    STORAGE.setItem('gem_theme', theme);
+    badgeText.textContent = provider + ' / ' + model;
 }
-
-themeSelector.addEventListener('change', (e) => {
-    applyTheme(e.target.value);
-});
 
 function handleProviderChange(provider) {
     const details = PROVIDERS[provider];
@@ -678,8 +725,8 @@ function updateMultiModelUI() {
     if (selectedMultiModels.length > 0) {
         const providerCount = new Set(selectedMultiModels.map(s => s.provider)).size;
         multiModelBadge.textContent = providerCount > 1
-            ? `⚡ Cross-Provider Compare: ${selectedMultiModels.length} models (${providerCount} providers)`
-            : `⚡ Parallel Mode Active: ${selectedMultiModels.length} models`;
+            ? `Cross-Provider Compare: ${selectedMultiModels.length} models (${providerCount} providers)`
+            : `Parallel Mode Active: ${selectedMultiModels.length} models`;
         multiModelBadge.classList.remove('hidden');
         botModelSelect.disabled = true;
     } else {
@@ -760,7 +807,7 @@ function renderSessionsList() {
     sessions.forEach(session => {
         const isActive = session.id === currentSessionId;
         const itemDiv = document.createElement('div');
-        itemDiv.className = `group flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
+        itemDiv.className = `group flex items-center justify-between p-2 rounded-2xl cursor-pointer transition ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
         itemDiv.onclick = () => selectSession(session.id);
 
         const nameSpan = document.createElement('span');
@@ -769,16 +816,20 @@ function renderSessionsList() {
 
         const renameBtn = document.createElement('button');
         renameBtn.className = 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white px-1 text-[11px] transition';
-        renameBtn.textContent = '✏️';
-        renameBtn.onclick = (e) => {
+        renameBtn.textContent = 'Rename';
+        renameBtn.onclick = async (e) => {
             e.stopPropagation();
-            const promptName = prompt('Enter new chat name:', session.name);
+            const promptName = await showAppPrompt('Enter new chat name:', session.name, {
+                title: 'Rename chat',
+                placeholder: 'Chat name',
+                confirmText: 'Rename'
+            });
             if (promptName && promptName.trim() !== '') renameSession(session.id, promptName.trim());
         };
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-300 px-1 text-[11px] transition';
-        deleteBtn.textContent = '🗑️';
+        deleteBtn.textContent = 'Delete';
         deleteBtn.onclick = (e) => deleteSession(session.id, e);
 
         itemDiv.appendChild(nameSpan);
@@ -791,8 +842,10 @@ function renderSessionsList() {
 function loadActiveSessionChat() {
     const session = sessions.find(s => s.id === currentSessionId);
     chatWindow.innerHTML = '';
+    updateWelcomeModelInfo();
     if (!session || session.messages.length === 0) {
         welcomeMessage.classList.remove('hidden');
+        chatWindow.appendChild(welcomeMessage);
         return;
     }
     welcomeMessage.classList.add('hidden');
@@ -810,6 +863,7 @@ async function fetchActiveModels() {
 
     if (hasKey && !key) {
         botModelSelect.innerHTML = '<option value="">(Provide API key for models)</option>';
+        updateWelcomeModelInfo();
         return;
     }
     botModelSelect.innerHTML = '<option value="">Loading models...</option>';
@@ -841,6 +895,7 @@ async function fetchActiveModels() {
 
         if (models.length === 0) {
             botModelSelect.innerHTML = '<option value="">No models found</option>';
+            updateWelcomeModelInfo();
             return;
         }
 
@@ -861,6 +916,7 @@ async function fetchActiveModels() {
     } catch (err) {
         console.error(err);
         botModelSelect.innerHTML = '<option value="">Error fetching model list</option>';
+        updateWelcomeModelInfo();
     }
 }
 
@@ -873,7 +929,7 @@ function copyTextToClipboard(text, successMessage = 'Copied to clipboard!') {
     textPlain.select();
     try {
         document.execCommand('copy');
-        alert(successMessage);
+        notifySuccess(successMessage);
     } catch (err) {
         console.error(err);
     }
@@ -952,9 +1008,9 @@ function startIntro() {
     showIntroStep();
 }
 
-function showIntroStep() {
+async function showIntroStep() {
     if (currentIntroStep >= introSteps.length) {
-        alert("Congratulations! You've completed the tour.");
+        notifySuccess("Congratulations! You've completed the tour.");
         closeSidebarUniversal();
         return;
     }
@@ -963,12 +1019,20 @@ function showIntroStep() {
     if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.classList.add('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
-        setTimeout(() => {
-            confirm(`${step.text}\n\n[Click OK to proceed]`);
-            el.classList.remove('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
-            currentIntroStep++;
-            showIntroStep();
-        }, 400);
+        // Small delay keeps the highlight visible before the in-app dialog opens.
+        await new Promise(resolve => setTimeout(resolve, 400));
+        const proceed = await showAppConfirm(step.text, {
+            title: `Interface guide (${currentIntroStep + 1}/${introSteps.length})`,
+            confirmText: currentIntroStep === introSteps.length - 1 ? 'Finish' : 'Next',
+            cancelText: 'Skip tour'
+        });
+        el.classList.remove('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
+        currentIntroStep++;
+        if (!proceed) {
+            closeSidebarUniversal();
+            return;
+        }
+        showIntroStep();
     } else {
         currentIntroStep++;
         showIntroStep();
@@ -1016,6 +1080,26 @@ function openNote(id) {
         updateNoteTags();
     }
     renderNotesList();
+    closeNotesSidebarDrawer();
+}
+
+// Notes sidebar drawer: hidden slide-over panel on phones, static column on desktop.
+function openNotesSidebarDrawer() {
+    const sidebar = document.getElementById('notesSidebar');
+    const overlay = document.getElementById('notesOverlay');
+    if (!sidebar) return;
+    if (window.innerWidth >= 768) return;
+    sidebar.classList.remove('-translate-x-full');
+    if (overlay) overlay.classList.remove('hidden');
+}
+
+function closeNotesSidebarDrawer() {
+    const sidebar = document.getElementById('notesSidebar');
+    const overlay = document.getElementById('notesOverlay');
+    if (!sidebar) return;
+    if (window.innerWidth >= 768) return;
+    sidebar.classList.add('-translate-x-full');
+    if (overlay) overlay.classList.add('hidden');
 }
 
 function updateNoteContent() {
@@ -1086,7 +1170,7 @@ async function complementNote() {
     const note = notes.find(n => n.id === currentNoteId);
     if (!note || !note.content) {
         console.warn('Note is empty, nothing to complement');
-        alert('Please write some text in the note first!');
+        notifyWarning('Please write some text in the note first!');
         return;
     }
 
@@ -1099,12 +1183,12 @@ async function complementNote() {
     console.log('AI Config:', { providerName, model, hasKey });
 
 if (hasKey && !apiKey) {
-        alert('Please enter your API key first!');
+        notifyWarning('Please enter your API key first!');
         openSidebarUniversal();
         return;
     }
     if (!model) {
-        alert('Please select an AI model in settings first!');
+        notifyWarning('Please select an AI model in settings first!');
         openSidebarUniversal();
         return;
     }
@@ -1145,7 +1229,7 @@ if (hasKey && !apiKey) {
         console.log('Note successfully complemented');
         } catch (error) {
         console.error('AI Complement Error:', error);
-        alert('AI Complement failed: ' + error.message);
+        notifyError('AI Complement failed: ' + error.message);
         noteContent.value = noteContent.value.replace(placeholder, '');
         updateNoteContent();
         }
@@ -1207,7 +1291,7 @@ function exportNoteToRAG() {
 
     const content = note.content.trim();
     if (!content) {
-        alert('Note is empty, nothing to export!');
+        notifyWarning('Note is empty, nothing to export!');
         return;
     }
 
@@ -1224,14 +1308,14 @@ function exportNoteToRAG() {
     }
     saveRagKnowledgeBase(kb);
 
-    exportToRagBtn.textContent = '✅ Added';
-    setTimeout(() => { exportToRagBtn.textContent = '📚 Export to RAG'; }, 2000);
+    exportToRagBtn.textContent = 'Added';
+    setTimeout(() => { exportToRagBtn.textContent = 'Export to RAG'; }, 2000);
 }
 
 function renderMessageToDOM(role, content, botName, index) {
     welcomeMessage.classList.add('hidden');
     const messageDiv = document.createElement('div');
-    messageDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full group/msg`;
+    messageDiv.className = `msg-enter flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full group/msg`;
 
     const senderName = role === 'user' ? 'You' : botName;
     const bgClass = role === 'user' ? 'bg-emerald-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-100';
@@ -1257,7 +1341,7 @@ function renderMessageToDOM(role, content, botName, index) {
                 thinkingHtml = `
                     <details class="thinking-block w-full mb-3 bg-gray-950/60 border border-gray-800 rounded-lg p-2.5 transition">
                         <summary class="text-xs text-amber-400/80 font-medium select-none cursor-pointer hover:text-amber-300 flex items-center justify-between">
-                            <span class="flex items-center gap-1.5">💡 Model Thinking...</span>
+                            <span class="flex items-center gap-1.5">Model Thinking...</span>
                             <span class="text-[10px] text-gray-500 uppercase tracking-wider">Expand</span>
                         </summary>
                         <div class="mt-2 text-xs text-gray-400 border-t border-gray-900 pt-2 whitespace-pre-wrap leading-relaxed italic font-sans">
@@ -1280,8 +1364,8 @@ function renderMessageToDOM(role, content, botName, index) {
             return `
                 <div class="relative group/code my-4">
                     <div class="absolute right-2 top-2 z-10 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity">
-                        <button onclick="copyTextToClipboard(decodeURIComponent('${encodedCode}'), 'Code copied!')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded border border-gray-700 cursor-pointer transition">📋 Copy</button>
-                        ${isRunnable ? `<button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded cursor-pointer transition">▶ Sandbox</button>` : ''}
+                        <button onclick="copyTextToClipboard(decodeURIComponent('${encodedCode}'), 'Code copied!')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-xl border border-gray-700 cursor-pointer transition">Copy</button>
+                        ${isRunnable ? `<button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded-xl cursor-pointer transition">Sandbox</button>` : ''}
                     </div>
                     <div class="text-[11px] bg-gray-950/80 px-4 py-1 text-gray-400 rounded-t-lg font-mono border-t border-x border-gray-800">${codeLang || 'code'}</div>
                     <pre class="!mt-0 !rounded-t-none"><code class="language-${codeLang}">${escapeHtml(codeText)}</code></pre>
@@ -1295,19 +1379,19 @@ function renderMessageToDOM(role, content, botName, index) {
 
     const encodedText = safeEncode(typeof content === 'string' ? content : normalizeContentToText(content));
     const regenerateBtnHtml = (role !== 'user' && index !== undefined) ? `
-        <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">🔄 Regenerate</button>
+        <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">Regenerate</button>
     ` : '';
 
     const copyResponseButton = role !== 'user' ? `
         <div class="flex justify-end mt-2 opacity-0 group-hover/msg:opacity-100 transition-opacity gap-3">
-            <button onclick="copyTextToClipboard(decodeURIComponent('${encodedText}'), 'Response copied!')" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">📋 Copy Response</button>
+            <button onclick="copyTextToClipboard(decodeURIComponent('${encodedText}'), 'Response copied!')" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">Copy Response</button>
             ${regenerateBtnHtml}
         </div>
     ` : '';
 
     messageDiv.innerHTML = `
         <span class="text-xs text-gray-500 mb-1 px-1">${senderName}</span>
-        <div class="max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
+        <div class="max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
             ${formattedContent}
             ${copyResponseButton}
         </div>
@@ -1372,13 +1456,13 @@ function buildPromptText(messages) {
 function createAssistantStreamingPlaceholder(botName) {
     welcomeMessage.classList.add('hidden');
     const placeholder = document.createElement('div');
-    placeholder.className = 'flex flex-col items-start w-full group/msg';
+    placeholder.className = 'msg-enter flex flex-col items-start w-full group/msg';
     const senderName = document.createElement('span');
     senderName.className = 'text-xs text-gray-500 mb-1 px-1';
     senderName.textContent = botName;
 
     const bubble = document.createElement('div');
-    bubble.className = 'max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words';
+    bubble.className = 'max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words';
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'whitespace-pre-wrap break-words text-sm';
@@ -1481,6 +1565,7 @@ function getEstimatedCostFromText(promptText, outputText) {
 }
 
 function convertContentForAnthropic(content) {
+    content = unwrapMessageContent(content);
     if (typeof content === 'string') return content;
     if (!Array.isArray(content)) return normalizeContentToText(content);
 
@@ -1488,7 +1573,7 @@ function convertContentForAnthropic(content) {
         if (typeof part === 'string') return { type: 'text', text: part };
         if (part?.type === 'text' || part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
         if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') {
-            const dataUrl = part.image_url?.url || part.url || '';
+            const dataUrl = typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url || part.url || '');
             if (dataUrl.startsWith('data:')) {
                 const [meta, payload] = dataUrl.split(',');
                 const mime = meta.match(/data:(.+);/)?.[1] || 'image/png';
@@ -1576,7 +1661,7 @@ function buildMcpSystemNote() {
 function renderMcpToolActivity(toolName, status) {
     const div = document.createElement('div');
     div.className = 'flex flex-col items-start w-full';
-    div.innerHTML = `<div class="max-w-[90%] rounded-2xl px-4 py-2 text-xs shadow-md bg-fuchsia-950/40 border border-fuchsia-800 text-fuchsia-200"><span class="font-mono">🔧 ${escapeHtml(toolName)}</span> — <span class="mcp-status">${escapeHtml(status)}</span></div>`;
+    div.innerHTML = `<div class="max-w-[95%] rounded-3xl px-5 py-2 text-xs shadow-md bg-fuchsia-950/40 border border-fuchsia-800 text-fuchsia-200"><span class="font-mono">[tool] ${escapeHtml(toolName)}</span> — <span class="mcp-status">${escapeHtml(status)}</span></div>`;
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
     return div;
@@ -1588,7 +1673,7 @@ function updateMcpToolActivity(div, resultText) {
     const preview = resultText.length > 500 ? resultText.slice(0, 500) + '…' : resultText;
     const details = document.createElement('details');
     details.className = 'mt-1 text-[10px] text-fuchsia-300/80';
-    details.innerHTML = `<summary class="cursor-pointer select-none">View result</summary><pre class="whitespace-pre-wrap break-words mt-1 bg-fuchsia-950/30 rounded p-2">${escapeHtml(preview)}</pre>`;
+    details.innerHTML = `<summary class="cursor-pointer select-none">View result</summary><pre class="whitespace-pre-wrap break-words mt-1 bg-fuchsia-950/30 rounded-2xl p-2">${escapeHtml(preview)}</pre>`;
     div.querySelector('div').appendChild(details);
     chatWindow.scrollTop = chatWindow.scrollHeight;
 }
@@ -1663,7 +1748,7 @@ async function runAgenticSingleModel(session, modelId, providerName, endpoint, a
 
     const sysPrompt = (session.systemPrompt || '') + buildMcpSystemNote();
     const conv = [{ role: 'system', content: sysPrompt }];
-    session.messages.forEach(m => conv.push({ role: m.role, content: m.content }));
+    session.messages.forEach(m => conv.push({ role: m.role, content: normalizeContentForApi(m.content) }));
 
     let finalContent = '';
     const MAX_ITER = 8;
@@ -1733,14 +1818,14 @@ async function triggerAiResponse(session) {
     const maxTokens = getMaxTokens();
 
     if (selectedMultiModels.length === 0 && hasKey && !apiKey) {
-        alert('Please enter your API key!');
+        notifyWarning('Please enter your API key!');
         openSidebarUniversal();
         return;
     }
 
     const activeModels = selectedMultiModels.length > 0 ? selectedMultiModels : [botModelSelect.value];
     if (activeModels.length === 1 && !activeModels[0]) {
-        alert('Please select an AI model!');
+        notifyWarning('Please select an AI model!');
         openSidebarUniversal();
         return;
     }
@@ -1754,7 +1839,7 @@ async function triggerAiResponse(session) {
 
     let messagesToSend = [];
     if (session.systemPrompt) messagesToSend.push({ role: 'system', content: session.systemPrompt });
-    session.messages.forEach(msg => messagesToSend.push({ role: msg.role, content: typeof msg.content === 'string' ? msg.content : msg.content }));
+    session.messages.forEach(msg => messagesToSend.push({ role: msg.role, content: normalizeContentForApi(msg.content) }));
 
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'text-xs text-gray-500 italic px-1 animate-pulse';
@@ -1834,19 +1919,19 @@ async function triggerAiResponse(session) {
             const results = await Promise.all(requests);
             if (loadingDiv) loadingDiv.remove();
 
-            let multiMarkdown = '### 📊 Multi-Model Performance Comparison\n\n';
+            let multiMarkdown = '### Multi-Model Performance Comparison\n\n';
             results.forEach(res => {
-                multiMarkdown += `#### 🤖 Model: \`${res.model}\`\n##### 🔌 Provider: \`${res.provider}\`\n`;
+                multiMarkdown += `#### Model: \`${res.model}\`\n##### Provider: \`${res.provider}\`\n`;
                 if (res.success) {
                     const parsed = extractAssistantContent(res.data, res.provider);
                     let text = parsed.content || '';
                     const thinking = parsed.reasoning_content || '';
                     if (thinking) {
-                        multiMarkdown += `<details class="mb-2"><summary class="text-amber-400 text-xs cursor-pointer">View Reasoning Log</summary><div class="p-2 bg-gray-950 text-xs italic text-gray-400 border border-gray-800 rounded mt-1">${thinking}</div></details>\n`;
+                        multiMarkdown += `<details class="mb-2"><summary class="text-amber-400 text-xs cursor-pointer">View Reasoning Log</summary><div class="p-2 bg-gray-950 text-xs italic text-gray-400 border border-gray-800 rounded-2xl mt-1">${thinking}</div></details>\n`;
                     }
                     multiMarkdown += `${text}\n\n---\n`;
                 } else {
-                    multiMarkdown += `❌ *API Error Encountered:* \`${res.error}\`\n\n---\n`;
+                    multiMarkdown += `Error: *API Error Encountered:* \`${res.error}\`\n\n---\n`;
                 }
             });
 
@@ -1868,7 +1953,7 @@ async function triggerAiResponse(session) {
             chatWindow.appendChild(stopDiv);
         } else {
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-lg text-xs max-w-xl';
+            errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-2xl text-xs max-w-2xl';
             errorDiv.innerText = `Execution Interrupted: ${error.message}`;
             chatWindow.appendChild(errorDiv);
         }
@@ -1894,14 +1979,15 @@ async function sendMessage() {
 
     let fullUserContent = text;
     if (attachedFileContent) {
-        if (attachedFileType.startsWith('image/') || attachedFileType.startsWith('video/')) {
-            fullUserContent = {
-                role: 'user',
-                content: [
-                    { type: 'text', text: text || `Attached ${attachedFileType.startsWith('image/') ? 'image' : 'video'}: ${attachedFileName}` },
-                    { type: attachedFileType.startsWith('image/') ? 'image_url' : 'video_url', url: attachedFileContent }
-                ]
-            };
+        if (attachedFileType.startsWith('image/')) {
+            // Standard OpenAI chat format; also accepted by the Gemini OpenAI-compatible endpoint.
+            fullUserContent = [
+                { type: 'text', text: text || `Attached image: ${attachedFileName}` },
+                { type: 'image_url', image_url: { url: attachedFileContent } }
+            ];
+        } else if (attachedFileType.startsWith('video/')) {
+            // No chat/completions endpoint in this hub supports video parts — send a text note instead of video_url to avoid HTTP 400.
+            fullUserContent = (text ? text + '\n\n' : '') + `[Video attachment: ${attachedFileName} — video bytes are not sent to the model.]`;
         } else {
             fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
         }
@@ -1913,7 +1999,8 @@ async function sendMessage() {
     session.messages.push({ role: 'user', content: fullUserContent });
 
     if (session.name.startsWith('Chat #')) {
-        session.name = text.slice(0, 24) + (text.length > 24 ? '...' : '...');
+        const baseName = text || `Image ${attachedFileName}`;
+        session.name = baseName.slice(0, 24) + (baseName.length > 24 ? '...' : '...');
     }
 
     const baseSystemPrompt = botPromptInput.value.trim();
@@ -1953,7 +2040,7 @@ closeGroupChatModal.addEventListener('click', () => groupChatModal.classList.add
 startGroupDebateBtn.addEventListener('click', async () => {
     const idea = groupIdeaInput.value.trim();
     if (!idea) {
-        alert('Please formulate your thesis/idea first!');
+        notifyWarning('Please formulate your thesis/idea first!');
         return;
     }
 
@@ -1962,7 +2049,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
     const endpoint = apiEndpoint.value.trim();
     const model = botModelSelect.value;
     if (!model) {
-        alert('Please select an active model in the configuration panel first!');
+        notifyWarning('Please select an active model in the configuration panel first!');
         groupChatModal.classList.add('hidden');
         openSidebarUniversal();
         return;
@@ -1971,7 +2058,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
     groupChatModal.classList.add('hidden');
     createNewSession();
     let session = sessions[0];
-    session.name = '👥 Debate: ' + idea.slice(0, 20) + '...';
+    session.name = 'Debate: ' + idea.slice(0, 20) + '...';
     renderSessionsList();
 
     renderMessageToDOM('user', `**[Initiating AI Panel Evaluation]** For the following proposition:\n> ${idea}`, 'System Operator');
@@ -1979,9 +2066,9 @@ startGroupDebateBtn.addEventListener('click', async () => {
 
     const languageHint = 'Answer in the same language as the user\'s proposition. If the proposition is in Russian, respond in Russian; if it is in English, respond in English. Do not switch languages and keep your output complete, avoiding cut-off fragments.';
     const agents = [
-        { name: '🌟 Agent Optimist', prompt: `You are an optimistic market strategist. Analyze the given idea, highlight its strongest disruptive potentials, hidden opportunities, and scalable micro-advantages. Keep your response brief, targeted, and focused entirely on potential success vectors. ${languageHint}` },
-        { name: '🛡️ Agent Critic', prompt: `You are a ruthless risk analyst and security architect. Deconstruct the user\'s idea to find conceptual faults, operational vulnerabilities, security pitfalls, and hidden execution expenses. Be brutally honest. ${languageHint}` },
-        { name: '🔧 Agent Technologist', prompt: `You are a pragmatic solutions engineer. Evaluate the architectural feasibility of the idea, map out a realistic software/hardware stack layout, data handling structures, and step-by-step developer pipeline roadmap. ${languageHint}` }
+        { name: 'Agent Optimist', prompt: `You are an optimistic market strategist. Analyze the given idea, highlight its strongest disruptive potentials, hidden opportunities, and scalable micro-advantages. Keep your response brief, targeted, and focused entirely on potential success vectors. ${languageHint}` },
+        { name: 'Agent Critic', prompt: `You are a ruthless risk analyst and security architect. Deconstruct the user\'s idea to find conceptual faults, operational vulnerabilities, security pitfalls, and hidden execution expenses. Be brutally honest. ${languageHint}` },
+        { name: 'Agent Technologist', prompt: `You are a pragmatic solutions engineer. Evaluate the architectural feasibility of the idea, map out a realistic software/hardware stack layout, data handling structures, and step-by-step developer pipeline roadmap. ${languageHint}` }
     ];
 
     userInput.disabled = true;
@@ -1997,7 +2084,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
             chatWindow.scrollTop = chatWindow.scrollHeight;
 
             let currentContext = [{ role: 'system', content: agent.prompt }];
-            session.messages.forEach(m => currentContext.push({ role: m.role, content: m.content }));
+            session.messages.forEach(m => currentContext.push({ role: m.role, content: normalizeContentForApi(m.content) }));
 
             try {
                 const maxTokens = Math.max(1500, getMaxTokens());
@@ -2097,17 +2184,102 @@ function closeSidebarUniversal() {
     }
 }
 
-attachmentInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
+// Light UX: close drawers and popups with Escape, keep focus safe on mobile.
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    chatsPanel.classList.add('-translate-x-full');
+    chatsOverlay.classList.add('hidden');
+    closeSidebarUniversal();
+    closeNotesSidebarDrawer();
+    if (collapsedButtons) {
+        collapsedButtons.classList.add('hidden');
+        collapsedButtons.classList.remove('flex');
+    }
+});
+
+// Shared attachment reader: supports text, PDF, image and video files.
+// Used by the file picker, mobile camera input and clipboard paste (Ctrl+V).
+function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
+// Downscale large pasted/screenshot images so base64 stays small enough
+// for localStorage and chat/completions vision payloads.
+async function compressImageFile(file, maxDim = 1600, quality = 0.85) {
+    const dataUrl = await readFileAsDataURL(file);
+    try {
+        const bitmap = await createImageBitmap(file);
+        const { width, height } = bitmap;
+        bitmap.close();
+        const scale = Math.min(1, maxDim / Math.max(width, height));
+        if (scale >= 1 && (file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp') && file.size < 1024 * 1024) {
+            return dataUrl;
+        }
+        const targetW = Math.max(1, Math.round(width * scale));
+        const targetH = Math.max(1, Math.round(height * scale));
+        const img = await new Promise((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = reject;
+            el.src = dataUrl;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        canvas.getContext('2d').drawImage(img, 0, 0, targetW, targetH);
+        const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        return canvas.toDataURL(outType, quality);
+    } catch (e) {
+        return dataUrl;
+    }
+}
+
+function resolveAttachmentName(file, fallbackPrefix = 'image') {
+    if (file && file.name) return file.name;
+    const ext = (file && file.type === 'image/png') ? 'png'
+        : (file && file.type === 'image/jpeg') ? 'jpg'
+        : (file && file.type === 'image/webp') ? 'webp'
+        : (file && file.type === 'image/gif') ? 'gif'
+        : 'png';
+    return `${fallbackPrefix}-${Date.now()}.${ext}`;
+}
+
+async function handleAttachedFile(file, options = {}) {
     if (!file) return;
-    attachedFileName = file.name;
+    const fallbackPrefix = options.fallbackPrefix || 'pasted-image';
+    attachedFileName = resolveAttachmentName(file, file.type && file.type.startsWith('image/') ? fallbackPrefix : 'camera-photo');
+    if (!attachedFileName.includes('.') && file.type) {
+        if (file.type === 'image/png') attachedFileName += '.png';
+        else if (file.type === 'image/jpeg') attachedFileName += '.jpg';
+    }
     attachedFileType = file.type || '';
+    if (!attachedFileType && /\.png$/i.test(attachedFileName)) attachedFileType = 'image/png';
+    if (!attachedFileType && /\.jpe?g$/i.test(attachedFileName)) attachedFileType = 'image/jpeg';
 
     fileNameDisplay.textContent = attachedFileName;
     fileIndicator.classList.remove('hidden');
     fileIndicator.classList.add('flex');
 
-    if (file.type === 'application/pdf' || attachedFileName.toLowerCase().endsWith('.pdf')) {
+    const showPreview = (dataUrl) => {
+        if (!filePreviewThumb) return;
+        if (attachedFileType.startsWith('image/')) {
+            filePreviewThumb.src = dataUrl;
+            filePreviewThumb.classList.remove('hidden');
+        } else {
+            filePreviewThumb.classList.add('hidden');
+            filePreviewThumb.removeAttribute('src');
+        }
+    };
+
+    const fileType = file.type || attachedFileType || '';
+
+    if (fileType === 'application/pdf' || attachedFileName.toLowerCase().endsWith('.pdf')) {
+        if (filePreviewThumb) filePreviewThumb.classList.add('hidden');
         try {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -2124,20 +2296,82 @@ attachmentInput.addEventListener('change', async (e) => {
         return;
     }
 
-    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+    if (fileType.startsWith('image/') || attachedFileType.startsWith('image/')) {
+        if (fileType === 'image/gif') {
+            attachedFileContent = await readFileAsDataURL(file);
+        } else {
+            try {
+                attachedFileContent = await compressImageFile(file);
+            } catch (e) {
+                attachedFileContent = await readFileAsDataURL(file);
+            }
+        }
+        showPreview(attachedFileContent);
+        return;
+    }
+
+    if (fileType.startsWith('video/')) {
         const reader = new FileReader();
         reader.onload = function(event) {
             attachedFileContent = event.target.result;
+            showPreview(attachedFileContent);
         };
         reader.readAsDataURL(file);
         return;
     }
 
+    if (filePreviewThumb) filePreviewThumb.classList.add('hidden');
     const reader = new FileReader();
     reader.onload = function(event) {
         attachedFileContent = event.target.result;
     };
     reader.readAsText(file);
+}
+
+attachmentInput.addEventListener('change', async (e) => {
+    await handleAttachedFile(e.target.files[0]);
+});
+
+if (cameraInput) {
+    cameraInput.addEventListener('change', async (e) => {
+        await handleAttachedFile(e.target.files[0]);
+        cameraInput.value = '';
+    });
+}
+
+// Paste images from clipboard with Ctrl+V (screenshots, copied files/photos).
+// Text from clipboard keeps the default textarea behavior.
+function extractImageFileFromClipboard(e) {
+    const clipboard = e.clipboardData;
+    if (!clipboard) return null;
+    if (clipboard.files && clipboard.files.length > 0) {
+        for (const f of clipboard.files) {
+            if (f.type && f.type.startsWith('image/')) return f;
+        }
+    }
+    if (clipboard.items) {
+        for (const item of clipboard.items) {
+            if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+                const f = item.getAsFile();
+                if (f) return f;
+            }
+        }
+    }
+    return null;
+}
+
+userInput.addEventListener('paste', async (e) => {
+    const imageFile = extractImageFileFromClipboard(e);
+    if (!imageFile) return;
+    e.preventDefault();
+    try {
+        await handleAttachedFile(imageFile, { fallbackPrefix: 'pasted-image' });
+        notifySuccess('Image pasted from clipboard!');
+        userInput.focus();
+    } catch (err) {
+        console.error(err);
+        notifyError('Failed to paste image: ' + err.message);
+    }
 });
 
 function removeAttachedFile() {
@@ -2145,6 +2379,11 @@ function removeAttachedFile() {
     attachedFileName = '';
     attachedFileType = '';
     attachmentInput.value = '';
+    if (cameraInput) cameraInput.value = '';
+    if (filePreviewThumb) {
+        filePreviewThumb.classList.add('hidden');
+        filePreviewThumb.removeAttribute('src');
+    }
     fileIndicator.classList.add('hidden');
     fileIndicator.classList.remove('flex');
 }
@@ -2177,8 +2416,18 @@ closeHelpModalBtn.addEventListener('click', () => { helpModal.classList.add('hid
 openNotesBtn.addEventListener('click', () => {
     notesPage.classList.remove('hidden');
     loadNotes();
+    // On phones the notes list starts hidden as a drawer; on desktop it stays visible.
+    if (window.innerWidth < 768) {
+        closeNotesSidebarDrawer();
+    }
 });
 closeNotesPage.addEventListener('click', () => notesPage.classList.add('hidden'));
+const toggleNotesSidebarBtn = document.getElementById('toggleNotesSidebar');
+if (toggleNotesSidebarBtn) toggleNotesSidebarBtn.addEventListener('click', openNotesSidebarDrawer);
+const closeNotesSidebarBtn = document.getElementById('closeNotesSidebar');
+if (closeNotesSidebarBtn) closeNotesSidebarBtn.addEventListener('click', closeNotesSidebarDrawer);
+const notesOverlayEl = document.getElementById('notesOverlay');
+if (notesOverlayEl) notesOverlayEl.addEventListener('click', closeNotesSidebarDrawer);
 newNoteBtn.addEventListener('click', createNewNote);
 noteTitle.addEventListener('input', updateNoteContent);
 noteContent.addEventListener('input', () => {
@@ -2187,9 +2436,14 @@ noteContent.addEventListener('input', () => {
     if (isPreviewVisible) renderNotePreview();
 });
 notesSearch.addEventListener('input', renderNotesList);
-deleteNoteBtn.addEventListener('click', () => {
+deleteNoteBtn.addEventListener('click', async () => {
     if (!currentNoteId) return;
-    if (confirm('Delete this note?')) {
+    const confirmed = await showAppConfirm('Delete this note?', {
+        title: 'Delete note',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (confirmed) {
         notes = notes.filter(n => n.id !== currentNoteId);
         saveNotesToStorage();
         if (notes.length > 0) {
@@ -2212,7 +2466,7 @@ toggleNotePreview.addEventListener('click', () => {
     if (isPreview) {
         notePreview.classList.add('hidden');
         noteContent.classList.remove('hidden');
-        toggleNotePreview.textContent = '👁️ Preview';
+        toggleNotePreview.textContent = 'Preview';
     } else {
         notePreview.classList.remove('hidden');
         noteContent.classList.add('hidden');
@@ -2267,10 +2521,10 @@ importJsonInput.addEventListener('change', (e) => {
             saveApiSettings();
             if (config.selectedModel) STORAGE.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
             fetchActiveModels();
-            alert('Configuration Loaded!');
+            notifySuccess('Configuration Loaded!');
             closeSidebarUniversal();
         } catch (error) {
-            alert('Invalid structure.');
+            notifyError('Invalid structure.');
         }
     };
     reader.readAsText(file);
@@ -2287,6 +2541,7 @@ function updateStatusCard() {
     } else {
         activeStatusText.innerHTML = `<strong class="text-emerald-400">${name}</strong><br><span class="text-gray-400 block truncate text-[11px]">${prompt}</span><span class="text-[10px] text-gray-500 font-mono block">Provider: ${provider} | ${model}</span>`;
     }
+    updateWelcomeModelInfo();
 }
 
 function updateLoginButton() {
@@ -2414,9 +2669,14 @@ if (authSubmitBtn) {
 // Login button in header
 const loginBtn = document.getElementById('loginBtn');
 if (loginBtn) {
-    loginBtn.addEventListener('click', () => {
+    loginBtn.addEventListener('click', async () => {
         if (SYNC_MANAGER.isLoggedIn()) {
-            if (confirm('Logout from cloud sync?')) {
+            const confirmed = await showAppConfirm('Logout from cloud sync?', {
+                title: 'Logout',
+                confirmText: 'Logout',
+                danger: true
+            });
+            if (confirmed) {
                 SYNC_MANAGER.logout().then(() => {
                     updateLoginButton();
                     updateSyncStatus();
@@ -2449,7 +2709,12 @@ if (dbConnectBtn) {
 
 if (dbDisconnectBtn) {
     dbDisconnectBtn.addEventListener('click', async () => {
-        if (confirm('Disconnect from cloud? Your local data will be preserved.')) {
+        const confirmed = await showAppConfirm('Disconnect from cloud? Your local data will be preserved.', {
+            title: 'Disconnect',
+            confirmText: 'Disconnect',
+            danger: true
+        });
+        if (confirmed) {
             await SYNC_MANAGER.logout();
             updateLoginButton();
             updateSyncStatus();

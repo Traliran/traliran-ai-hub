@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
     <title>Traliran AI IDE - Serverless Code Editor</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -25,30 +26,36 @@
 
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 p-3 sticky top-0 z-20 shadow-md">
-        <div class="max-w-[1920px] mx-auto flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <span class="text-2xl">⚡</span>
-                <h1 class="text-lg font-black text-violet-400 tracking-wide">Traliran AI IDE</h1>
-                <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1 rounded transition ml-2">
-                    ◀ Back to Hub
+        <div class="max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+                <button id="toggleFilesBtn" class="md:hidden bg-gray-800 hover:bg-gray-700 text-gray-200 p-2 rounded-2xl transition" title="Files" aria-label="Toggle files panel">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+                <svg class="h-6 w-6 text-violet-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                <h1 class="text-base sm:text-lg font-black text-violet-400 tracking-wide truncate">Traliran AI IDE</h1>
+                <a href="index.html" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1 rounded-2xl transition ml-1 shrink-0">
+                    Back to Hub
                 </a>
             </div>
             
-            <div class="flex items-center gap-2">
-                <button id="newFileBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded transition" title="New File">
-                    📄 New File
+            <div class="flex items-center gap-2 flex-wrap justify-end">
+                <button id="newFileBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-2xl transition" title="New File">
+                    New File
                 </button>
-                <button id="saveFileBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded transition" title="Save File (Ctrl+S)">
-                    💾 Save
+                <button id="saveFileBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-2xl transition" title="Save File (Ctrl+S)">
+                    Save
                 </button>
-                <button id="togglePreviewBtn" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded transition" title="Toggle Live Preview">
-                    👁️ Preview
+                <button id="togglePreviewBtn" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded-2xl transition" title="Toggle Live Preview">
+                    Preview
                 </button>
-                <button id="openBotStoreBtn" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 text-xs px-3 py-1.5 rounded transition" title="Assistant Store">
-                    🏪 Assistants
+                <button id="openBotStoreBtn" class="hidden sm:block bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 text-xs px-3 py-1.5 rounded-2xl transition" title="Assistant Store">
+                    Assistants
                 </button>
-                <button id="loginBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded transition" title="Login / Cloud Sync">
-                    🔑 <span id="loginBtnText">Login</span>
+                <button id="loginBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded-2xl transition" title="Login / Cloud Sync">
+                    <span id="loginBtnText">Login</span>
+                </button>
+                <button id="toggleAgentBtn" class="lg:hidden bg-gray-800 hover:bg-gray-700 text-gray-200 p-2 rounded-2xl transition" title="AI agent and settings" aria-label="Toggle AI agent panel">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                 </button>
             </div>
         </div>
@@ -56,16 +63,17 @@
 
     <!-- Main Content -->
     <main class="flex-1 max-w-[1920px] w-full mx-auto flex relative overflow-hidden">
-        
-        <!-- Left Sidebar - Files & Version Control -->
-        <aside class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+        <div id="filesOverlay" class="hidden absolute inset-0 bg-black/60 z-30 md:hidden"></div>
+        <div id="agentOverlay" class="hidden absolute inset-0 bg-black/60 z-30 lg:hidden"></div>
+        <!-- Left Sidebar - Files & Version Control (drawer on phones, static column on desktop) -->
+        <aside id="filesSidebar" class="absolute inset-y-0 left-0 w-[86vw] max-w-[320px] md:w-64 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden z-40 transition-transform duration-300 -translate-x-full md:translate-x-0 md:static">
             <!-- Tab Headers -->
             <div class="flex border-b border-gray-800">
                 <button id="filesTabBtn" class="flex-1 px-3 py-2 text-xs font-medium text-violet-400 border-b-2 border-violet-400 bg-gray-800/50">
-                    📁 Files
+                    Files
                 </button>
                 <button id="versionControlTabBtn" class="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-200">
-                    📜 Versions
+                    Versions
                 </button>
             </div>
 
@@ -73,7 +81,7 @@
             <div id="filesPanel" class="flex-1 overflow-y-auto chat-scroll p-2">
                 <div class="flex justify-between items-center mb-2">
                     <h3 class="text-xs font-bold text-gray-400 uppercase">Workspace</h3>
-                    <button id="addFolderBtn" class="text-gray-400 hover:text-emerald-400 text-xs" title="Add Folder">📁+</button>
+                    <button id="addFolderBtn" class="text-gray-400 hover:text-emerald-400 text-xs" title="Add Folder">New folder</button>
                 </div>
                 <div id="fileTreeContainer" class="space-y-1 text-sm font-mono">
                     <!-- File tree populated by JS -->
@@ -85,8 +93,8 @@
                 <div class="mb-3">
                     <input type="text" id="commitMessageInput" placeholder="Commit message..." 
                         class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs focus:border-violet-500 focus:outline-none">
-                    <button id="createCommitBtn" class="w-full mt-2 bg-violet-600 hover:bg-violet-700 text-white text-xs py-1.5 rounded transition">
-                        📦 Create Commit
+                    <button id="createCommitBtn" class="w-full mt-2 bg-violet-600 hover:bg-violet-700 text-white text-xs py-1.5 rounded-2xl transition">
+                        Create Commit
                     </button>
                 </div>
                 <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Commit History</h3>
@@ -94,11 +102,11 @@
                     <!-- Commits populated by JS -->
                 </div>
                 <div class="mt-4 pt-3 border-t border-gray-800">
-                    <button id="exportZipBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 rounded transition mb-2">
-                        📦 Export as ZIP
+                    <button id="exportZipBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 rounded-2xl transition mb-2">
+                        Export as ZIP
                     </button>
-                    <button id="importZipBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 rounded transition">
-                        📥 Import ZIP
+                    <button id="importZipBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 rounded-2xl transition">
+                        Import ZIP
                     </button>
                     <input type="file" id="zipFileInput" accept=".zip" class="hidden">
                 </div>
@@ -106,7 +114,7 @@
         </aside>
 
         <!-- Monaco Editor Container -->
-        <section class="flex-1 flex flex-col min-w-0">
+        <section class="flex-1 flex flex-col min-w-0 min-h-0">
             <!-- Open Files Tabs -->
             <div id="openFilesTabs" class="flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
                 <!-- Tabs populated by JS -->
@@ -127,15 +135,15 @@
             </div>
         </section>
 
-        <!-- Right Sidebar - AI Agent & Settings -->
-        <aside class="w-96 bg-gray-900 border-l border-gray-800 flex flex-col overflow-hidden">
+        <!-- Right Sidebar - AI Agent & Settings (drawer on phones/tablets, static column on desktop) -->
+        <aside id="agentSidebar" class="absolute inset-y-0 right-0 w-[92vw] max-w-[400px] lg:w-96 bg-gray-900 border-l border-gray-800 flex flex-col overflow-hidden z-40 transition-transform duration-300 translate-x-full lg:translate-x-0 lg:static">
             <!-- Tabs Header -->
             <div class="flex border-b border-gray-800">
                 <button onclick="switchRightTab('agent')" id="tabBtnAgent" class="flex-1 px-3 py-2 text-xs font-medium text-violet-400 border-b-2 border-violet-400 bg-gray-800/50">
-                    🤖 Agent
+                    Agent
                 </button>
                 <button onclick="switchRightTab('settings')" id="tabBtnSettings" class="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-200">
-                    ⚙️ API Config
+                    API Config
                 </button>
             </div>
 
@@ -143,8 +151,8 @@
             <div id="panelAgent" class="flex-1 flex flex-col overflow-hidden">
                 <!-- Chat Messages -->
                 <div id="agentChatWindow" class="flex-1 overflow-y-auto chat-scroll p-3 space-y-3">
-                    <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-xs text-gray-300">
-                        <p class="font-semibold text-violet-400 mb-1">🤖 Welcome to AI IDE!</p>
+                    <div class="bg-gray-800/50 border border-gray-700 rounded-2xl p-3 text-xs text-gray-300">
+                        <p class="font-semibold text-violet-400 mb-1">Welcome to AI IDE!</p>
                         <p>I can help you write, edit, and refactor code. I have access to your workspace files.</p>
                         <ul class="mt-2 space-y-1 text-gray-400">
                             <li>• Ask me to create new files</li>
@@ -157,14 +165,29 @@
 
                 <!-- Input Area -->
                 <div class="p-3 border-t border-gray-800 bg-gray-900">
+                    <div id="agentFileIndicator" class="hidden items-center justify-between gap-2 bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs mb-2">
+                        <div class="flex items-center gap-2 text-violet-300 truncate min-w-0">
+                            <img id="agentFilePreview" class="hidden w-10 h-10 rounded-lg object-cover border border-gray-700 shrink-0" alt="Attachment preview">
+                            <span id="agentFileName" class="truncate font-mono">image.png</span>
+                        </div>
+                        <button id="removeAgentFileBtn" class="text-rose-400 hover:text-rose-300 cursor-pointer px-1 font-bold shrink-0" aria-label="Remove attachment">Remove</button>
+                    </div>
                     <textarea id="agentInput" rows="3" placeholder="Describe what you want to build or change..." 
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none resize-none"></textarea>
+                        class="w-full bg-gray-800 border border-gray-700 rounded-2xl px-3 py-2 text-sm focus:border-violet-500 focus:outline-none resize-none"></textarea>
                     <div class="flex gap-2 mt-2">
-                        <button id="sendAgentBtn" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm py-2 rounded transition">
-                            ➤ Send
+                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 px-3 py-2 rounded-2xl transition cursor-pointer flex items-center justify-center shrink-0" title="Attach an image for the AI">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                            <input type="file" id="agentAttachmentInput" class="hidden" accept="image/*,.txt,.md,.js,.ts,.py,.json,.html,.css">
+                        </label>
+                        <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 px-3 py-2 rounded-2xl transition cursor-pointer flex items-center justify-center shrink-0" title="Take a photo (mobile camera)">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                            <input type="file" id="agentCameraInput" class="hidden" accept="image/*" capture="environment">
+                        </label>
+                        <button id="sendAgentBtn" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm py-2 rounded-2xl transition">
+                            Send
                         </button>
-                        <button id="stopAgentBtn" class="hidden flex-1 bg-rose-600 hover:bg-rose-700 text-white text-sm py-2 rounded transition">
-                            ⏹ Stop
+                        <button id="stopAgentBtn" class="hidden flex-1 bg-rose-600 hover:bg-rose-700 text-white text-sm py-2 rounded-2xl transition">
+                            Stop
                         </button>
                     </div>
                     <div class="flex items-center justify-between mt-2 text-[10px] text-gray-500">
@@ -354,6 +377,7 @@
     <!-- Scripts -->
     <script src="db-connector.js"></script>
     <script src="sync-manager.js"></script>
+    <script src="ui-dialogs.js"></script>
     <script src="ide.js"></script>
 </body>
 </html>
