@@ -264,3 +264,138 @@ body { min-height: 100vh; min-height: 100dvh; }
     button, a { min-height: 40px; }
     #sendBtn, #stopBtn { min-height: 44px; min-width: 44px; }
 }
+
+/* In-app notification and dialog system (replaces native alert/confirm/prompt) */
+.app-toast-stack {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: min(92vw, 360px);
+    pointer-events: none;
+}
+.app-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 0.7rem 0.8rem;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+    transition: opacity var(--anim-fast) var(--anim-ease), transform var(--anim-fast) var(--anim-ease);
+    cursor: pointer;
+}
+.app-toast-visible { opacity: 1; transform: translateY(0) scale(1); }
+.app-toast-leaving { opacity: 0; transform: translateY(-6px) scale(0.99); }
+.app-toast-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 9999px;
+    margin-top: 0.3rem;
+    flex-shrink: 0;
+}
+.app-toast-body {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    word-break: break-word;
+    color: var(--text-main);
+}
+.app-toast-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0 0.15rem;
+    cursor: pointer;
+    min-height: auto;
+}
+.app-toast-close:hover { color: var(--text-main); }
+
+.app-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    animation: fade-in var(--anim-fast) ease-out;
+}
+.app-dialog-card {
+    width: min(92vw, 440px);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    padding: 1.25rem;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    animation: pop-in var(--anim-med) var(--anim-ease);
+    max-height: 90dvh;
+    overflow-y: auto;
+}
+.app-dialog-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 0.5rem;
+}
+.app-dialog-message {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.app-dialog-input {
+    width: 100%;
+    margin-top: 0.75rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.6rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-main);
+    outline: none;
+}
+.app-dialog-input:focus { border-color: var(--accent-color); }
+.app-dialog-input-error { border-color: #f43f5e !important; }
+.app-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+.app-dialog-btn {
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.55rem 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    cursor: pointer;
+    min-height: 40px;
+}
+.app-dialog-btn-primary { background: #059669; color: #fff; }
+.app-dialog-btn-primary:hover { background: #10b981; }
+.app-dialog-btn-secondary { background: var(--bg-tertiary); color: var(--text-main); border-color: var(--border-color); }
+.app-dialog-btn-secondary:hover { background: #1f1f1f; }
+.app-dialog-btn-danger { background: #be123c; color: #fff; }
+.app-dialog-btn-danger:hover { background: #e11d48; }
+
+@media (max-width: 767px) {
+    .app-toast-stack { top: auto; bottom: 1rem; right: 0.75rem; left: 0.75rem; width: auto; }
+    .app-dialog-overlay { align-items: flex-end; padding: 0.5rem; }
+    .app-dialog-card { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .app-toast, .app-dialog-overlay, .app-dialog-card { animation: none; transition: none; }
+}

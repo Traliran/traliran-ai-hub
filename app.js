@@ -202,7 +202,7 @@ summarizeChatBtn.addEventListener('click', async () => {
     if (!session) return;
     
     if (countAssistantMessages() < 2) {
-        alert('Need at least 2 AI responses to summarize.');
+        notifyWarning('Need at least 2 AI responses to summarize.');
         return;
     }
     
@@ -213,14 +213,14 @@ summarizeChatBtn.addEventListener('click', async () => {
     const topP = parseFloat(topPInput.value);
     
     if (hasKey && !apiKey) {
-        alert('Please enter your API key!');
+        notifyWarning('Please enter your API key!');
         openSidebarUniversal();
         return;
     }
     
     const modelId = botModelSelect.value;
     if (!modelId) {
-        alert('Please select an AI model!');
+        notifyWarning('Please select an AI model!');
         openSidebarUniversal();
         return;
     }
@@ -275,7 +275,7 @@ summarizeChatBtn.addEventListener('click', async () => {
     } catch (error) {
         console.error('Summarization error:', error);
         const message = error.name === 'AbortError' ? 'Request timed out after 60s' : error.message;
-        alert('Failed to summarize conversation: ' + message);
+        notifyError('Failed to summarize conversation: ' + message);
         summarizeChatBtn.innerHTML = '<span class="hidden sm:inline">Summarize</span>';
     } finally {
         clearTimeout(timeoutId);
@@ -413,7 +413,7 @@ window.installFreeAssistant = function(name, promptText) {
     saveApiSettings();
     storeModal.classList.add('hidden');
     createNewSession();
-    alert(`Assistant Profile "${name}" is now online!`);
+    notifySuccess(`Assistant Profile "${name}" is now online!`);
 };
 
 openStoreBtn.addEventListener('click', () => {
@@ -458,9 +458,14 @@ function renderMcpList() {
         mcpList.appendChild(card);
     });
 
-    mcpList.querySelectorAll('.mcp-remove').forEach(b => b.addEventListener('click', () => {
+    mcpList.querySelectorAll('.mcp-remove').forEach(b => b.addEventListener('click', async () => {
         const target = MCP_MANAGER.servers.find(x => x.id === b.dataset.id);
-        if (confirm(`Remove MCP server "${target?.name || ''}"?`)) {
+        const confirmed = await showAppConfirm(`Remove MCP server "${target?.name || ''}"?`, {
+            title: 'Remove MCP server',
+            confirmText: 'Remove',
+            danger: true
+        });
+        if (confirmed) {
             MCP_MANAGER.remove(b.dataset.id);
             renderMcpList();
             updateMcpBadge();
@@ -469,7 +474,7 @@ function renderMcpList() {
     mcpList.querySelectorAll('.mcp-reconnect').forEach(b => b.addEventListener('click', async () => {
         b.textContent = '…';
         try { await MCP_MANAGER.connectOne(b.dataset.id); }
-        catch (e) { alert('Connect failed: ' + e.message); }
+        catch (e) { notifyError('Connect failed: ' + e.message); }
         renderMcpList();
         updateMcpBadge();
     }));
@@ -478,7 +483,7 @@ function renderMcpList() {
 mcpAddBtn.addEventListener('click', async () => {
     const name = mcpNameInput.value.trim();
     const url = mcpUrlInput.value.trim();
-    if (!name || !url) { alert('Please enter a server name and URL.'); return; }
+    if (!name || !url) { notifyWarning('Please enter a server name and URL.'); return; }
     mcpAddBtn.disabled = true;
     mcpAddBtn.textContent = 'Connecting…';
     try {
@@ -488,7 +493,7 @@ mcpAddBtn.addEventListener('click', async () => {
         renderMcpList();
         updateMcpBadge();
     } catch (e) {
-        alert('Failed to connect MCP server: ' + e.message);
+        notifyError('Failed to connect MCP server: ' + e.message);
     } finally {
         mcpAddBtn.disabled = false;
         mcpAddBtn.textContent = 'Add & Connect';
@@ -812,9 +817,13 @@ function renderSessionsList() {
         const renameBtn = document.createElement('button');
         renameBtn.className = 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white px-1 text-[11px] transition';
         renameBtn.textContent = 'Rename';
-        renameBtn.onclick = (e) => {
+        renameBtn.onclick = async (e) => {
             e.stopPropagation();
-            const promptName = prompt('Enter new chat name:', session.name);
+            const promptName = await showAppPrompt('Enter new chat name:', session.name, {
+                title: 'Rename chat',
+                placeholder: 'Chat name',
+                confirmText: 'Rename'
+            });
             if (promptName && promptName.trim() !== '') renameSession(session.id, promptName.trim());
         };
 
@@ -920,7 +929,7 @@ function copyTextToClipboard(text, successMessage = 'Copied to clipboard!') {
     textPlain.select();
     try {
         document.execCommand('copy');
-        alert(successMessage);
+        notifySuccess(successMessage);
     } catch (err) {
         console.error(err);
     }
@@ -999,9 +1008,9 @@ function startIntro() {
     showIntroStep();
 }
 
-function showIntroStep() {
+async function showIntroStep() {
     if (currentIntroStep >= introSteps.length) {
-        alert("Congratulations! You've completed the tour.");
+        notifySuccess("Congratulations! You've completed the tour.");
         closeSidebarUniversal();
         return;
     }
@@ -1010,12 +1019,20 @@ function showIntroStep() {
     if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.classList.add('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
-        setTimeout(() => {
-            confirm(`${step.text}\n\n[Click OK to proceed]`);
-            el.classList.remove('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
-            currentIntroStep++;
-            showIntroStep();
-        }, 400);
+        // Small delay keeps the highlight visible before the in-app dialog opens.
+        await new Promise(resolve => setTimeout(resolve, 400));
+        const proceed = await showAppConfirm(step.text, {
+            title: `Interface guide (${currentIntroStep + 1}/${introSteps.length})`,
+            confirmText: currentIntroStep === introSteps.length - 1 ? 'Finish' : 'Next',
+            cancelText: 'Skip tour'
+        });
+        el.classList.remove('ring-2', 'ring-emerald-400', 'p-1', 'rounded');
+        currentIntroStep++;
+        if (!proceed) {
+            closeSidebarUniversal();
+            return;
+        }
+        showIntroStep();
     } else {
         currentIntroStep++;
         showIntroStep();
@@ -1153,7 +1170,7 @@ async function complementNote() {
     const note = notes.find(n => n.id === currentNoteId);
     if (!note || !note.content) {
         console.warn('Note is empty, nothing to complement');
-        alert('Please write some text in the note first!');
+        notifyWarning('Please write some text in the note first!');
         return;
     }
 
@@ -1166,12 +1183,12 @@ async function complementNote() {
     console.log('AI Config:', { providerName, model, hasKey });
 
 if (hasKey && !apiKey) {
-        alert('Please enter your API key first!');
+        notifyWarning('Please enter your API key first!');
         openSidebarUniversal();
         return;
     }
     if (!model) {
-        alert('Please select an AI model in settings first!');
+        notifyWarning('Please select an AI model in settings first!');
         openSidebarUniversal();
         return;
     }
@@ -1212,7 +1229,7 @@ if (hasKey && !apiKey) {
         console.log('Note successfully complemented');
         } catch (error) {
         console.error('AI Complement Error:', error);
-        alert('AI Complement failed: ' + error.message);
+        notifyError('AI Complement failed: ' + error.message);
         noteContent.value = noteContent.value.replace(placeholder, '');
         updateNoteContent();
         }
@@ -1274,7 +1291,7 @@ function exportNoteToRAG() {
 
     const content = note.content.trim();
     if (!content) {
-        alert('Note is empty, nothing to export!');
+        notifyWarning('Note is empty, nothing to export!');
         return;
     }
 
@@ -1801,14 +1818,14 @@ async function triggerAiResponse(session) {
     const maxTokens = getMaxTokens();
 
     if (selectedMultiModels.length === 0 && hasKey && !apiKey) {
-        alert('Please enter your API key!');
+        notifyWarning('Please enter your API key!');
         openSidebarUniversal();
         return;
     }
 
     const activeModels = selectedMultiModels.length > 0 ? selectedMultiModels : [botModelSelect.value];
     if (activeModels.length === 1 && !activeModels[0]) {
-        alert('Please select an AI model!');
+        notifyWarning('Please select an AI model!');
         openSidebarUniversal();
         return;
     }
@@ -2023,7 +2040,7 @@ closeGroupChatModal.addEventListener('click', () => groupChatModal.classList.add
 startGroupDebateBtn.addEventListener('click', async () => {
     const idea = groupIdeaInput.value.trim();
     if (!idea) {
-        alert('Please formulate your thesis/idea first!');
+        notifyWarning('Please formulate your thesis/idea first!');
         return;
     }
 
@@ -2032,7 +2049,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
     const endpoint = apiEndpoint.value.trim();
     const model = botModelSelect.value;
     if (!model) {
-        alert('Please select an active model in the configuration panel first!');
+        notifyWarning('Please select an active model in the configuration panel first!');
         groupChatModal.classList.add('hidden');
         openSidebarUniversal();
         return;
@@ -2311,9 +2328,14 @@ noteContent.addEventListener('input', () => {
     if (isPreviewVisible) renderNotePreview();
 });
 notesSearch.addEventListener('input', renderNotesList);
-deleteNoteBtn.addEventListener('click', () => {
+deleteNoteBtn.addEventListener('click', async () => {
     if (!currentNoteId) return;
-    if (confirm('Delete this note?')) {
+    const confirmed = await showAppConfirm('Delete this note?', {
+        title: 'Delete note',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (confirmed) {
         notes = notes.filter(n => n.id !== currentNoteId);
         saveNotesToStorage();
         if (notes.length > 0) {
@@ -2391,10 +2413,10 @@ importJsonInput.addEventListener('change', (e) => {
             saveApiSettings();
             if (config.selectedModel) STORAGE.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
             fetchActiveModels();
-            alert('Configuration Loaded!');
+            notifySuccess('Configuration Loaded!');
             closeSidebarUniversal();
         } catch (error) {
-            alert('Invalid structure.');
+            notifyError('Invalid structure.');
         }
     };
     reader.readAsText(file);
@@ -2539,9 +2561,14 @@ if (authSubmitBtn) {
 // Login button in header
 const loginBtn = document.getElementById('loginBtn');
 if (loginBtn) {
-    loginBtn.addEventListener('click', () => {
+    loginBtn.addEventListener('click', async () => {
         if (SYNC_MANAGER.isLoggedIn()) {
-            if (confirm('Logout from cloud sync?')) {
+            const confirmed = await showAppConfirm('Logout from cloud sync?', {
+                title: 'Logout',
+                confirmText: 'Logout',
+                danger: true
+            });
+            if (confirmed) {
                 SYNC_MANAGER.logout().then(() => {
                     updateLoginButton();
                     updateSyncStatus();
@@ -2574,7 +2601,12 @@ if (dbConnectBtn) {
 
 if (dbDisconnectBtn) {
     dbDisconnectBtn.addEventListener('click', async () => {
-        if (confirm('Disconnect from cloud? Your local data will be preserved.')) {
+        const confirmed = await showAppConfirm('Disconnect from cloud? Your local data will be preserved.', {
+            title: 'Disconnect',
+            confirmText: 'Disconnect',
+            danger: true
+        });
+        if (confirmed) {
             await SYNC_MANAGER.logout();
             updateLoginButton();
             updateSyncStatus();

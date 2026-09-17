@@ -551,8 +551,13 @@ const VERSION_CONTROL = {
                 <div class="text-[10px] text-gray-500 mt-1">${date.toLocaleString()}</div>
                 <div class="text-[10px] text-gray-600 mt-1">${Object.keys(commit.snapshot).length} files</div>
             `;
-            div.onclick = () => {
-                if (confirm(`Revert to this commit? This will replace current workspace.`)) {
+            div.onclick = async () => {
+                const confirmed = await showAppConfirm(`Revert to this commit? This will replace current workspace.`, {
+                    title: 'Revert to commit',
+                    confirmText: 'Revert',
+                    danger: true
+                });
+                if (confirmed) {
                     this.revertToCommit(commit.id);
                 }
             };
@@ -562,7 +567,7 @@ const VERSION_CONTROL = {
 
     async exportAsZip() {
         if (typeof JSZip === 'undefined') {
-            alert('ZIP library not loaded. Please check your internet connection.');
+            notifyError('ZIP library not loaded. Please check your internet connection.');
             return;
         }
         
@@ -587,7 +592,7 @@ const VERSION_CONTROL = {
             console.log('[VERSION] Exported as ZIP');
         } catch (e) {
             console.error('[VERSION] Export error:', e);
-            alert('Failed to export ZIP: ' + e.message);
+            notifyError('Failed to export ZIP: ' + e.message);
         }
     },
 
@@ -609,10 +614,10 @@ const VERSION_CONTROL = {
             
             await Promise.all(promises);
             console.log('[VERSION] Imported from ZIP');
-            alert('Project imported successfully!');
+            notifySuccess('Project imported successfully!');
         } catch (e) {
             console.error('[VERSION] Import error:', e);
-            alert('Failed to import ZIP: ' + e.message);
+            notifyError('Failed to import ZIP: ' + e.message);
         }
     }
 };
@@ -1457,7 +1462,7 @@ function saveBot() {
     const prompt = editBotPrompt.value.trim();
     
     if (!name || !prompt) {
-        alert('Please provide both name and system prompt.');
+        notifyWarning('Please provide both name and system prompt.');
         return;
     }
     
@@ -1492,10 +1497,15 @@ function saveBot() {
     renderBotStore();
 }
 
-function deleteBot() {
+async function deleteBot() {
     if (!editingBotId) return;
     
-    if (!confirm('Delete this assistant?')) return;
+    const confirmed = await showAppConfirm('Delete this assistant?', {
+        title: 'Delete assistant',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (!confirmed) return;
     
     customBots = customBots.filter(b => b.id !== editingBotId);
     
@@ -1534,12 +1544,12 @@ function importBots(event) {
                 customBots = [...customBots, ...imported];
                 STORAGE.setItem('ide_custom_bots', JSON.stringify(customBots));
                 renderBotStore();
-                alert(`Imported ${imported.length} assistant(s)!`);
+                notifySuccess(`Imported ${imported.length} assistant(s)!`);
             } else {
                 throw new Error('Invalid format');
             }
         } catch (err) {
-            alert('Failed to import: ' + err.message);
+            notifyError('Failed to import: ' + err.message);
         }
     };
     reader.readAsText(file);
@@ -1947,7 +1957,12 @@ async function deleteFileOrFolder(path) {
     const file = vfsFiles[path];
     if (file) {
         // It's a file
-        if (!confirm(`Delete file "${path}"? This cannot be undone.`)) return;
+        const confirmed = await showAppConfirm(`Delete file "${path}"? This cannot be undone.`, {
+            title: 'Delete file',
+            confirmText: 'Delete',
+            danger: true
+        });
+        if (!confirmed) return;
         
         // Close tab if open
         if (openFiles.includes(path)) {
@@ -1960,10 +1975,15 @@ async function deleteFileOrFolder(path) {
         // It's a folder - delete all files in it
         const filesInFolder = Object.keys(vfsFiles).filter(p => p.startsWith(path + '/'));
         if (filesInFolder.length === 0) {
-            alert('Folder is empty or does not exist.');
+            notifyWarning('Folder is empty or does not exist.');
             return;
         }
-        if (!confirm(`Delete folder "${path}" and all ${filesInFolder.length} files inside? This cannot be undone.`)) return;
+        const confirmedFolder = await showAppConfirm(`Delete folder "${path}" and all ${filesInFolder.length} files inside? This cannot be undone.`, {
+            title: 'Delete folder',
+            confirmText: 'Delete',
+            danger: true
+        });
+        if (!confirmedFolder) return;
         
         // Close tabs for files in folder
         for (const f of filesInFolder) {
@@ -2157,7 +2177,12 @@ async function init() {
     
     // File operations
     newFileBtn.onclick = async () => {
-        const name = prompt('Enter file name (e.g., script.js):');
+        const name = await showAppPrompt('Enter file name (e.g., script.js):', '', {
+            title: 'New file',
+            placeholder: 'script.js',
+            confirmText: 'Create',
+            required: true
+        });
         if (name) {
             await VFS.writeFile(name, '');
             MONACO.openFile(name);
@@ -2191,7 +2216,7 @@ async function init() {
     createCommitBtn.onclick = async () => {
         const message = commitMessageInput.value.trim();
         if (!message) {
-            alert('Please enter a commit message');
+            notifyWarning('Please enter a commit message');
             return;
         }
         await VERSION_CONTROL.createCommit(message);

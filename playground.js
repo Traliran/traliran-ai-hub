@@ -151,15 +151,25 @@ if (kbUploadModal) kbUploadModal.addEventListener('change', async (e) => {
     e.target.value = '';
 });
 
-clearKbBtn.addEventListener('click', () => {
-    if (confirm('Clear all knowledge base files?')) {
+clearKbBtn.addEventListener('click', async () => {
+    const confirmed = await showAppConfirm('Clear all knowledge base files?', {
+        title: 'Clear knowledge base',
+        confirmText: 'Clear',
+        danger: true
+    });
+    if (confirmed) {
         knowledgeBase = [];
         saveKnowledgeBase();
     }
 });
 
-if (clearKbModalBtn) clearKbModalBtn.addEventListener('click', () => {
-    if (confirm('Clear all knowledge base files?')) {
+if (clearKbModalBtn) clearKbModalBtn.addEventListener('click', async () => {
+    const confirmed = await showAppConfirm('Clear all knowledge base files?', {
+        title: 'Clear knowledge base',
+        confirmText: 'Clear',
+        danger: true
+    });
+    if (confirmed) {
         knowledgeBase = [];
         saveKnowledgeBase();
     }
@@ -253,7 +263,7 @@ async function sendMessage() {
 
     const config = loadConfig();
     if (PROVIDERS[config.provider].hasKey && !config.apiKey) {
-        alert('API Key missing! Please configure it in the Hub.');
+        notifyWarning('API Key missing! Please configure it in the Hub.');
         return;
     }
 
