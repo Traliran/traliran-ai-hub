@@ -26,6 +26,11 @@ let agentAbortController = null;
 let isAgentProcessing = false;
 let totalTokensUsed = 0;
 
+// Image attachment state for the AI agent (works on desktop and mobile).
+let agentAttachedContent = null;
+let agentAttachedName = '';
+let agentAttachedType = '';
+
 // Version Control State
 let commitHistory = [];
 
@@ -102,7 +107,7 @@ function convertContentForAnthropic(content) {
         if (typeof part === 'string') return { type: 'text', text: part };
         if (part?.type === 'text' || part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
         if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') {
-            const dataUrl = part.image_url?.url || part.url || '';
+            const dataUrl = typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url || part.url || '');
             if (dataUrl.startsWith('data:')) {
                 const [meta, payload] = dataUrl.split(',');
                 const mime = meta.match(/data:(.+);/)?.[1] || 'image/png';
@@ -858,12 +863,30 @@ const AI_AGENT = {
 
     async sendMessage(userMessage) {
         if (isAgentProcessing) return;
+
+        const text = (userMessage || '').trim();
+        if (!text && !agentAttachedContent) return;
         
         isAgentProcessing = true;
         agentAbortController = new AbortController();
+
+        // Build multimodal user content when an image is attached.
+        let userContent = text;
+        if (agentAttachedContent) {
+            if (agentAttachedType.startsWith('image/')) {
+                userContent = [
+                    { type: 'text', text: text || `Attached image: ${agentAttachedName}` },
+                    { type: 'image_url', image_url: { url: agentAttachedContent } }
+                ];
+            } else if (agentAttachedContent) {
+                userContent = text ? `${text}\n\n[Attached file: ${agentAttachedName}]\n${agentAttachedContent}` : `[Attached file: ${agentAttachedName}]\n${agentAttachedContent}`;
+            }
+        }
         
-        this.addMessageToChat('user', userMessage);
+        this.addMessageToChat('user', userContent);
+        agentChatHistory.push({ role: 'user', content: userContent });
         agentInput.value = '';
+        this.clearAttachment();
         
         const statusEl = document.getElementById('agentStatusIndicator');
         statusEl.textContent = 'Thinking...';
@@ -894,12 +917,11 @@ Be helpful, precise, and professional. All communication must be in English.`;
             const fileTree = VFS.getFileTree();
             const initialContext = `Current workspace structure:\n${JSON.stringify(fileTree, null, 2)}`;
 
-            // Build messages array
+            // Build messages array (history already includes the current message)
             const messages = [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: initialContext },
-                ...agentChatHistory.slice(-10), // Last 10 messages for context
-                { role: 'user', content: userMessage }
+                ...agentChatHistory.slice(-10) // Last 10 messages for context
             ];
 
             // Get API config
@@ -1189,15 +1211,34 @@ If no tool is needed, just respond normally with your answer.`;
             ? 'bg-violet-900/30 border border-violet-800 rounded-lg p-3 text-sm ml-8'
             : 'bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-sm mr-8';
 
-        // Parse markdown for assistant messages
-        const formattedContent = role === 'assistant' ? marked.parse(content) : escapeHtml(content);
-        
-        div.innerHTML = `
-            <div class="font-semibold text-xs mb-1 ${role === 'user' ? 'text-violet-400' : 'text-gray-400'}">
-                ${role === 'user' ? '👤 You' : '🤖 Assistant'}
-            </div>
-            <div class="prose prose-invert prose-sm max-w-none text-gray-200">${formattedContent}</div>
-        `;
+        const label = document.createElement('div');
+        label.className = `font-semibold text-xs mb-1 ${role === 'user' ? 'text-violet-400' : 'text-gray-400'}`;
+        label.textContent = role === 'user' ? 'You' : 'Assistant';
+        div.appendChild(label);
+
+        const body = document.createElement('div');
+        body.className = 'prose prose-invert prose-sm max-w-none text-gray-200';
+        if (role === 'assistant') {
+            body.innerHTML = marked.parse(typeof content === 'string' ? content : normalizeContentToText(content));
+        } else if (Array.isArray(content)) {
+            const textPart = normalizeContentToText(content);
+            const textDiv = document.createElement('div');
+            textDiv.textContent = textPart;
+            body.appendChild(textDiv);
+            content.forEach((part) => {
+                const url = part?.image_url?.url || part?.url || '';
+                if ((part?.type === 'image_url' || part?.type === 'image') && url) {
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.alt = 'User attachment';
+                    img.className = 'rounded-lg border border-gray-700 max-w-full h-auto mt-2';
+                    body.appendChild(img);
+                }
+            });
+        } else {
+            body.textContent = content;
+        }
+        div.appendChild(body);
 
         agentChatWindow.appendChild(div);
         agentChatWindow.scrollTop = agentChatWindow.scrollHeight;
@@ -1226,6 +1267,59 @@ If no tool is needed, just respond normally with your answer.`;
     stopGeneration() {
         if (agentAbortController) {
             agentAbortController.abort();
+        }
+    },
+
+    // Store an image or text file selected from desktop or mobile camera.
+    handleAttachmentFile(file) {
+        if (!file) return;
+        agentAttachedName = file.name || 'camera-photo.jpg';
+        agentAttachedType = file.type || '';
+        const indicator = document.getElementById('agentFileIndicator');
+        const nameEl = document.getElementById('agentFileName');
+        const previewEl = document.getElementById('agentFilePreview');
+        if (nameEl) nameEl.textContent = agentAttachedName;
+        if (agentAttachedType.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                agentAttachedContent = event.target.result;
+                if (previewEl) {
+                    previewEl.src = agentAttachedContent;
+                    previewEl.classList.remove('hidden');
+                }
+            };
+            reader.readAsDataURL(file);
+        } else {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                agentAttachedContent = event.target.result;
+                if (previewEl) previewEl.classList.add('hidden');
+            };
+            reader.readAsText(file);
+        }
+        if (indicator) {
+            indicator.classList.remove('hidden');
+            indicator.classList.add('flex');
+        }
+    },
+
+    clearAttachment() {
+        agentAttachedContent = null;
+        agentAttachedName = '';
+        agentAttachedType = '';
+        const indicator = document.getElementById('agentFileIndicator');
+        const previewEl = document.getElementById('agentFilePreview');
+        const attachInput = document.getElementById('agentAttachmentInput');
+        const cameraInput = document.getElementById('agentCameraInput');
+        if (attachInput) attachInput.value = '';
+        if (cameraInput) cameraInput.value = '';
+        if (previewEl) {
+            previewEl.classList.add('hidden');
+            previewEl.removeAttribute('src');
+        }
+        if (indicator) {
+            indicator.classList.add('hidden');
+            indicator.classList.remove('flex');
         }
     }
 };
@@ -1826,6 +1920,7 @@ function renderFileTree() {
                 fileDiv.onclick = () => {
                     MONACO.openFile(itemPath);
                     renderFileTree(); // Update active state
+                    closeFilesDrawer();
                 };
                 div.appendChild(fileDiv);
                 
@@ -1883,6 +1978,45 @@ async function deleteFileOrFolder(path) {
         }
         renderFileTree();
     }
+}
+
+// ==================== MOBILE DRAWERS ====================
+
+// Sidebars are static columns on desktop and slide-over drawers on phones.
+function openFilesDrawer() {
+    const sidebar = document.getElementById('filesSidebar');
+    const overlay = document.getElementById('filesOverlay');
+    if (!sidebar) return;
+    if (window.innerWidth >= 768) return;
+    sidebar.classList.remove('-translate-x-full');
+    if (overlay) overlay.classList.remove('hidden');
+}
+
+function closeFilesDrawer() {
+    const sidebar = document.getElementById('filesSidebar');
+    const overlay = document.getElementById('filesOverlay');
+    if (!sidebar) return;
+    if (window.innerWidth >= 768) return;
+    sidebar.classList.add('-translate-x-full');
+    if (overlay) overlay.classList.add('hidden');
+}
+
+function openAgentDrawer() {
+    const sidebar = document.getElementById('agentSidebar');
+    const overlay = document.getElementById('agentOverlay');
+    if (!sidebar) return;
+    if (window.innerWidth >= 1024) return;
+    sidebar.classList.remove('translate-x-full');
+    if (overlay) overlay.classList.remove('hidden');
+}
+
+function closeAgentDrawer() {
+    const sidebar = document.getElementById('agentSidebar');
+    const overlay = document.getElementById('agentOverlay');
+    if (!sidebar) return;
+    if (window.innerWidth >= 1024) return;
+    sidebar.classList.add('translate-x-full');
+    if (overlay) overlay.classList.add('hidden');
 }
 
 // ==================== INITIALIZATION ====================
@@ -2088,8 +2222,40 @@ async function init() {
     // AI Agent
     sendAgentBtn.onclick = () => {
         const msg = agentInput.value.trim();
-        if (msg) AI_AGENT.sendMessage(msg);
+        if (msg || agentAttachedContent) AI_AGENT.sendMessage(msg);
     };
+
+    const agentAttachmentInput = document.getElementById('agentAttachmentInput');
+    if (agentAttachmentInput) {
+        agentAttachmentInput.onchange = (e) => {
+            AI_AGENT.handleAttachmentFile(e.target.files[0]);
+        };
+    }
+    const agentCameraInput = document.getElementById('agentCameraInput');
+    if (agentCameraInput) {
+        agentCameraInput.onchange = (e) => {
+            AI_AGENT.handleAttachmentFile(e.target.files[0]);
+            agentCameraInput.value = '';
+        };
+    }
+    const removeAgentFileBtn = document.getElementById('removeAgentFileBtn');
+    if (removeAgentFileBtn) removeAgentFileBtn.onclick = () => AI_AGENT.clearAttachment();
+
+    // Mobile drawers for files and agent panels
+    const toggleFilesBtn = document.getElementById('toggleFilesBtn');
+    if (toggleFilesBtn) toggleFilesBtn.onclick = openFilesDrawer;
+    const filesOverlay = document.getElementById('filesOverlay');
+    if (filesOverlay) filesOverlay.onclick = closeFilesDrawer;
+    const toggleAgentBtn = document.getElementById('toggleAgentBtn');
+    if (toggleAgentBtn) toggleAgentBtn.onclick = openAgentDrawer;
+    const agentOverlay = document.getElementById('agentOverlay');
+    if (agentOverlay) agentOverlay.onclick = closeAgentDrawer;
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeFilesDrawer();
+            closeAgentDrawer();
+        }
+    });
     
     agentInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {

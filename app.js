@@ -155,8 +155,10 @@ const stopBtn = document.getElementById('stopBtn');
 const chatsList = document.getElementById('chatsList');
 const newChatBtn = document.getElementById('newChatBtn');
 const attachmentInput = document.getElementById('attachmentInput');
+const cameraInput = document.getElementById('cameraInput');
 const fileIndicator = document.getElementById('fileIndicator');
 const fileNameDisplay = document.getElementById('fileNameDisplay');
+const filePreviewThumb = document.getElementById('filePreviewThumb');
 const removeFileBtn = document.getElementById('removeFileBtn');
 const usageInfo = document.getElementById('usageInfo');
 const streamingStatus = document.getElementById('streamingStatus');
@@ -227,7 +229,7 @@ summarizeChatBtn.addEventListener('click', async () => {
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({
             role: m.role,
-            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+            content: normalizeContentToText(m.content)
         }));
     
     const summarizationPrompt = {
@@ -313,6 +315,7 @@ function escapeHtml(value) {
 }
 
 function normalizeContentToText(content) {
+    content = unwrapMessageContent(content);
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
         return content.map(part => {
@@ -326,13 +329,52 @@ function normalizeContentToText(content) {
     return '';
 }
 
+// Unwrap legacy double-wrapped content: some stored messages keep the shape
+// { role: 'user', content: [...] } inside the message content field.
+function unwrapMessageContent(content) {
+    if (content && typeof content === 'object' && !Array.isArray(content) && Array.isArray(content.content)) {
+        return content.content;
+    }
+    return content;
+}
+
+// Convert stored content to the standard OpenAI chat format:
+// [{ type: 'text', text }, { type: 'image_url', image_url: { url } }].
+// Legacy parts stored as { type: 'image_url', url } are migrated here.
+function normalizeContentForApi(content) {
+    content = unwrapMessageContent(content);
+    if (typeof content === 'string' || !Array.isArray(content)) return content;
+    return content.map(part => {
+        if (typeof part === 'string') return { type: 'text', text: part };
+        if (part?.type === 'text') return { type: 'text', text: part.text || part.content || '' };
+        if (part?.type === 'image_url') {
+            const url = typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url || part.url || '');
+            if (!url) return { type: 'text', text: '[Image attachment]' };
+            return { type: 'image_url', image_url: { url } };
+        }
+        if (part?.type === 'video_url' || part?.type === 'video') {
+            return { type: 'text', text: `[Video attachment: ${part.url || part.video_url?.url || 'video'} — video bytes are not sent, describe it in text instead.]` };
+        }
+        if (part?.type === 'image' || part?.type === 'input_image') {
+            const url = part.url || part.src || '';
+            if (!url) return { type: 'text', text: '[Image attachment]' };
+            return { type: 'image_url', image_url: { url } };
+        }
+        if (part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
+        return { type: 'text', text: part?.text || part?.content || '' };
+    });
+}
+
 function buildMediaHtmlFromContent(content) {
+    content = unwrapMessageContent(content);
     if (!Array.isArray(content)) return '';
 
     return content.map(part => {
         if (typeof part === 'string' || !part) return '';
 
-        const source = part.image_url?.url || part.video_url?.url || part.url || part.src || '';
+        const imageUrl = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url;
+        const videoUrl = typeof part.video_url === 'string' ? part.video_url : part.video_url?.url;
+        const source = imageUrl || videoUrl || part.url || part.src || '';
         if (!source) return '';
 
         if (part.type === 'image_url' || part.type === 'image' || part.type === 'input_image') {
@@ -1021,6 +1063,26 @@ function openNote(id) {
         updateNoteTags();
     }
     renderNotesList();
+    closeNotesSidebarDrawer();
+}
+
+// Notes sidebar drawer: hidden slide-over panel on phones, static column on desktop.
+function openNotesSidebarDrawer() {
+    const sidebar = document.getElementById('notesSidebar');
+    const overlay = document.getElementById('notesOverlay');
+    if (!sidebar) return;
+    if (window.innerWidth >= 768) return;
+    sidebar.classList.remove('-translate-x-full');
+    if (overlay) overlay.classList.remove('hidden');
+}
+
+function closeNotesSidebarDrawer() {
+    const sidebar = document.getElementById('notesSidebar');
+    const overlay = document.getElementById('notesOverlay');
+    if (!sidebar) return;
+    if (window.innerWidth >= 768) return;
+    sidebar.classList.add('-translate-x-full');
+    if (overlay) overlay.classList.add('hidden');
 }
 
 function updateNoteContent() {
@@ -1486,6 +1548,7 @@ function getEstimatedCostFromText(promptText, outputText) {
 }
 
 function convertContentForAnthropic(content) {
+    content = unwrapMessageContent(content);
     if (typeof content === 'string') return content;
     if (!Array.isArray(content)) return normalizeContentToText(content);
 
@@ -1493,7 +1556,7 @@ function convertContentForAnthropic(content) {
         if (typeof part === 'string') return { type: 'text', text: part };
         if (part?.type === 'text' || part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
         if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') {
-            const dataUrl = part.image_url?.url || part.url || '';
+            const dataUrl = typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url || part.url || '');
             if (dataUrl.startsWith('data:')) {
                 const [meta, payload] = dataUrl.split(',');
                 const mime = meta.match(/data:(.+);/)?.[1] || 'image/png';
@@ -1668,7 +1731,7 @@ async function runAgenticSingleModel(session, modelId, providerName, endpoint, a
 
     const sysPrompt = (session.systemPrompt || '') + buildMcpSystemNote();
     const conv = [{ role: 'system', content: sysPrompt }];
-    session.messages.forEach(m => conv.push({ role: m.role, content: m.content }));
+    session.messages.forEach(m => conv.push({ role: m.role, content: normalizeContentForApi(m.content) }));
 
     let finalContent = '';
     const MAX_ITER = 8;
@@ -1759,7 +1822,7 @@ async function triggerAiResponse(session) {
 
     let messagesToSend = [];
     if (session.systemPrompt) messagesToSend.push({ role: 'system', content: session.systemPrompt });
-    session.messages.forEach(msg => messagesToSend.push({ role: msg.role, content: typeof msg.content === 'string' ? msg.content : msg.content }));
+    session.messages.forEach(msg => messagesToSend.push({ role: msg.role, content: normalizeContentForApi(msg.content) }));
 
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'text-xs text-gray-500 italic px-1 animate-pulse';
@@ -1899,14 +1962,15 @@ async function sendMessage() {
 
     let fullUserContent = text;
     if (attachedFileContent) {
-        if (attachedFileType.startsWith('image/') || attachedFileType.startsWith('video/')) {
-            fullUserContent = {
-                role: 'user',
-                content: [
-                    { type: 'text', text: text || `Attached ${attachedFileType.startsWith('image/') ? 'image' : 'video'}: ${attachedFileName}` },
-                    { type: attachedFileType.startsWith('image/') ? 'image_url' : 'video_url', url: attachedFileContent }
-                ]
-            };
+        if (attachedFileType.startsWith('image/')) {
+            // Standard OpenAI chat format; also accepted by the Gemini OpenAI-compatible endpoint.
+            fullUserContent = [
+                { type: 'text', text: text || `Attached image: ${attachedFileName}` },
+                { type: 'image_url', image_url: { url: attachedFileContent } }
+            ];
+        } else if (attachedFileType.startsWith('video/')) {
+            // No chat/completions endpoint in this hub supports video parts — send a text note instead of video_url to avoid HTTP 400.
+            fullUserContent = (text ? text + '\n\n' : '') + `[Video attachment: ${attachedFileName} — video bytes are not sent to the model.]`;
         } else {
             fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
         }
@@ -1918,7 +1982,8 @@ async function sendMessage() {
     session.messages.push({ role: 'user', content: fullUserContent });
 
     if (session.name.startsWith('Chat #')) {
-        session.name = text.slice(0, 24) + (text.length > 24 ? '...' : '...');
+        const baseName = text || `Image ${attachedFileName}`;
+        session.name = baseName.slice(0, 24) + (baseName.length > 24 ? '...' : '...');
     }
 
     const baseSystemPrompt = botPromptInput.value.trim();
@@ -2002,7 +2067,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
             chatWindow.scrollTop = chatWindow.scrollHeight;
 
             let currentContext = [{ role: 'system', content: agent.prompt }];
-            session.messages.forEach(m => currentContext.push({ role: m.role, content: m.content }));
+            session.messages.forEach(m => currentContext.push({ role: m.role, content: normalizeContentForApi(m.content) }));
 
             try {
                 const maxTokens = Math.max(1500, getMaxTokens());
@@ -2108,23 +2173,37 @@ document.addEventListener('keydown', (e) => {
     chatsPanel.classList.add('-translate-x-full');
     chatsOverlay.classList.add('hidden');
     closeSidebarUniversal();
+    closeNotesSidebarDrawer();
     if (collapsedButtons) {
         collapsedButtons.classList.add('hidden');
         collapsedButtons.classList.remove('flex');
     }
 });
 
-attachmentInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
+// Shared attachment reader: supports text, PDF, image and video files.
+// Used by both the desktop file picker and the mobile camera input.
+async function handleAttachedFile(file) {
     if (!file) return;
-    attachedFileName = file.name;
+    attachedFileName = file.name || 'camera-photo.jpg';
     attachedFileType = file.type || '';
 
     fileNameDisplay.textContent = attachedFileName;
     fileIndicator.classList.remove('hidden');
     fileIndicator.classList.add('flex');
 
+    const showPreview = (dataUrl) => {
+        if (!filePreviewThumb) return;
+        if (attachedFileType.startsWith('image/')) {
+            filePreviewThumb.src = dataUrl;
+            filePreviewThumb.classList.remove('hidden');
+        } else {
+            filePreviewThumb.classList.add('hidden');
+            filePreviewThumb.removeAttribute('src');
+        }
+    };
+
     if (file.type === 'application/pdf' || attachedFileName.toLowerCase().endsWith('.pdf')) {
+        if (filePreviewThumb) filePreviewThumb.classList.add('hidden');
         try {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -2145,23 +2224,41 @@ attachmentInput.addEventListener('change', async (e) => {
         const reader = new FileReader();
         reader.onload = function(event) {
             attachedFileContent = event.target.result;
+            showPreview(attachedFileContent);
         };
         reader.readAsDataURL(file);
         return;
     }
 
+    if (filePreviewThumb) filePreviewThumb.classList.add('hidden');
     const reader = new FileReader();
     reader.onload = function(event) {
         attachedFileContent = event.target.result;
     };
     reader.readAsText(file);
+}
+
+attachmentInput.addEventListener('change', async (e) => {
+    await handleAttachedFile(e.target.files[0]);
 });
+
+if (cameraInput) {
+    cameraInput.addEventListener('change', async (e) => {
+        await handleAttachedFile(e.target.files[0]);
+        cameraInput.value = '';
+    });
+}
 
 function removeAttachedFile() {
     attachedFileContent = null;
     attachedFileName = '';
     attachedFileType = '';
     attachmentInput.value = '';
+    if (cameraInput) cameraInput.value = '';
+    if (filePreviewThumb) {
+        filePreviewThumb.classList.add('hidden');
+        filePreviewThumb.removeAttribute('src');
+    }
     fileIndicator.classList.add('hidden');
     fileIndicator.classList.remove('flex');
 }
@@ -2194,8 +2291,18 @@ closeHelpModalBtn.addEventListener('click', () => { helpModal.classList.add('hid
 openNotesBtn.addEventListener('click', () => {
     notesPage.classList.remove('hidden');
     loadNotes();
+    // On phones the notes list starts hidden as a drawer; on desktop it stays visible.
+    if (window.innerWidth < 768) {
+        closeNotesSidebarDrawer();
+    }
 });
 closeNotesPage.addEventListener('click', () => notesPage.classList.add('hidden'));
+const toggleNotesSidebarBtn = document.getElementById('toggleNotesSidebar');
+if (toggleNotesSidebarBtn) toggleNotesSidebarBtn.addEventListener('click', openNotesSidebarDrawer);
+const closeNotesSidebarBtn = document.getElementById('closeNotesSidebar');
+if (closeNotesSidebarBtn) closeNotesSidebarBtn.addEventListener('click', closeNotesSidebarDrawer);
+const notesOverlayEl = document.getElementById('notesOverlay');
+if (notesOverlayEl) notesOverlayEl.addEventListener('click', closeNotesSidebarDrawer);
 newNoteBtn.addEventListener('click', createNewNote);
 noteTitle.addEventListener('input', updateNoteContent);
 noteContent.addEventListener('input', () => {

@@ -180,6 +180,8 @@ main, header > div {
 @media (max-width: 1023px) {
     #sidebar:not(.translate-x-full) { animation: slide-in-right var(--anim-med) var(--anim-ease); }
     #sandboxColumn:not(.hidden) { animation: slide-up var(--anim-med) var(--anim-ease); }
+    #kbPanel:not(.-translate-x-full) { animation: slide-in-left var(--anim-med) var(--anim-ease); }
+    #agentSidebar:not(.translate-x-full) { animation: slide-in-right var(--anim-med) var(--anim-ease); }
 }
 @media (min-width: 768px) {
     #sandboxColumn:not(.hidden) { animation: fade-in var(--anim-fast) ease-out; }
@@ -235,8 +237,20 @@ body { min-height: 100vh; min-height: 100dvh; }
         width: 100% !important;
         overflow-y: auto;
     }
-    #notesPage aside { width: 86vw !important; max-width: 320px; }
+    /* Notes drawer on phones (chat-style slide-over, static column on desktop) */
+    #notesSidebar { width: 86vw !important; max-width: 320px; }
+    #notesSidebar:not(.-translate-x-full) { animation: slide-in-left var(--anim-med) var(--anim-ease); }
+    /* RAG knowledge base drawer on phones (static column on desktop) */
+    #kbPanel { width: 86vw !important; max-width: 320px; }
+    #kbPanel:not(.-translate-x-full) { animation: slide-in-left var(--anim-med) var(--anim-ease); }
     #noteContent, #notePreview { padding: 1rem !important; }
+    /* IDE drawers on phones (static columns on desktop) */
+    #filesSidebar { width: 86vw !important; max-width: 320px; }
+    #filesSidebar:not(.-translate-x-full) { animation: slide-in-left var(--anim-med) var(--anim-ease); }
+    #agentSidebar { width: 92vw !important; max-width: 400px; }
+    #agentSidebar:not(.translate-x-full) { animation: slide-in-right var(--anim-med) var(--anim-ease); }
+    #monacoContainer { min-height: 40dvh; }
+    #filePreviewThumb, #agentFilePreview { width: 2.5rem; height: 2.5rem; }
 }
 @media (max-width: 380px) {
     #chatWindow { padding: 0.6rem !important; }
