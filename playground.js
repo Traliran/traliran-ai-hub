@@ -1,6 +1,8 @@
 // Traliran AI RAG Playground - JS Logic
+// All comments and user-facing strings are in English.
 let knowledgeBase = [];
-let currentSessionMessages = [];
+let ragSessions = [];
+let currentRagSessionId = null;
 let currentAbortController = null;
 
 const PROVIDERS = {
@@ -40,8 +42,145 @@ const settingsModal = document.getElementById('settingsModal');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const currentConfigDisplay = document.getElementById('currentConfigDisplay');
 const refreshConfigBtn = document.getElementById('refreshConfigBtn');
+const ragChatsList = document.getElementById('ragChatsList');
+const newRagChatBtn = document.getElementById('newRagChatBtn');
+const newRagChatTopBtn = document.getElementById('newRagChatTopBtn');
+const ragActiveChatName = document.getElementById('ragActiveChatName');
 
 marked.use({ breaks: true, gfm: true });
+
+// ---------- RAG chat sessions (multi-chat history) ----------
+function getActiveRagSession() {
+    return ragSessions.find(s => s.id === currentRagSessionId) || null;
+}
+
+function saveRagSessionsToStorage() {
+    STORAGE.setItem('gem_rag_sessions', JSON.stringify(ragSessions));
+    if (typeof SYNC_MANAGER !== 'undefined' && SYNC_MANAGER.pushToCloud) {
+        SYNC_MANAGER.pushToCloud('rag_sessions');
+    }
+}
+
+function createNewRagSession() {
+    const id = 'rag_' + Date.now();
+    const newSession = {
+        id,
+        name: `Chat #${ragSessions.length + 1}`,
+        messages: [],
+        createdAt: Date.now()
+    };
+    ragSessions.unshift(newSession);
+    currentRagSessionId = id;
+    saveRagSessionsToStorage();
+    renderRagSessionsList();
+    loadActiveRagSession();
+    if (typeof closeKbDrawer === 'function' && window.innerWidth < 1024) closeKbDrawer();
+}
+
+function selectRagSession(id) {
+    currentRagSessionId = id;
+    renderRagSessionsList();
+    loadActiveRagSession();
+    if (window.innerWidth < 1024) closeKbDrawer();
+}
+
+async function deleteRagSession(id, event) {
+    if (event) event.stopPropagation();
+    const session = ragSessions.find(s => s.id === id);
+    const confirmed = await showAppConfirm(`Delete chat "${session?.name || ''}"?`, {
+        title: 'Delete chat',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (!confirmed) return;
+    ragSessions = ragSessions.filter(s => s.id !== id);
+    if (ragSessions.length === 0) {
+        createNewRagSession();
+        return;
+    }
+    if (currentRagSessionId === id) currentRagSessionId = ragSessions[0].id;
+    saveRagSessionsToStorage();
+    renderRagSessionsList();
+    loadActiveRagSession();
+}
+
+async function renameRagSession(id) {
+    const session = ragSessions.find(s => s.id === id);
+    if (!session) return;
+    const newName = await showAppPrompt('Enter new chat name:', session.name, {
+        title: 'Rename chat',
+        placeholder: 'Chat name',
+        confirmText: 'Rename'
+    });
+    if (newName && newName.trim() !== '') {
+        session.name = newName.trim();
+        saveRagSessionsToStorage();
+        renderRagSessionsList();
+        loadActiveRagSession();
+    }
+}
+
+function renderRagSessionsList() {
+    if (!ragChatsList) return;
+    ragChatsList.innerHTML = '';
+    ragSessions.forEach(session => {
+        const isActive = session.id === currentRagSessionId;
+        const item = document.createElement('div');
+        item.className = `group flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
+        item.onclick = () => selectRagSession(session.id);
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'text-xs font-medium truncate flex-1 pr-2';
+        nameSpan.textContent = session.name;
+
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white px-1 text-[11px] transition shrink-0';
+        renameBtn.textContent = 'Rename';
+        renameBtn.onclick = (e) => { e.stopPropagation(); renameRagSession(session.id); };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-300 px-1 text-[11px] transition shrink-0';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = (e) => deleteRagSession(session.id, e);
+
+        item.appendChild(nameSpan);
+        item.appendChild(renameBtn);
+        item.appendChild(deleteBtn);
+        ragChatsList.appendChild(item);
+    });
+}
+
+function loadActiveRagSession() {
+    const session = getActiveRagSession();
+    chatWindow.innerHTML = '';
+    if (!session || session.messages.length === 0) {
+        welcomeMessage.classList.remove('hidden');
+        chatWindow.appendChild(welcomeMessage);
+    } else {
+        welcomeMessage.classList.add('hidden');
+        session.messages.forEach(msg => renderMessage(msg.role, msg.content, true));
+    }
+    if (ragActiveChatName) ragActiveChatName.textContent = session ? session.name : 'New Chat';
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+function loadRagSessions() {
+    const saved = STORAGE.getItem('gem_rag_sessions');
+    if (saved) {
+        try { ragSessions = JSON.parse(saved); } catch (e) { ragSessions = []; }
+    }
+    if (!Array.isArray(ragSessions) || ragSessions.length === 0) {
+        ragSessions = [];
+        createNewRagSession();
+    } else {
+        currentRagSessionId = ragSessions[0].id;
+        renderRagSessionsList();
+        loadActiveRagSession();
+    }
+}
+
+if (newRagChatBtn) newRagChatBtn.addEventListener('click', createNewRagSession);
+if (newRagChatTopBtn) newRagChatTopBtn.addEventListener('click', createNewRagSession);
 
 function loadConfig() {
     const provider = STORAGE.getItem('gem_provider') || 'groq';
@@ -179,7 +318,8 @@ function escapeHtml(value) {
     return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function renderMessage(role, content) {
+function renderMessage(role, content, fromHistory) {
+    // Hide the welcome banner whenever a real message is rendered.
     welcomeMessage.classList.add('hidden');
     const msgDiv = document.createElement('div');
     msgDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full`;
@@ -261,6 +401,13 @@ async function sendMessage() {
     const text = userInput.value.trim();
     if (!text) return;
 
+    let session = getActiveRagSession();
+    if (!session) {
+        createNewRagSession();
+        session = getActiveRagSession();
+    }
+    if (!session) return;
+
     const config = loadConfig();
     if (PROVIDERS[config.provider].hasKey && !config.apiKey) {
         notifyWarning('API Key missing! Please configure it in the Hub.');
@@ -270,7 +417,15 @@ async function sendMessage() {
     userInput.value = '';
     userInput.style.height = 'auto';
     renderMessage('user', text);
-    currentSessionMessages.push({ role: 'user', content: text });
+    session.messages.push({ role: 'user', content: text });
+
+    // Auto-rename untitled chats from the first user message.
+    if (session.name.startsWith('Chat #') && text) {
+        session.name = text.slice(0, 28) + (text.length > 28 ? '...' : '');
+    }
+    saveRagSessionsToStorage();
+    renderRagSessionsList();
+    if (ragActiveChatName) ragActiveChatName.textContent = session.name;
 
     // Build RAG System Prompt
     const personalContext = config.personalInfo ? `[About the user]:\n${config.personalInfo}\n\n` : '';
@@ -288,7 +443,7 @@ ${kbContext || 'No files uploaded yet.'}
 
     const messages = [
         { role: 'system', content: ragSystemPrompt },
-        ...currentSessionMessages
+        ...session.messages
     ];
 
     userInput.disabled = true;
@@ -326,7 +481,8 @@ ${kbContext || 'No files uploaded yet.'}
             }
         );
 
-        currentSessionMessages.push({ role: 'assistant', content: finalContent });
+        session.messages.push({ role: 'assistant', content: finalContent });
+        saveRagSessionsToStorage();
         
         // Transition from plain text to rendered markdown
         placeholderDiv.remove();
@@ -406,18 +562,25 @@ window.addEventListener('storage', (e) => {
     if (e.key === 'gem_rag_kb') {
         loadKnowledgeBase();
     }
+    if (e.key === 'gem_rag_sessions') {
+        loadRagSessions();
+    }
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
     await STORAGE.ready();
     loadConfig();
     loadKnowledgeBase();
+    loadRagSessions();
     setupPlaygroundSync();
 
     if (SYNC_MANAGER.isLoggedIn()) {
         SYNC_MANAGER.pullFromCloud('rag_knowledge').then(() => {
             loadKnowledgeBase();
         }).catch(e => console.error('Initial RAG sync error:', e));
+        SYNC_MANAGER.pullFromCloud('rag_sessions').then((data) => {
+            if (data) loadRagSessions();
+        }).catch(e => console.error('Initial RAG sessions sync error:', e));
     }
 });
 

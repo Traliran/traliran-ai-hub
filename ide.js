@@ -20,8 +20,9 @@ const OFFICIAL_BOTS = [
     },
 ];
 
-// AI Agent State
-let agentChatHistory = [];
+// AI Agent State (multi-chat history, all comments in English)
+let agentSessions = [];
+let currentAgentSessionId = null;
 let agentAbortController = null;
 let isAgentProcessing = false;
 let totalTokensUsed = 0;
@@ -774,6 +775,155 @@ const MONACO = {
     }
 };
 
+// ==================== AI AGENT CHAT SESSIONS (multi-chat history) ====================
+
+function getActiveAgentSession() {
+    return agentSessions.find(s => s.id === currentAgentSessionId) || null;
+}
+
+function saveAgentSessionsToStorage() {
+    try {
+        STORAGE.setItem('ide_agent_sessions', JSON.stringify(agentSessions));
+    } catch (e) {
+        console.error('[AGENT CHATS] Save error:', e);
+    }
+    if (typeof SYNC_MANAGER !== 'undefined' && SYNC_MANAGER.pushToCloud) {
+        SYNC_MANAGER.pushToCloud('ide_agent_chats');
+    }
+}
+
+function createNewAgentSession() {
+    const id = 'agent_' + Date.now();
+    const newSession = {
+        id,
+        name: `Chat #${agentSessions.length + 1}`,
+        messages: [],
+        createdAt: Date.now()
+    };
+    agentSessions.unshift(newSession);
+    currentAgentSessionId = id;
+    saveAgentSessionsToStorage();
+    renderAgentSessionsList();
+    loadActiveAgentSession();
+}
+
+function selectAgentSession(id) {
+    if (isAgentProcessing) {
+        notifyWarning('Please wait until the agent finishes responding.');
+        return;
+    }
+    currentAgentSessionId = id;
+    renderAgentSessionsList();
+    loadActiveAgentSession();
+}
+
+async function deleteAgentSession(id, event) {
+    if (event) event.stopPropagation();
+    const session = agentSessions.find(s => s.id === id);
+    const confirmed = await showAppConfirm(`Delete agent chat "${session?.name || ''}"?`, {
+        title: 'Delete agent chat',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (!confirmed) return;
+    agentSessions = agentSessions.filter(s => s.id !== id);
+    if (agentSessions.length === 0) {
+        createNewAgentSession();
+        return;
+    }
+    if (currentAgentSessionId === id) currentAgentSessionId = agentSessions[0].id;
+    saveAgentSessionsToStorage();
+    renderAgentSessionsList();
+    loadActiveAgentSession();
+}
+
+async function renameAgentSession(id) {
+    const session = agentSessions.find(s => s.id === id);
+    if (!session) return;
+    const newName = await showAppPrompt('Enter new chat name:', session.name, {
+        title: 'Rename agent chat',
+        placeholder: 'Chat name',
+        confirmText: 'Rename'
+    });
+    if (newName && newName.trim() !== '') {
+        session.name = newName.trim();
+        saveAgentSessionsToStorage();
+        renderAgentSessionsList();
+    }
+}
+
+function renderAgentSessionsList() {
+    const listEl = document.getElementById('agentChatsList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    agentSessions.forEach(session => {
+        const isActive = session.id === currentAgentSessionId;
+        const item = document.createElement('div');
+        item.className = `group flex items-center justify-between p-1.5 rounded-lg cursor-pointer transition text-xs ${isActive ? 'bg-violet-600/20 border border-violet-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
+        item.onclick = () => selectAgentSession(session.id);
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'font-medium truncate flex-1 pr-2';
+        nameSpan.textContent = session.name;
+
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white px-1 text-[10px] transition shrink-0';
+        renameBtn.textContent = 'Rename';
+        renameBtn.onclick = (e) => { e.stopPropagation(); renameAgentSession(session.id); };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-300 px-1 text-[10px] transition shrink-0';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = (e) => deleteAgentSession(session.id, e);
+
+        item.appendChild(nameSpan);
+        item.appendChild(renameBtn);
+        item.appendChild(deleteBtn);
+        listEl.appendChild(item);
+    });
+}
+
+function loadAgentSessionsFromStorage() {
+    try {
+        const saved = STORAGE.getItem('ide_agent_sessions');
+        if (saved) agentSessions = JSON.parse(saved);
+    } catch (e) {
+        agentSessions = [];
+    }
+    if (!Array.isArray(agentSessions) || agentSessions.length === 0) {
+        agentSessions = [];
+        createNewAgentSession();
+    } else {
+        currentAgentSessionId = agentSessions[0].id;
+        renderAgentSessionsList();
+        loadActiveAgentSession();
+    }
+}
+
+function loadActiveAgentSession() {
+    if (!agentChatWindow) return;
+    const session = getActiveAgentSession();
+    agentChatWindow.innerHTML = '';
+    if (!session || session.messages.length === 0) {
+        agentChatWindow.innerHTML = `
+            <div class="bg-gray-800/50 border border-gray-700 rounded-2xl p-3 text-xs text-gray-300">
+                <p class="font-semibold text-violet-400 mb-1">Welcome to AI IDE!</p>
+                <p>I can help you write, edit, and refactor code. I have access to your workspace files.</p>
+                <ul class="mt-2 space-y-1 text-gray-400">
+                    <li>• Ask me to create new files</li>
+                    <li>• Request code modifications</li>
+                    <li>• Debug issues in your code</li>
+                    <li>• Explain code structure</li>
+                </ul>
+            </div>`;
+        return;
+    }
+    session.messages.forEach(msg => {
+        AI_AGENT.addMessageToChat(msg.role, msg.content);
+    });
+    agentChatWindow.scrollTop = agentChatWindow.scrollHeight;
+}
+
 // ==================== AI AGENT WITH TOOL CALLING ====================
 
 const AI_AGENT = {
@@ -871,9 +1021,18 @@ const AI_AGENT = {
 
         const text = (userMessage || '').trim();
         if (!text && !agentAttachedContent) return;
+
+        let session = getActiveAgentSession();
+        if (!session) {
+            createNewAgentSession();
+            session = getActiveAgentSession();
+        }
+        if (!session) return;
         
         isAgentProcessing = true;
         agentAbortController = new AbortController();
+        if (typeof sendAgentBtn !== 'undefined' && sendAgentBtn) sendAgentBtn.classList.add('hidden');
+        if (typeof stopAgentBtn !== 'undefined' && stopAgentBtn) stopAgentBtn.classList.remove('hidden');
 
         // Build multimodal user content when an image is attached.
         let userContent = text;
@@ -889,7 +1048,13 @@ const AI_AGENT = {
         }
         
         this.addMessageToChat('user', userContent);
-        agentChatHistory.push({ role: 'user', content: userContent });
+        session.messages.push({ role: 'user', content: userContent });
+        // Auto-rename untitled chats from the first user message.
+        if (session.name.startsWith('Chat #') && text) {
+            session.name = text.slice(0, 28) + (text.length > 28 ? '...' : '');
+            renderAgentSessionsList();
+        }
+        saveAgentSessionsToStorage();
         agentInput.value = '';
         this.clearAttachment();
         
@@ -926,7 +1091,7 @@ Be helpful, precise, and professional. All communication must be in English.`;
             const messages = [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: initialContext },
-                ...agentChatHistory.slice(-10) // Last 10 messages for context
+                ...session.messages.slice(-10) // Last 10 messages for context
             ];
 
             // Get API config
@@ -936,7 +1101,9 @@ Be helpful, precise, and professional. All communication must be in English.`;
             const baseEndpoint = PROVIDERS[provider]?.url || '';
 
             if (!apiKey && PROVIDERS[provider]?.hasKey) {
-                this.addMessageToChat('assistant', '⚠️ Please configure your API key in Settings first.');
+                this.addMessageToChat('assistant', 'Warning: Please configure your API key in Settings first.');
+                session.messages.push({ role: 'assistant', content: 'Warning: Please configure your API key in Settings first.' });
+                saveAgentSessionsToStorage();
                 isAgentProcessing = false;
                 statusEl.textContent = 'Error';
                 return;
@@ -947,12 +1114,19 @@ Be helpful, precise, and professional. All communication must be in English.`;
 
         } catch (e) {
             console.error('[AI AGENT] Error:', e);
-            this.addMessageToChat('assistant', `❌ Error: ${e.message}`);
+            const errorText = `Error: ${e.message}`;
+            this.addMessageToChat('assistant', errorText);
+            if (session) {
+                session.messages.push({ role: 'assistant', content: errorText });
+                saveAgentSessionsToStorage();
+            }
         } finally {
             isAgentProcessing = false;
             agentAbortController = null;
             statusEl.textContent = 'Ready';
             statusEl.classList.remove('text-violet-400');
+            if (typeof sendAgentBtn !== 'undefined' && sendAgentBtn) sendAgentBtn.classList.remove('hidden');
+            if (typeof stopAgentBtn !== 'undefined' && stopAgentBtn) stopAgentBtn.classList.add('hidden');
         }
     },
 
@@ -1011,7 +1185,11 @@ If no tool is needed, just respond normally with your answer.`;
             if (!toolCalls || toolCalls.length === 0) {
                 if (content) {
                     this.addMessageToChat('assistant', content);
-                    agentChatHistory.push({ role: 'assistant', content });
+                    const activeSession = getActiveAgentSession();
+                    if (activeSession) {
+                        activeSession.messages.push({ role: 'assistant', content });
+                        saveAgentSessionsToStorage();
+                    }
                 }
                 break;
             }
@@ -1048,7 +1226,13 @@ If no tool is needed, just respond normally with your answer.`;
         }
 
         if (iterations >= maxIterations) {
-            this.addMessageToChat('assistant', '⚠️ Reached maximum iteration limit. Please refine your request.');
+            const limitText = 'Warning: Reached maximum iteration limit. Please refine your request.';
+            this.addMessageToChat('assistant', limitText);
+            const activeSession = getActiveAgentSession();
+            if (activeSession) {
+                activeSession.messages.push({ role: 'assistant', content: limitText });
+                saveAgentSessionsToStorage();
+            }
         }
     },
 
@@ -2250,6 +2434,11 @@ async function init() {
         if (msg || agentAttachedContent) AI_AGENT.sendMessage(msg);
     };
 
+    // Agent multi-chat history
+    const newAgentChatBtn = document.getElementById('newAgentChatBtn');
+    if (newAgentChatBtn) newAgentChatBtn.onclick = () => createNewAgentSession();
+    loadAgentSessionsFromStorage();
+
     const agentAttachmentInput = document.getElementById('agentAttachmentInput');
     if (agentAttachmentInput) {
         agentAttachmentInput.onchange = (e) => {
@@ -2311,6 +2500,13 @@ async function init() {
         if (e.key?.startsWith('gem_')) {
             loadApiConfig();
         }
+        if (e.key === 'ide_agent_sessions') {
+            loadAgentSessionsFromStorage();
+        }
+    });
+    // Listen for cloud sync updates of agent chats
+    window.addEventListener('ide-agent-chats-synced', () => {
+        loadAgentSessionsFromStorage();
     });
     
     updateAuthUI();
