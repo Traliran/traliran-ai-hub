@@ -84,6 +84,26 @@ await MCP_MANAGER.connectOne(entry.id);
 
 ---
 
+### 🐳 Run via Docker (Self-Hosted)
+
+If you want to run this app locally using Docker, you can build and run it yourself:
+
+1. Clone the repository:
+```
+   git clone https://github.com/traliran/traliran-ai-hub.git
+   cd traliran-ai-hub
+```
+2. Build the Docker image:
+```
+docker build -t traliran-ai-hub .
+```
+3. Run the container:
+```
+docker run -d -p 8080:80 traliran-ai-hub
+```
+Open http://localhost:8080 in your browser.
+
+   
 ## ⚖️ License & Open Source Terms
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**.
