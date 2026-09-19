@@ -1416,9 +1416,11 @@ function extractAssistantContent(response, providerName) {
 }
 
 function buildLanguageHint(sourceText = '') {
+    // Keep the prompt in English: ask the model to mirror the user language,
+    // including Russian when the user writes in Russian.
     const baseHint = 'Answer in the same language as the user\'s prompt and keep the response complete, without cutting off the answer mid-sentence.';
     if (/[А-Яа-яЁё]/.test(sourceText)) {
-        return `Ответь на русском языке. ${baseHint}`;
+        return `If the user prompt is in Russian, respond in Russian. ${baseHint}`;
     }
     return baseHint;
 }

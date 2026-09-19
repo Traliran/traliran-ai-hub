@@ -26,9 +26,11 @@ const SYNC_MANAGER = {
     hub_notes: { key: 'gem_notes' },
     hub_settings: { keys: ['gem_provider', 'gem_bot_name', 'gem_system_prompt', 'gem_temp', 'gem_topp', 'gem_tokens'], isSettings: true },
     rag_knowledge: { key: 'gem_rag_kb' },
+    rag_sessions: { key: 'gem_rag_sessions' },
     hub_personal: { key: 'gem_personal_info' },
     ide_vfs: { key: 'ide_vfs_files', isVFS: true },
     ide_commits: { key: 'ide_vfs_commits', isCommits: true },
+    ide_agent_chats: { key: 'ide_agent_sessions' },
   },
 
   init() {
