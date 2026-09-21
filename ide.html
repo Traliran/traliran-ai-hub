@@ -45,7 +45,7 @@
                 <button id="saveFileBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-2xl transition" title="Save File (Ctrl+S)">
                     Save
                 </button>
-                <button id="togglePreviewBtn" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded-2xl transition" title="Toggle Live Preview">
+                <button id="togglePreviewBtn" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded-2xl transition" title="Open Preview in New Tab">
                     Preview
                 </button>
                 <button id="openBotStoreBtn" class="hidden sm:block bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 text-xs px-3 py-1.5 rounded-2xl transition" title="Assistant Store">
@@ -125,11 +125,14 @@
                 <div id="monacoContainer" class="absolute inset-0"></div>
             </div>
 
-            <!-- Live Preview Panel (collapsible) -->
+            <!-- Live Preview Panel (collapsible, kept for inline view) -->
             <div id="previewPanel" class="hidden h-64 border-t border-gray-800 bg-gray-950">
                 <div class="flex justify-between items-center px-3 py-1.5 bg-gray-900 border-b border-gray-800">
                     <span class="text-xs font-bold text-gray-400">Live Preview</span>
-                    <button id="closePreviewBtn" class="text-gray-400 hover:text-white text-xs">✕ Close</button>
+                    <div class="flex items-center gap-2">
+                        <button id="openPreviewTabBtn" class="text-violet-300 hover:text-white text-xs">Open in New Tab</button>
+                        <button id="closePreviewBtn" class="text-gray-400 hover:text-white text-xs">✕ Close</button>
+                    </div>
                 </div>
                 <iframe id="previewFrame" class="w-full h-[calc(100%-32px)] border-0 bg-white"></iframe>
             </div>

@@ -53,7 +53,7 @@ let filesPanel, versionControlPanel;
 let fileTreeContainer, openFilesTabs;
 let commitMessageInput, createCommitBtn, commitHistoryList;
 let exportZipBtn, importZipBtn, zipFileInput;
-let newFileBtn, saveFileBtn, togglePreviewBtn, previewPanel, previewFrame, closePreviewBtn;
+let newFileBtn, saveFileBtn, togglePreviewBtn, previewPanel, previewFrame, closePreviewBtn, openPreviewTabBtn;
 let monacoContainer;
 
 // Bot Store DOM Elements
@@ -2018,46 +2018,85 @@ async function handleLogout() {
 
 const PREVIEW = {
     isVisible: false,
-    
+    previewTab: null,
+
     toggle() {
         this.isVisible = !this.isVisible;
         previewPanel.classList.toggle('hidden', !this.isVisible);
-        
+
         if (this.isVisible) {
             this.render();
         }
     },
-    
-    render() {
-        if (!previewFrame) return;
-        
+
+    // Build standalone HTML from workspace files (shared by inline and new-tab preview).
+    buildHtml() {
         // Find HTML file to preview
         let htmlContent = '';
-        let cssContent = '';
-        let jsContent = '';
-        
+
         // Look for index.html or main HTML file
         const htmlFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.html'));
         const mainHtml = htmlFiles.find(p => p.includes('index')) || htmlFiles[0];
-        
-        if (mainHtml) {
-            htmlContent = vfsFiles[mainHtml].content;
+
+        if (!mainHtml) {
+            return null;
         }
-        
+
+        htmlContent = vfsFiles[mainHtml].content;
+
         // Inject CSS
         const cssFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.css'));
         if (cssFiles.length > 0) {
             const styleTag = '<style>\n' + cssFiles.map(f => vfsFiles[f].content).join('\n') + '\n</style>';
             htmlContent = htmlContent.replace('</head>', styleTag + '</head>');
         }
-        
+
         // Inject JS
         const jsFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.js'));
         if (jsFiles.length > 0) {
             const scriptTag = '<script>\n' + jsFiles.map(f => vfsFiles[f].content).join('\n') + '\n<\/script>';
             htmlContent = htmlContent.replace('</body>', scriptTag + '</body>');
         }
-        
+
+        return htmlContent;
+    },
+
+    // Open preview in a separate browser tab.
+    openInNewTab() {
+        const htmlContent = this.buildHtml();
+        if (!htmlContent) {
+            notifyWarning('No HTML file to preview.');
+            return;
+        }
+
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+
+        // Reuse the preview tab when possible, otherwise open a new one.
+        if (this.previewTab && !this.previewTab.closed) {
+            this.previewTab.location.href = url;
+            this.previewTab.focus();
+        } else {
+            this.previewTab = window.open(url, '_blank');
+        }
+
+        if (!this.previewTab) {
+            notifyWarning('Popup blocked. Please allow popups to open preview.');
+            return;
+        }
+
+        // Release the blob URL after the new tab has loaded it.
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    },
+
+    render() {
+        if (!previewFrame) return;
+
+        const htmlContent = this.buildHtml();
+        if (!htmlContent) {
+            return;
+        }
+
         // Render in iframe
         const blob = new Blob([htmlContent], { type: 'text/html' });
         previewFrame.src = URL.createObjectURL(blob);
@@ -2250,6 +2289,7 @@ async function init() {
     previewPanel = document.getElementById('previewPanel');
     previewFrame = document.getElementById('previewFrame');
     closePreviewBtn = document.getElementById('closePreviewBtn');
+    openPreviewTabBtn = document.getElementById('openPreviewTabBtn');
     monacoContainer = document.getElementById('monacoContainer');
     
     // Bot Store elements
@@ -2392,8 +2432,9 @@ async function init() {
         }
     });
     
-    // Preview
-    togglePreviewBtn.onclick = () => PREVIEW.toggle();
+    // Preview (opens in a separate browser tab; inline panel kept as fallback)
+    togglePreviewBtn.onclick = () => PREVIEW.openInNewTab();
+    if (openPreviewTabBtn) openPreviewTabBtn.onclick = () => PREVIEW.openInNewTab();
     closePreviewBtn.onclick = () => PREVIEW.toggle();
     
     // Version control
