@@ -54,6 +54,7 @@ let fileTreeContainer, openFilesTabs;
 let commitMessageInput, createCommitBtn, commitHistoryList;
 let exportZipBtn, importZipBtn, zipFileInput;
 let newFileBtn, saveFileBtn, togglePreviewBtn, previewPanel, previewFrame, closePreviewBtn, openPreviewTabBtn;
+let agenticModeBtn;
 let monacoContainer;
 
 // Bot Store DOM Elements
@@ -2262,6 +2263,47 @@ function closeAgentDrawer() {
     if (overlay) overlay.classList.add('hidden');
 }
 
+// ==================== AGENTIC-ONLY VIEW ====================
+
+// Chat-only mode: hides files, versions and editor, keeps the agent panel.
+const AGENTIC_VIEW = {
+    isActive: false,
+
+    toggle() {
+        if (this.isActive) {
+            this.exit();
+        } else {
+            this.enter();
+        }
+    },
+
+    enter() {
+        this.isActive = true;
+        document.body.classList.add('agentic-only');
+        closeFilesDrawer();
+        closeAgentDrawer();
+        // Always show the agent chat (not settings) in this mode.
+        switchRightTab('agent');
+        this.updateButton();
+    },
+
+    exit() {
+        this.isActive = false;
+        document.body.classList.remove('agentic-only');
+        this.updateButton();
+        // Restore editor layout after it becomes visible again.
+        if (monacoEditor && typeof monacoEditor.layout === 'function') {
+            setTimeout(() => monacoEditor.layout(), 50);
+        }
+    },
+
+    updateButton() {
+        if (!agenticModeBtn) return;
+        agenticModeBtn.textContent = this.isActive ? 'Back to IDE' : 'Agentic Only';
+        agenticModeBtn.title = this.isActive ? 'Back to full IDE' : 'Show agent chat only';
+    }
+};
+
 // ==================== INITIALIZATION ====================
 
 async function init() {
@@ -2290,6 +2332,7 @@ async function init() {
     previewFrame = document.getElementById('previewFrame');
     closePreviewBtn = document.getElementById('closePreviewBtn');
     openPreviewTabBtn = document.getElementById('openPreviewTabBtn');
+    agenticModeBtn = document.getElementById('agenticModeBtn');
     monacoContainer = document.getElementById('monacoContainer');
     
     // Bot Store elements
@@ -2436,6 +2479,9 @@ async function init() {
     togglePreviewBtn.onclick = () => PREVIEW.openInNewTab();
     if (openPreviewTabBtn) openPreviewTabBtn.onclick = () => PREVIEW.openInNewTab();
     closePreviewBtn.onclick = () => PREVIEW.toggle();
+
+    // Agentic-only view (chat without editor)
+    if (agenticModeBtn) agenticModeBtn.onclick = () => AGENTIC_VIEW.toggle();
     
     // Version control
     createCommitBtn.onclick = async () => {

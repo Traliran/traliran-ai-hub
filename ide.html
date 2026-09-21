@@ -20,6 +20,28 @@
         .chat-scroll::-webkit-scrollbar-track { background: #111827; }
         .chat-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
         .chat-scroll::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+        /* Agentic-only mode: show only the agent chat, hide editor and files. */
+        body.agentic-only #filesSidebar,
+        body.agentic-only #editorSection,
+        body.agentic-only #filesOverlay,
+        body.agentic-only #agentOverlay,
+        body.agentic-only #newFileBtn,
+        body.agentic-only #saveFileBtn,
+        body.agentic-only #togglePreviewBtn,
+        body.agentic-only #toggleFilesBtn {
+            display: none !important;
+        }
+        body.agentic-only #ideMain {
+            justify-content: center;
+        }
+        body.agentic-only #agentSidebar {
+            position: static !important;
+            transform: none !important;
+            width: 100% !important;
+            max-width: 48rem !important;
+            margin: 0 auto !important;
+            border-left: none !important;
+        }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
@@ -39,6 +61,9 @@
             </div>
             
             <div class="flex items-center gap-2 flex-wrap justify-end">
+                <button id="agenticModeBtn" class="bg-violet-600 hover:bg-violet-700 text-white text-xs px-3 py-1.5 rounded-2xl transition" title="Show agent chat only">
+                    Agentic Only
+                </button>
                 <button id="newFileBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-2xl transition" title="New File">
                     New File
                 </button>
@@ -62,7 +87,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 max-w-[1920px] w-full mx-auto flex relative overflow-hidden">
+    <main id="ideMain" class="flex-1 max-w-[1920px] w-full mx-auto flex relative overflow-hidden">
         <div id="filesOverlay" class="hidden absolute inset-0 bg-black/60 z-30 md:hidden"></div>
         <div id="agentOverlay" class="hidden absolute inset-0 bg-black/60 z-30 lg:hidden"></div>
         <!-- Left Sidebar - Files & Version Control (drawer on phones, static column on desktop) -->
@@ -114,7 +139,7 @@
         </aside>
 
         <!-- Monaco Editor Container -->
-        <section class="flex-1 flex flex-col min-w-0 min-h-0">
+        <section id="editorSection" class="flex-1 flex flex-col min-w-0 min-h-0">
             <!-- Open Files Tabs -->
             <div id="openFilesTabs" class="flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
                 <!-- Tabs populated by JS -->
