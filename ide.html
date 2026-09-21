@@ -20,6 +20,20 @@
         .chat-scroll::-webkit-scrollbar-track { background: #111827; }
         .chat-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
         .chat-scroll::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+        /* Smooth width change when the agent panel stretches to full screen. */
+        #agentSidebar {
+            transition: max-width 0.35s ease, transform 0.3s ease, opacity 0.25s ease;
+        }
+        /* Entrance animation for agentic-only mode. */
+        @keyframes agenticEnter {
+            from { opacity: 0; transform: translateY(14px) scale(0.99); }
+            to { opacity: 1; transform: none; }
+        }
+        /* Gentle rise for the centered welcome block and input. */
+        @keyframes agenticFadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: none; }
+        }
         /* Agentic-only mode: show only the agent chat, hide editor and files. */
         body.agentic-only #filesSidebar,
         body.agentic-only #editorSection,
@@ -34,13 +48,54 @@
         body.agentic-only #ideMain {
             justify-content: center;
         }
+        /* Full-screen container, inner content stays in a centered column. */
         body.agentic-only #agentSidebar {
             position: static !important;
             transform: none !important;
             width: 100% !important;
-            max-width: 48rem !important;
-            margin: 0 auto !important;
+            max-width: none !important;
+            margin: 0 !important;
             border-left: none !important;
+            animation: agenticEnter 0.35s ease;
+        }
+        body.agentic-only #agentTabsHeader,
+        body.agentic-only #panelAgent,
+        body.agentic-only #panelSettings {
+            width: 100% !important;
+            max-width: 48rem !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }
+        body.agentic-only #panelSettings {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        /* Centered empty state: welcome block and input in the middle. */
+        body.agentic-only #panelAgent.is-empty {
+            justify-content: center;
+        }
+        body.agentic-only #panelAgent.is-empty #agentChatsHeader {
+            display: none;
+        }
+        body.agentic-only #panelAgent.is-empty #agentChatWindow {
+            flex: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-height: 44vh;
+            animation: agenticFadeUp 0.35s ease;
+        }
+        body.agentic-only #panelAgent.is-empty #agentInputArea {
+            animation: agenticFadeUp 0.35s ease;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #agentSidebar,
+            body.agentic-only #agentSidebar,
+            body.agentic-only #panelAgent.is-empty #agentChatWindow,
+            body.agentic-only #panelAgent.is-empty #agentInputArea {
+                animation: none;
+                transition: none;
+            }
         }
     </style>
 </head>
@@ -166,7 +221,7 @@
         <!-- Right Sidebar - AI Agent & Settings (drawer on phones/tablets, static column on desktop) -->
         <aside id="agentSidebar" class="absolute inset-y-0 right-0 w-[92vw] max-w-[400px] lg:w-96 bg-gray-900 border-l border-gray-800 flex flex-col overflow-hidden z-40 transition-transform duration-300 translate-x-full lg:translate-x-0 lg:static">
             <!-- Tabs Header -->
-            <div class="flex border-b border-gray-800">
+            <div id="agentTabsHeader" class="flex border-b border-gray-800">
                 <button onclick="switchRightTab('agent')" id="tabBtnAgent" class="flex-1 px-3 py-2 text-xs font-medium text-violet-400 border-b-2 border-violet-400 bg-gray-800/50">
                     Agent
                 </button>
@@ -178,7 +233,7 @@
             <!-- AI Agent Panel -->
             <div id="panelAgent" class="flex-1 flex flex-col overflow-hidden">
                 <!-- Agent Chats -->
-                <div class="px-3 pt-3 pb-2 border-b border-gray-800">
+                <div id="agentChatsHeader" class="px-3 pt-3 pb-2 border-b border-gray-800">
                     <div class="flex items-center justify-between gap-2 mb-2">
                         <h3 class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Agent Chats</h3>
                         <button id="newAgentChatBtn" class="bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-semibold py-1 px-2.5 rounded-lg transition cursor-pointer">
@@ -204,7 +259,7 @@
                 </div>
 
                 <!-- Input Area -->
-                <div class="p-3 border-t border-gray-800 bg-gray-900">
+                <div id="agentInputArea" class="p-3 border-t border-gray-800 bg-gray-900">
                     <div id="agentFileIndicator" class="hidden items-center justify-between gap-2 bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs mb-2">
                         <div class="flex items-center gap-2 text-violet-300 truncate min-w-0">
                             <img id="agentFilePreview" class="hidden w-10 h-10 rounded-lg object-cover border border-gray-700 shrink-0" alt="Attachment preview">

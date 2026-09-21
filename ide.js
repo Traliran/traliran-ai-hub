@@ -917,12 +917,23 @@ function loadActiveAgentSession() {
                     <li>• Explain code structure</li>
                 </ul>
             </div>`;
+        updateAgenticEmptyState();
         return;
     }
     session.messages.forEach(msg => {
         AI_AGENT.addMessageToChat(msg.role, msg.content);
     });
     agentChatWindow.scrollTop = agentChatWindow.scrollHeight;
+    updateAgenticEmptyState();
+}
+
+// Center welcome and input while the active chat has no messages.
+function updateAgenticEmptyState() {
+    const panel = document.getElementById('panelAgent');
+    if (!panel) return;
+    const session = getActiveAgentSession();
+    const isEmpty = !session || session.messages.length === 0;
+    panel.classList.toggle('is-empty', isEmpty);
 }
 
 // ==================== AI AGENT WITH TOOL CALLING ====================
@@ -1050,6 +1061,7 @@ const AI_AGENT = {
         
         this.addMessageToChat('user', userContent);
         session.messages.push({ role: 'user', content: userContent });
+        updateAgenticEmptyState();
         // Auto-rename untitled chats from the first user message.
         if (session.name.startsWith('Chat #') && text) {
             session.name = text.slice(0, 28) + (text.length > 28 ? '...' : '');
@@ -2284,6 +2296,7 @@ const AGENTIC_VIEW = {
         closeAgentDrawer();
         // Always show the agent chat (not settings) in this mode.
         switchRightTab('agent');
+        updateAgenticEmptyState();
         this.updateButton();
     },
 
