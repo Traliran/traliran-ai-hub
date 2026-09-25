@@ -8,7 +8,15 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Local vendor copy first (works offline); CDN fallback if missing. -->
+    <script src="jszip.min.js"></script>
+    <script>
+        if (typeof JSZip === 'undefined') {
+            var jszipFallback = document.createElement('script');
+            jszipFallback.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+            document.head.appendChild(jszipFallback);
+        }
+    </script>
     <link rel="stylesheet" href="styles.css">
     <style>
         #monacoContainer { height: 100%; width: 100%; }
@@ -159,6 +167,12 @@
 
             <!-- Files Panel -->
             <div id="filesPanel" class="flex-1 overflow-y-auto chat-scroll p-2">
+                <div class="flex items-center gap-1.5 mb-2">
+                    <label class="text-xs font-bold text-gray-400 uppercase shrink-0" for="repoSelect">Repo</label>
+                    <select id="repoSelect" class="flex-1 min-w-0 bg-gray-800 text-gray-200 text-xs rounded border border-gray-700 px-1.5 py-1 focus:border-violet-500 outline-none" title="Active repository"></select>
+                    <button id="newRepoBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-lg transition shrink-0" title="Create new repository">+</button>
+                    <button id="deleteRepoBtn" class="bg-gray-800 hover:bg-rose-700 text-gray-200 text-xs px-2 py-1 rounded-lg transition shrink-0" title="Delete active repository">Delete</button>
+                </div>
                 <div class="flex justify-between items-center mb-2">
                     <h3 class="text-xs font-bold text-gray-400 uppercase">Workspace</h3>
                     <button id="addFolderBtn" class="text-gray-400 hover:text-emerald-400 text-xs" title="Add Folder">New folder</button>
@@ -170,6 +184,11 @@
 
             <!-- Version Control Panel (hidden by default) -->
             <div id="versionControlPanel" class="hidden flex-1 overflow-y-auto chat-scroll p-2">
+                <div class="flex items-center gap-1.5 mb-2">
+                    <label class="text-xs font-bold text-gray-400 uppercase shrink-0" for="branchSelect">Branch</label>
+                    <select id="branchSelect" class="flex-1 min-w-0 bg-gray-800 text-gray-200 text-xs rounded border border-gray-700 px-1.5 py-1 focus:border-violet-500 outline-none" title="Active branch"></select>
+                    <button id="newBranchBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-lg transition shrink-0" title="Create new branch">+</button>
+                </div>
                 <div class="mb-3">
                     <input type="text" id="commitMessageInput" placeholder="Commit message..." 
                         class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs focus:border-violet-500 focus:outline-none">
@@ -471,6 +490,8 @@
 
     <!-- Scripts -->
     <script src="db-connector.js"></script>
+    <script src="git-engine.js"></script>
+    <script src="repo-store.js"></script>
     <script src="sync-manager.js"></script>
     <script src="ui-dialogs.js"></script>
     <script src="ide.js"></script>

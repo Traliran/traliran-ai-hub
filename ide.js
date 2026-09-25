@@ -297,15 +297,24 @@ const VFS = {
 
     async loadFromStorage() {
         try {
-            const stored = STORAGE.getItem('ide_vfs_files');
-            if (stored) {
-                vfsFiles = JSON.parse(stored);
-            }
-            
-            // Load commits
-            const commitsStored = STORAGE.getItem('ide_vfs_commits');
-            if (commitsStored) {
-                commitHistory = JSON.parse(commitsStored);
+            // Multi-repo: resolve active repo first (migrates legacy workspace).
+            if (typeof REPO_STORE !== 'undefined') REPO_STORE.init();
+            const useRepos = typeof REPO_STORE !== 'undefined';
+
+            if (useRepos) {
+                vfsFiles = REPO_STORE.loadFiles();
+                commitHistory = REPO_STORE.loadCommits();
+            } else {
+                const stored = STORAGE.getItem('ide_vfs_files');
+                if (stored) {
+                    vfsFiles = JSON.parse(stored);
+                }
+
+                // Load commits
+                const commitsStored = STORAGE.getItem('ide_vfs_commits');
+                if (commitsStored) {
+                    commitHistory = JSON.parse(commitsStored);
+                }
             }
             
             // If empty, create default files
@@ -323,7 +332,12 @@ const VFS = {
 
     async saveToStorage() {
         try {
-            STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
+            // Persist to active repo (+ legacy mirror for cloud sync compat).
+            if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+                REPO_STORE.saveFiles(vfsFiles);
+            } else {
+                STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
+            }
             window.dispatchEvent(new CustomEvent('vfs:saved'));
         } catch (e) {
             console.error('[VFS] Save error:', e);
@@ -374,6 +388,7 @@ const VFS = {
     getFileTree() {
         const tree = {};
         for (const path of Object.keys(vfsFiles)) {
+            if (path.startsWith('.git/')) continue; // Generated git data stays hidden.
             const parts = path.split('/');
             let current = tree;
             for (let i = 0; i < parts.length; i++) {
@@ -394,6 +409,7 @@ const VFS = {
     listFiles(dir = '') {
         const files = [];
         for (const path of Object.keys(vfsFiles)) {
+            if (path.startsWith('.git/')) continue; // Keep git internals out of agent tools.
             if (dir === '' || path.startsWith(dir + '/') || path.startsWith(dir)) {
                 files.push(path);
             }
@@ -462,19 +478,53 @@ const VFS = {
     }
 };
 
+// Load an external script once (used for CDN fallbacks).
+function loadScriptOnce(src) {
+    return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+            resolve();
+            return;
+        }
+        const el = document.createElement('script');
+        el.src = src;
+        el.onload = () => resolve();
+        el.onerror = () => reject(new Error('Failed to load ' + src));
+        document.head.appendChild(el);
+    });
+}
+
+// Ensure JSZip is available. The primary CDN can be blocked offline,
+// so retry once with a fallback CDN before giving up.
+async function ensureZipLib() {
+    if (typeof JSZip !== 'undefined') return true;
+    try {
+        await loadScriptOnce('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+    } catch (e) {
+        console.error('[VERSION] ZIP fallback load error:', e);
+    }
+    return typeof JSZip !== 'undefined';
+}
+
 // ==================== VERSION CONTROL ====================
 
 const VERSION_CONTROL = {
     async createCommit(message) {
+        const branch = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getBranch() : 'main';
         const commit = {
             id: 'commit_' + Date.now(),
             timestamp: Date.now(),
             message: message || 'Untitled commit',
+            branch,
             snapshot: JSON.parse(JSON.stringify(vfsFiles))
         };
         
         commitHistory.unshift(commit);
-        STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+        // Persist to active repo (+ legacy mirror for cloud sync compat).
+        if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+            REPO_STORE.saveCommits(commitHistory);
+        } else {
+            STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+        }
         
         // Also save to IndexedDB for persistence
         if (typeof projectDB !== 'undefined' && projectDB.saveCommit) {
@@ -486,6 +536,18 @@ const VERSION_CONTROL = {
         }
         
         console.log('[VERSION] Created commit:', commit.id);
+        // Link a real git SHA for this commit (non-blocking for snapshot logic).
+        try {
+            if (typeof REPO_STORE !== 'undefined' && typeof GIT_ENGINE !== 'undefined') {
+                const { shaByCommitId } = await GIT_ENGINE.buildGitFiles(
+                    commitHistory, REPO_STORE.meta.branches, REPO_STORE.getBranch()
+                );
+                const sha = shaByCommitId[commit.id] || null;
+                if (sha) REPO_STORE.linkCommitSha(commit.id, sha, null, branch);
+            }
+        } catch (e) {
+            console.error('[VERSION] Git SHA link error:', e);
+        }
         this.renderCommitHistory();
         return commit;
     },
@@ -507,13 +569,24 @@ const VERSION_CONTROL = {
     },
 
     async loadCommitsFromStorage() {
+        // Multi-repo: commits already loaded from active repo in VFS.init.
+        if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+            if (commitHistory.length > 0) {
+                console.log('[VERSION] Kept', commitHistory.length, 'commits from active repo');
+                return;
+            }
+        }
         // Try IndexedDB first
         if (typeof projectDB !== 'undefined' && projectDB.getAllCommits) {
             try {
                 const commits = await projectDB.getAllCommits();
                 if (commits && commits.length > 0) {
                     commitHistory = commits;
-                    STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+                    if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+                        REPO_STORE.saveCommits(commitHistory);
+                    } else {
+                        STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+                    }
                     console.log('[VERSION] Loaded', commits.length, 'commits from IndexedDB');
                     return;
                 }
@@ -548,10 +621,16 @@ const VERSION_CONTROL = {
             const date = new Date(commit.timestamp);
             const div = document.createElement('div');
             div.className = 'bg-gray-800 border border-gray-700 rounded p-2 cursor-pointer hover:border-violet-500 transition';
+            // Show real git short SHA when linked, plus branch name.
+            const sha = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getCommitSha(commit.id) : null;
+            const branch = commit.branch || 'main';
+            const metaLine = sha
+                ? `${sha.slice(0, 7)} · ${branch} · ${Object.keys(commit.snapshot).length} files`
+                : `${branch} · ${Object.keys(commit.snapshot).length} files`;
             div.innerHTML = `
                 <div class="text-xs font-mono text-violet-400 truncate">${escapeHtml(commit.message)}</div>
                 <div class="text-[10px] text-gray-500 mt-1">${date.toLocaleString()}</div>
-                <div class="text-[10px] text-gray-600 mt-1">${Object.keys(commit.snapshot).length} files</div>
+                <div class="text-[10px] text-gray-600 mt-1 font-mono">${escapeHtml(metaLine)}</div>
             `;
             div.onclick = async () => {
                 const confirmed = await showAppConfirm(`Revert to this commit? This will replace current workspace.`, {
@@ -568,30 +647,49 @@ const VERSION_CONTROL = {
     },
 
     async exportAsZip() {
-        if (typeof JSZip === 'undefined') {
-            notifyError('ZIP library not loaded. Please check your internet connection.');
+        if (!(await ensureZipLib())) {
+            notifyError('ZIP library not loaded. Check your internet connection and reload.');
             return;
         }
-        
+
         const zip = new JSZip();
-        
+
+        // Working tree files at ZIP root.
         for (const [path, file] of Object.entries(vfsFiles)) {
+            if (path.startsWith('.git/')) continue; // Safety: .git is generated below.
             zip.file(path, file.content);
         }
-        
+
+        // Real git repository data under .git/ (valid for `git log`, `git status`).
+        try {
+            if (typeof GIT_ENGINE !== 'undefined' && typeof REPO_STORE !== 'undefined') {
+                const { gitFiles } = await GIT_ENGINE.buildGitFiles(
+                    commitHistory, REPO_STORE.meta.branches, REPO_STORE.getBranch()
+                );
+                for (const entry of gitFiles) {
+                    zip.file(entry.path, entry.data);
+                }
+            }
+        } catch (e) {
+            console.error('[VERSION] Git export error (working tree still exported):', e);
+        }
+
         try {
             const blob = await zip.generateAsync({ type: 'blob' });
             const url = URL.createObjectURL(blob);
-            
+
+            const repoName = (typeof REPO_STORE !== 'undefined')
+                ? REPO_STORE.getActive().name.replace(/[^\w\-.]+/g, '-')
+                : 'workspace';
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'workspace-export-' + Date.now() + '.zip';
+            a.download = `${repoName}-git-export-` + Date.now() + '.zip';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            
+
             URL.revokeObjectURL(url);
-            console.log('[VERSION] Exported as ZIP');
+            console.log('[VERSION] Exported as real git ZIP');
         } catch (e) {
             console.error('[VERSION] Export error:', e);
             notifyError('Failed to export ZIP: ' + e.message);
@@ -599,24 +697,58 @@ const VERSION_CONTROL = {
     },
 
     async importFromZip(file) {
+        if (!(await ensureZipLib())) {
+            notifyError('ZIP library not loaded. Check your internet connection and reload.');
+            return;
+        }
         try {
             const zip = new JSZip();
             const contents = await zip.loadAsync(file);
-            
-            const promises = [];
+
+            // Collect entries first to detect a real git repo payload.
+            const names = Object.keys(contents.files);
+            const hasGit = names.some((n) => n === '.git/traliran-meta.json' || n.startsWith('.git/objects/'));
+
+            const textEntries = [];
+            const readJobs = [];
             contents.forEach((relativePath, zipEntry) => {
-                if (!zipEntry.dir) {
-                    promises.push(
-                        zipEntry.async('string').then(content => {
-                            VFS.writeFile(relativePath, content);
+                if (!zipEntry.dir && !relativePath.startsWith('.git/')) {
+                    readJobs.push(
+                        zipEntry.async('string').then((content) => {
+                            textEntries.push({ path: relativePath, data: content });
                         })
                     );
                 }
             });
-            
-            await Promise.all(promises);
+            await Promise.all(readJobs);
+
+            // If the ZIP carries git metadata, rebuild branch tips from it.
+            if (hasGit) {
+                try {
+                    const metaEntry = contents.file('.git/traliran-meta.json');
+                    if (metaEntry) {
+                        const metaText = await metaEntry.async('string');
+                        const meta = JSON.parse(metaText);
+                        if (meta && typeof REPO_STORE !== 'undefined') {
+                            // Restore branch refs; snapshot history stays file-based.
+                            if (meta.currentBranch) {
+                                try { REPO_STORE.createBranch(meta.currentBranch); }
+                                catch { REPO_STORE.switchBranch(meta.currentBranch); }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('[VERSION] Git meta import skipped:', e);
+                }
+            }
+
+            // Plain file import path (unchanged behavior, .git/ skipped).
+            const writeJobs = textEntries.map((e) => VFS.writeFile(e.path, e.data));
+            await Promise.all(writeJobs);
+            renderFileTree();
+            if (typeof renderRepoSelects === 'function') renderRepoSelects();
             console.log('[VERSION] Imported from ZIP');
-            notifySuccess('Project imported successfully!');
+            notifySuccess(hasGit ? 'Git repository imported successfully!' : 'Project imported successfully!');
         } catch (e) {
             console.error('[VERSION] Import error:', e);
             notifyError('Failed to import ZIP: ' + e.message);
@@ -2189,6 +2321,88 @@ function renderFileTree() {
     renderNode(tree);
 }
 
+// ==================== MULTI-REPO & BRANCH UI ====================
+
+// Refresh repo and branch dropdowns from REPO_STORE state.
+function renderRepoSelects() {
+    if (typeof REPO_STORE === 'undefined') return;
+    const repoSelect = document.getElementById('repoSelect');
+    if (repoSelect) {
+        repoSelect.innerHTML = '';
+        for (const repo of REPO_STORE.list()) {
+            const opt = document.createElement('option');
+            opt.value = repo.id;
+            opt.textContent = repo.name;
+            repoSelect.appendChild(opt);
+        }
+        repoSelect.value = REPO_STORE.activeId;
+    }
+    const branchSelect = document.getElementById('branchSelect');
+    if (branchSelect) {
+        branchSelect.innerHTML = '';
+        for (const name of REPO_STORE.listBranches()) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            branchSelect.appendChild(opt);
+        }
+        branchSelect.value = REPO_STORE.getBranch();
+    }
+}
+
+// Switch workspace to another repository (reset editor, tree, history).
+async function switchToRepo(repoId) {
+    if (typeof REPO_STORE === 'undefined') return;
+    REPO_STORE.switch(repoId);
+    vfsFiles = REPO_STORE.loadFiles();
+    commitHistory = REPO_STORE.loadCommits();
+    // Persist mirror for legacy readers and cloud sync.
+    STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
+    STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+    // Reset editor state.
+    openFiles = [];
+    activeFilePath = null;
+    monacoModels = {};
+    if (monacoEditor) monacoEditor.setModel(null);
+    const firstFile = Object.keys(vfsFiles)[0];
+    if (firstFile && monacoEditor) {
+        try { await MONACO.openFile(firstFile); } catch (e) { console.error('[REPO] Open error:', e); }
+    }
+    renderFileTree();
+    MONACO.renderTabs();
+    VERSION_CONTROL.renderCommitHistory();
+    renderRepoSelects();
+    window.dispatchEvent(new CustomEvent('repo:switched', { detail: { repoId } }));
+    console.log('[REPO] Switched to:', repoId);
+}
+
+// Switch to another branch tip (restore its latest snapshot, keep files if empty).
+async function switchToBranch(branchName) {
+    if (typeof REPO_STORE === 'undefined') return;
+    REPO_STORE.switchBranch(branchName);
+    const tipId = REPO_STORE.findTipCommitId(commitHistory, branchName);
+    if (tipId) {
+        const tip = commitHistory.find((c) => c.id === tipId);
+        if (tip) {
+            vfsFiles = JSON.parse(JSON.stringify(tip.snapshot));
+            await VFS.saveToStorage();
+            openFiles = [];
+            activeFilePath = null;
+            monacoModels = {};
+            if (monacoEditor) monacoEditor.setModel(null);
+            const firstFile = Object.keys(vfsFiles)[0];
+            if (firstFile && monacoEditor) {
+                try { await MONACO.openFile(firstFile); } catch (e) { console.error('[BRANCH] Open error:', e); }
+            }
+            renderFileTree();
+            MONACO.renderTabs();
+        }
+    }
+    VERSION_CONTROL.renderCommitHistory();
+    renderRepoSelects();
+    console.log('[BRANCH] Switched to:', branchName);
+}
+
 async function deleteFileOrFolder(path) {
     const file = vfsFiles[path];
     if (file) {
@@ -2432,6 +2646,61 @@ async function init() {
     // Render UI
     renderFileTree();
     VERSION_CONTROL.renderCommitHistory();
+    renderRepoSelects();
+
+    // Multi-repo and branch controls (additive, existing handlers untouched).
+    const repoSelect = document.getElementById('repoSelect');
+    if (repoSelect) repoSelect.onchange = (e) => switchToRepo(e.target.value);
+    const newRepoBtn = document.getElementById('newRepoBtn');
+    if (newRepoBtn) newRepoBtn.onclick = async () => {
+        const name = await showAppPrompt('Enter repository name:', '', {
+            title: 'New repository',
+            placeholder: 'my-project',
+            confirmText: 'Create',
+            required: true
+        });
+        if (!name) return;
+        const repo = REPO_STORE.create(name);
+        await switchToRepo(repo.id);
+        notifySuccess(`Repository "${repo.name}" created!`);
+    };
+    const branchSelect = document.getElementById('branchSelect');
+    if (branchSelect) branchSelect.onchange = (e) => switchToBranch(e.target.value);
+    const newBranchBtn = document.getElementById('newBranchBtn');
+    if (newBranchBtn) newBranchBtn.onclick = async () => {
+        const name = await showAppPrompt('Enter branch name:', '', {
+            title: 'New branch',
+            placeholder: 'feature-x',
+            confirmText: 'Create',
+            required: true
+        });
+        if (!name) return;
+        try {
+            const clean = REPO_STORE.createBranch(name);
+            await switchToBranch(clean);
+            notifySuccess(`Branch "${clean}" created!`);
+        } catch (e) {
+            notifyError('Failed to create branch: ' + e.message);
+        }
+    };
+    // Repository deletion (last repository is protected in REPO_STORE).
+    const deleteRepoBtn = document.getElementById('deleteRepoBtn');
+    if (deleteRepoBtn) deleteRepoBtn.onclick = async () => {
+        const active = REPO_STORE.getActive();
+        const confirmed = await showAppConfirm(`Delete repository "${active.name}" with all its files and history? This cannot be undone.`, {
+            title: 'Delete repository',
+            confirmText: 'Delete',
+            danger: true
+        });
+        if (!confirmed) return;
+        try {
+            REPO_STORE.remove(active.id);
+            await switchToRepo(REPO_STORE.activeId);
+            notifySuccess('Repository deleted.');
+        } catch (e) {
+            notifyError('Failed to delete repository: ' + e.message);
+        }
+    };
     
     // Setup event listeners
     
@@ -2457,9 +2726,9 @@ async function init() {
     
     // File operations
     newFileBtn.onclick = async () => {
-        const name = await showAppPrompt('Enter file name (e.g., script.js):', '', {
+        const name = await showAppPrompt('Enter file name (e.g., folder/script.js):', '', {
             title: 'New file',
-            placeholder: 'script.js',
+            placeholder: 'folder/script.js',
             confirmText: 'Create',
             required: true
         });
@@ -2468,6 +2737,22 @@ async function init() {
             MONACO.openFile(name);
             renderFileTree();
         }
+    };
+
+    // Folder creation (VFS is file-based, so a placeholder keeps the folder visible).
+    const addFolderBtn = document.getElementById('addFolderBtn');
+    if (addFolderBtn) addFolderBtn.onclick = async () => {
+        const name = await showAppPrompt('Enter folder name (e.g., src):', '', {
+            title: 'New folder',
+            placeholder: 'src',
+            confirmText: 'Create',
+            required: true
+        });
+        if (!name) return;
+        const clean = name.trim().replace(/^\/+|\/+$/g, '');
+        if (!clean) return;
+        await VFS.writeFile(`${clean}/.keep`, '');
+        renderFileTree();
     };
     
     saveFileBtn.onclick = () => {
