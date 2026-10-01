@@ -8,15 +8,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-    <!-- Local vendor copy first (works offline); CDN fallback if missing. -->
-    <script src="jszip.min.js"></script>
-    <script>
-        if (typeof JSZip === 'undefined') {
-            var jszipFallback = document.createElement('script');
-            jszipFallback.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-            document.head.appendChild(jszipFallback);
-        }
-    </script>
     <link rel="stylesheet" href="styles.css">
     <style>
         #monacoContainer { height: 100%; width: 100%; }
@@ -494,6 +485,7 @@
     <script src="repo-store.js"></script>
     <script src="sync-manager.js"></script>
     <script src="ui-dialogs.js"></script>
+    <script src="zip-export.js"></script>
     <script src="ide.js"></script>
 </body>
 </html>

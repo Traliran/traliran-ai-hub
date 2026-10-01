@@ -535,33 +535,6 @@ const VFS = {
     }
 };
 
-// Load an external script once (used for CDN fallbacks).
-function loadScriptOnce(src) {
-    return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) {
-            resolve();
-            return;
-        }
-        const el = document.createElement('script');
-        el.src = src;
-        el.onload = () => resolve();
-        el.onerror = () => reject(new Error('Failed to load ' + src));
-        document.head.appendChild(el);
-    });
-}
-
-// Ensure JSZip is available. The primary CDN can be blocked offline,
-// so retry once with a fallback CDN before giving up.
-async function ensureZipLib() {
-    if (typeof JSZip !== 'undefined') return true;
-    try {
-        await loadScriptOnce('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
-    } catch (e) {
-        console.error('[VERSION] ZIP fallback load error:', e);
-    }
-    return typeof JSZip !== 'undefined';
-}
-
 // ==================== VERSION CONTROL ====================
 
 const VERSION_CONTROL = {
@@ -703,113 +676,22 @@ const VERSION_CONTROL = {
         }
     },
 
+    // ZIP export/import lives in zip-export.js (zero-dependency, offline-safe).
+    // These wrappers only delegate so the button wiring stays untouched.
     async exportAsZip() {
-        if (!(await ensureZipLib())) {
-            notifyError('ZIP library not loaded. Check your internet connection and reload.');
+        if (typeof ZIP_EXPORT === 'undefined' || !ZIP_EXPORT.exportActiveRepo) {
+            notifyError('ZIP export module not loaded. Please reload the page.');
             return;
         }
-
-        const zip = new JSZip();
-
-        // Working tree files at ZIP root.
-        for (const [path, file] of Object.entries(vfsFiles)) {
-            if (path.startsWith('.git/')) continue; // Safety: .git is generated below.
-            zip.file(path, file.content);
-        }
-
-        // Real git repository data under .git/ (valid for `git log`, `git status`).
-        try {
-            if (typeof GIT_ENGINE !== 'undefined' && typeof REPO_STORE !== 'undefined') {
-                const { gitFiles } = await GIT_ENGINE.buildGitFiles(
-                    commitHistory, REPO_STORE.meta.branches, REPO_STORE.getBranch()
-                );
-                for (const entry of gitFiles) {
-                    zip.file(entry.path, entry.data);
-                }
-            }
-        } catch (e) {
-            console.error('[VERSION] Git export error (working tree still exported):', e);
-        }
-
-        try {
-            const blob = await zip.generateAsync({ type: 'blob' });
-            const url = URL.createObjectURL(blob);
-
-            const repoName = (typeof REPO_STORE !== 'undefined')
-                ? REPO_STORE.getActive().name.replace(/[^\w\-.]+/g, '-')
-                : 'workspace';
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${repoName}-git-export-` + Date.now() + '.zip';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-
-            URL.revokeObjectURL(url);
-            console.log('[VERSION] Exported as real git ZIP');
-        } catch (e) {
-            console.error('[VERSION] Export error:', e);
-            notifyError('Failed to export ZIP: ' + e.message);
-        }
+        await ZIP_EXPORT.exportActiveRepo();
     },
 
     async importFromZip(file) {
-        if (!(await ensureZipLib())) {
-            notifyError('ZIP library not loaded. Check your internet connection and reload.');
+        if (typeof ZIP_EXPORT === 'undefined' || !ZIP_EXPORT.importRepoZip) {
+            notifyError('ZIP import module not loaded. Please reload the page.');
             return;
         }
-        try {
-            const zip = new JSZip();
-            const contents = await zip.loadAsync(file);
-
-            // Collect entries first to detect a real git repo payload.
-            const names = Object.keys(contents.files);
-            const hasGit = names.some((n) => n === '.git/traliran-meta.json' || n.startsWith('.git/objects/'));
-
-            const textEntries = [];
-            const readJobs = [];
-            contents.forEach((relativePath, zipEntry) => {
-                if (!zipEntry.dir && !relativePath.startsWith('.git/')) {
-                    readJobs.push(
-                        zipEntry.async('string').then((content) => {
-                            textEntries.push({ path: relativePath, data: content });
-                        })
-                    );
-                }
-            });
-            await Promise.all(readJobs);
-
-            // If the ZIP carries git metadata, rebuild branch tips from it.
-            if (hasGit) {
-                try {
-                    const metaEntry = contents.file('.git/traliran-meta.json');
-                    if (metaEntry) {
-                        const metaText = await metaEntry.async('string');
-                        const meta = JSON.parse(metaText);
-                        if (meta && typeof REPO_STORE !== 'undefined') {
-                            // Restore branch refs; snapshot history stays file-based.
-                            if (meta.currentBranch) {
-                                try { REPO_STORE.createBranch(meta.currentBranch); }
-                                catch { REPO_STORE.switchBranch(meta.currentBranch); }
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error('[VERSION] Git meta import skipped:', e);
-                }
-            }
-
-            // Plain file import path (unchanged behavior, .git/ skipped).
-            const writeJobs = textEntries.map((e) => VFS.writeFile(e.path, e.data));
-            await Promise.all(writeJobs);
-            renderFileTree();
-            if (typeof renderRepoSelects === 'function') renderRepoSelects();
-            console.log('[VERSION] Imported from ZIP');
-            notifySuccess(hasGit ? 'Git repository imported successfully!' : 'Project imported successfully!');
-        } catch (e) {
-            console.error('[VERSION] Import error:', e);
-            notifyError('Failed to import ZIP: ' + e.message);
-        }
+        await ZIP_EXPORT.importRepoZip(file);
     }
 };
 
