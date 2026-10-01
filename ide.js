@@ -285,6 +285,13 @@ function debounce(fn, delay) {
     };
 }
 
+// Normalize a VFS path: trim, drop leading slashes, collapse repeats.
+function normalizeVfsPath(path) {
+    const clean = String(path || '').trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!clean || clean === '.' || clean.includes('..')) return '';
+    return clean;
+}
+
 // ==================== VFS (VIRTUAL FILE SYSTEM) ====================
 
 const VFS = {
@@ -383,6 +390,56 @@ const VFS = {
         delete vfsFiles[path];
         await this.saveToStorage();
         window.dispatchEvent(new CustomEvent('vfs:file-deleted', { detail: { path } }));
+    },
+
+    // Rename a file or a folder (folder = prefix move of all nested files).
+    async renamePath(oldPath, newPath) {
+        const from = normalizeVfsPath(oldPath);
+        const to = normalizeVfsPath(newPath);
+        if (!from || !to) throw new Error('Invalid path');
+        if (from === to) return [];
+        if (to.startsWith('.git/')) throw new Error('Cannot write inside .git/');
+        if (vfsFiles[to]) throw new Error(`Target already exists: ${to}`);
+
+        // Single file rename.
+        if (vfsFiles[from]) {
+            vfsFiles[to] = { ...vfsFiles[from], language: getLanguageFromPath(to), lastModified: Date.now() };
+            delete vfsFiles[from];
+            this.moveEditorState(from, to);
+            await this.saveToStorage();
+            window.dispatchEvent(new CustomEvent('vfs:renamed', { detail: { from, to } }));
+            return [to];
+        }
+
+        // Folder rename: move every file under "from/".
+        const prefix = from + '/';
+        const nested = Object.keys(vfsFiles).filter((p) => p.startsWith(prefix));
+        if (nested.length === 0) throw new Error(`Path not found: ${from}`);
+        const targetPrefix = to + '/';
+        const clash = nested.find((p) => vfsFiles[targetPrefix + p.slice(prefix.length)]);
+        if (clash) throw new Error(`Target already exists: ${targetPrefix + clash.slice(prefix.length)}`);
+        const moved = [];
+        for (const p of nested) {
+            const dest = targetPrefix + p.slice(prefix.length);
+            vfsFiles[dest] = { ...vfsFiles[p], language: getLanguageFromPath(dest), lastModified: Date.now() };
+            delete vfsFiles[p];
+            this.moveEditorState(p, dest);
+            moved.push(dest);
+        }
+        await this.saveToStorage();
+        window.dispatchEvent(new CustomEvent('vfs:renamed', { detail: { from, to } }));
+        return moved;
+    },
+
+    // Keep open tabs and cached Monaco models in sync after a rename.
+    moveEditorState(from, to) {
+        const tabIdx = openFiles.indexOf(from);
+        if (tabIdx > -1) openFiles[tabIdx] = to;
+        if (activeFilePath === from) activeFilePath = to;
+        if (monacoModels[from]) {
+            monacoModels[to] = monacoModels[from];
+            delete monacoModels[from];
+        }
     },
 
     getFileTree() {
@@ -1153,6 +1210,29 @@ const AI_AGENT = {
                     const newContent = content.replace(regex, args.replace_content);
                     await VFS.writeFile(args.path, newContent);
                     return JSON.stringify({ success: true, message: 'File updated successfully' }, null, 2);
+                } catch (e) {
+                    return JSON.stringify({ success: false, error: e.message }, null, 2);
+                }
+            }
+        },
+        {
+            name: 'rename_path',
+            description: 'Renames or moves a file or folder to a new path',
+            parameters: {
+                type: 'object',
+                properties: {
+                    old_path: { type: 'string', description: 'Current file or folder path' },
+                    new_path: { type: 'string', description: 'New file or folder path' }
+                },
+                required: ['old_path', 'new_path'],
+                additionalProperties: false
+            },
+            execute: async (args) => {
+                try {
+                    const moved = await VFS.renamePath(args.old_path, args.new_path);
+                    renderFileTree();
+                    MONACO.renderTabs();
+                    return JSON.stringify({ success: true, message: `Renamed to ${args.new_path}`, moved }, null, 2);
                 } catch (e) {
                     return JSON.stringify({ success: false, error: e.message }, null, 2);
                 }
@@ -2268,6 +2348,17 @@ function renderFileTree() {
                 folderDiv.className = 'flex items-center gap-1 flex-1';
                 folderDiv.innerHTML = `<span>📁</span><span>${escapeHtml(name)}</span>`;
                 div.appendChild(folderDiv);
+
+                // Rename button for folders
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'text-gray-500 hover:text-violet-400 text-[10px] px-1';
+                renameBtn.innerHTML = '✏️';
+                renameBtn.title = 'Rename folder';
+                renameBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    renameFileOrFolder(itemPath);
+                };
+                div.appendChild(renameBtn);
                 
                 // Delete button for folders
                 const delBtn = document.createElement('button');
@@ -2302,6 +2393,17 @@ function renderFileTree() {
                 };
                 div.appendChild(fileDiv);
                 
+                // Rename button for files
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'text-gray-500 hover:text-violet-400 text-[10px] px-1';
+                renameBtn.innerHTML = '✏️';
+                renameBtn.title = 'Rename file';
+                renameBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    renameFileOrFolder(itemPath);
+                };
+                div.appendChild(renameBtn);
+
                 // Delete button for files
                 const delBtn = document.createElement('button');
                 delBtn.className = 'text-gray-500 hover:text-rose-400 text-[10px] px-1';
@@ -2401,6 +2503,25 @@ async function switchToBranch(branchName) {
     VERSION_CONTROL.renderCommitHistory();
     renderRepoSelects();
     console.log('[BRANCH] Switched to:', branchName);
+}
+
+async function renameFileOrFolder(path) {
+    const isFolder = !vfsFiles[path];
+    const newPath = await showAppPrompt(`Enter new ${isFolder ? 'folder' : 'file'} path:`, path, {
+        title: isFolder ? 'Rename folder' : 'Rename file',
+        placeholder: path,
+        confirmText: 'Rename',
+        required: true
+    });
+    if (!newPath) return;
+    try {
+        await VFS.renamePath(path, newPath);
+        renderFileTree();
+        MONACO.renderTabs();
+        notifySuccess(`Renamed to "${normalizeVfsPath(newPath)}".`);
+    } catch (e) {
+        notifyError('Failed to rename: ' + e.message);
+    }
 }
 
 async function deleteFileOrFolder(path) {
