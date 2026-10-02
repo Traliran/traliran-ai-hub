@@ -13,12 +13,6 @@ A lightweight, serverless, and privacy-first AI web client and sandbox running d
 > P.S. This was designed to make it easy to import or restore your session later.
 
 
-> When you export a custom bot configuration that you've created, **your API keys are also exported**.
-> 
-> So before sharing your configuration, **REMOVE YOUR API KEYS FROM THE .json FILE**
-> 
-> P.S. This was designed to make it easy to import or restore your session later.
-
 <img width="1866" height="1032" alt="image" src="https://github.com/user-attachments/assets/9a5bc0a3-eea5-4027-a76a-03c72e10bbc6" />
 
 <img width="1873" height="1030" alt="image" src="https://github.com/user-attachments/assets/7ee56e9d-e4bd-4cac-b466-afe62f79816b" />
@@ -62,11 +56,17 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 *   **💡 Model Thinking Support:** Native rendering for reasoning models (like DeepSeek-R1). Structural thoughts are captured and organized into a clean, collapsible hidden dropdown block.
 *   **👥 AI Group Debate Mode:** Turn your raw ideas into fully analyzed concepts. Run a multi-agent discussion loop where specialized personas (Optimist, Critic, and Technologist) cross-examine your thesis over multiple rounds.
 *   **⚡ AI IDE - Integrated Development Environment:** A full-fledged in-browser IDE for code generation, editing, and project management, powered by your chosen AI model.
-    *   **File Explorer:** Manage multiple project files (HTML, CSS, JS, etc.).
+    *   **Multi-Repository Workspaces:** Create, switch, and delete repositories. Each repo keeps its own files, commits, branches, and git refs; new repos start empty.
+    *   **Real Git:** Commits bound to repo + branch, per-branch history, branches forked from the current branch, cascading delete of branches/repos with their commits (GIT tab).
+    *   **Git-Compatible ZIP Export/Import:** Export packs the working tree plus a real `.git/` readable by the Git CLI (offline, zero dependencies); import restores files, history, and branches.
+    *   **File Explorer:** Create/rename files and folders manually (HTML, CSS, JS, etc.) or via the AI agent.
     *   **Code Editor:** Edit files with a monospaced code editor.
-    *   **Live Preview:** Instantly preview HTML/JS/CSS code changes in an isolated iframe.
-    *   **AI:** Utilize AI for quick actions like `Create Layout`, `Optimize / Clean`, `Explain Code`, and `Debug & Fix` based on your active file or prompt.
+    *   **Live Preview:** Instantly preview HTML/JS/CSS code changes in a separate browser tab or the inline panel.
+    *   **AI Agent:** Multi-chat agent with tool calling (`list/read/write/edit/rename` files), image attachments (upload, camera, `Ctrl+V` paste), and a fullscreen Agentic-only mode.
+    *   **Cloud Sync (optional):** Sync workspace via Firebase, Supabase, PocketBase, or a generic backend, with an offline queue.
     *   **Project Management:** Download your entire workspace as a `.zip` or reset it.
+*   **📚 RAG Playground:** Build a local knowledge base, run dedicated RAG chats over it, and export Hub notes straight into the knowledge base.
+*   **☁️ Cloud Sync:** Optional Firebase / Supabase / PocketBase / generic-backend sync with offline queueing for sessions, notes, VFS files, commits, and agent chats.
 *   **💻 Built-in Sandbox Interpreter:** Execute, preview, and test generated HTML/JS/CSS code snippets securely in an isolated iframe without leaving the main chat workspace.
 *   **🏪 Assistant Store:** Access a marketplace of free and premium, highly-optimized AI assistant presets and custom prompts for various tasks (e.g., Polyglot Translator, Code & Text Editor, Ideation Generator).
 *   **⚙️ Advanced Parameters Control:** Fine-tune system behaviors with on-the-fly adjustable sliders for Temperature, Top P, and Max Tokens configuration.
