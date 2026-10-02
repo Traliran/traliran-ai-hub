@@ -53,7 +53,8 @@ let filesPanel, versionControlPanel;
 let fileTreeContainer, openFilesTabs;
 let commitMessageInput, createCommitBtn, commitHistoryList;
 let exportZipBtn, importZipBtn, zipFileInput;
-let newFileBtn, saveFileBtn, togglePreviewBtn, previewPanel, previewFrame, closePreviewBtn;
+let newFileBtn, saveFileBtn, togglePreviewBtn, previewPanel, previewFrame, closePreviewBtn, openPreviewTabBtn;
+let agenticModeBtn;
 let monacoContainer;
 
 // Bot Store DOM Elements
@@ -284,6 +285,13 @@ function debounce(fn, delay) {
     };
 }
 
+// Normalize a VFS path: trim, drop leading slashes, collapse repeats.
+function normalizeVfsPath(path) {
+    const clean = String(path || '').trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!clean || clean === '.' || clean.includes('..')) return '';
+    return clean;
+}
+
 // ==================== VFS (VIRTUAL FILE SYSTEM) ====================
 
 const VFS = {
@@ -296,24 +304,28 @@ const VFS = {
 
     async loadFromStorage() {
         try {
-            const stored = STORAGE.getItem('ide_vfs_files');
-            if (stored) {
-                vfsFiles = JSON.parse(stored);
+            // Multi-repo: resolve active repo first (migrates legacy workspace).
+            if (typeof REPO_STORE !== 'undefined') REPO_STORE.init();
+            const useRepos = typeof REPO_STORE !== 'undefined';
+
+            if (useRepos) {
+                vfsFiles = REPO_STORE.loadFiles();
+                commitHistory = REPO_STORE.loadCommits();
+            } else {
+                const stored = STORAGE.getItem('ide_vfs_files');
+                if (stored) {
+                    vfsFiles = JSON.parse(stored);
+                }
+
+                // Load commits
+                const commitsStored = STORAGE.getItem('ide_vfs_commits');
+                if (commitsStored) {
+                    commitHistory = JSON.parse(commitsStored);
+                }
             }
             
-            // Load commits
-            const commitsStored = STORAGE.getItem('ide_vfs_commits');
-            if (commitsStored) {
-                commitHistory = JSON.parse(commitsStored);
-            }
-            
-            // If empty, create default files
-            if (Object.keys(vfsFiles).length === 0) {
-                await this.writeFile('README.md', '# Welcome to Traliran AI IDE\n\nStart coding! The AI agent can help you.\n');
-                await this.writeFile('index.html', '<!DOCTYPE html>\n<html>\n<head>\n    <title>My App</title>\n</head>\n<body>\n    <h1>Hello World</h1>\n    <script src="app.js"><\/script>\n</body>\n</html>\n');
-                await this.writeFile('app.js', '// Your JavaScript code here\nconsole.log("Hello from AI IDE!");\n');
-                await this.writeFile('styles.css', '/* Your styles here */\nbody {\n    font-family: system-ui;\n    margin: 2rem;\n}\n');
-            }
+            // New repositories stay empty until the user or agent adds files.
+            // No default files are created here.
         } catch (e) {
             console.error('[VFS] Load error:', e);
             vfsFiles = {};
@@ -322,7 +334,12 @@ const VFS = {
 
     async saveToStorage() {
         try {
-            STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
+            // Persist to active repo (+ legacy mirror for cloud sync compat).
+            if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+                REPO_STORE.saveFiles(vfsFiles);
+            } else {
+                STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
+            }
             window.dispatchEvent(new CustomEvent('vfs:saved'));
         } catch (e) {
             console.error('[VFS] Save error:', e);
@@ -370,9 +387,60 @@ const VFS = {
         window.dispatchEvent(new CustomEvent('vfs:file-deleted', { detail: { path } }));
     },
 
+    // Rename a file or a folder (folder = prefix move of all nested files).
+    async renamePath(oldPath, newPath) {
+        const from = normalizeVfsPath(oldPath);
+        const to = normalizeVfsPath(newPath);
+        if (!from || !to) throw new Error('Invalid path');
+        if (from === to) return [];
+        if (to.startsWith('.git/')) throw new Error('Cannot write inside .git/');
+        if (vfsFiles[to]) throw new Error(`Target already exists: ${to}`);
+
+        // Single file rename.
+        if (vfsFiles[from]) {
+            vfsFiles[to] = { ...vfsFiles[from], language: getLanguageFromPath(to), lastModified: Date.now() };
+            delete vfsFiles[from];
+            this.moveEditorState(from, to);
+            await this.saveToStorage();
+            window.dispatchEvent(new CustomEvent('vfs:renamed', { detail: { from, to } }));
+            return [to];
+        }
+
+        // Folder rename: move every file under "from/".
+        const prefix = from + '/';
+        const nested = Object.keys(vfsFiles).filter((p) => p.startsWith(prefix));
+        if (nested.length === 0) throw new Error(`Path not found: ${from}`);
+        const targetPrefix = to + '/';
+        const clash = nested.find((p) => vfsFiles[targetPrefix + p.slice(prefix.length)]);
+        if (clash) throw new Error(`Target already exists: ${targetPrefix + clash.slice(prefix.length)}`);
+        const moved = [];
+        for (const p of nested) {
+            const dest = targetPrefix + p.slice(prefix.length);
+            vfsFiles[dest] = { ...vfsFiles[p], language: getLanguageFromPath(dest), lastModified: Date.now() };
+            delete vfsFiles[p];
+            this.moveEditorState(p, dest);
+            moved.push(dest);
+        }
+        await this.saveToStorage();
+        window.dispatchEvent(new CustomEvent('vfs:renamed', { detail: { from, to } }));
+        return moved;
+    },
+
+    // Keep open tabs and cached Monaco models in sync after a rename.
+    moveEditorState(from, to) {
+        const tabIdx = openFiles.indexOf(from);
+        if (tabIdx > -1) openFiles[tabIdx] = to;
+        if (activeFilePath === from) activeFilePath = to;
+        if (monacoModels[from]) {
+            monacoModels[to] = monacoModels[from];
+            delete monacoModels[from];
+        }
+    },
+
     getFileTree() {
         const tree = {};
         for (const path of Object.keys(vfsFiles)) {
+            if (path.startsWith('.git/')) continue; // Generated git data stays hidden.
             const parts = path.split('/');
             let current = tree;
             for (let i = 0; i < parts.length; i++) {
@@ -393,6 +461,7 @@ const VFS = {
     listFiles(dir = '') {
         const files = [];
         for (const path of Object.keys(vfsFiles)) {
+            if (path.startsWith('.git/')) continue; // Keep git internals out of agent tools.
             if (dir === '' || path.startsWith(dir + '/') || path.startsWith(dir)) {
                 files.push(path);
             }
@@ -465,15 +534,24 @@ const VFS = {
 
 const VERSION_CONTROL = {
     async createCommit(message) {
+        const branch = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getBranch() : 'main';
+        const repoId = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.activeId : null;
         const commit = {
             id: 'commit_' + Date.now(),
             timestamp: Date.now(),
             message: message || 'Untitled commit',
+            branch,
+            repoId,
             snapshot: JSON.parse(JSON.stringify(vfsFiles))
         };
         
         commitHistory.unshift(commit);
-        STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+        // Persist to active repo (+ legacy mirror for cloud sync compat).
+        if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+            REPO_STORE.saveCommits(commitHistory);
+        } else {
+            STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+        }
         
         // Also save to IndexedDB for persistence
         if (typeof projectDB !== 'undefined' && projectDB.saveCommit) {
@@ -485,6 +563,18 @@ const VERSION_CONTROL = {
         }
         
         console.log('[VERSION] Created commit:', commit.id);
+        // Link a real git SHA for this commit (non-blocking for snapshot logic).
+        try {
+            if (typeof REPO_STORE !== 'undefined' && typeof GIT_ENGINE !== 'undefined') {
+                const { shaByCommitId } = await GIT_ENGINE.buildGitFiles(
+                    commitHistory, REPO_STORE.meta.branches, REPO_STORE.getBranch()
+                );
+                const sha = shaByCommitId[commit.id] || null;
+                if (sha) REPO_STORE.linkCommitSha(commit.id, sha, null, branch);
+            }
+        } catch (e) {
+            console.error('[VERSION] Git SHA link error:', e);
+        }
         this.renderCommitHistory();
         return commit;
     },
@@ -506,13 +596,27 @@ const VERSION_CONTROL = {
     },
 
     async loadCommitsFromStorage() {
-        // Try IndexedDB first
+        // Multi-repo: commits already loaded from active repo in VFS.init.
+        if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+            if (commitHistory.length > 0) {
+                console.log('[VERSION] Kept', commitHistory.length, 'commits from active repo');
+                return;
+            }
+        }
+        // Try IndexedDB first (scoped to the active repo so other repos
+        // or a deleted repo can never leak commits into a new empty repo).
         if (typeof projectDB !== 'undefined' && projectDB.getAllCommits) {
             try {
-                const commits = await projectDB.getAllCommits();
-                if (commits && commits.length > 0) {
+                const all = await projectDB.getAllCommits();
+                const activeId = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.activeId : null;
+                const commits = (all || []).filter((c) => (c.repoId || 'repo_main') === activeId);
+                if (commits.length > 0) {
                     commitHistory = commits;
-                    STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+                    if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+                        REPO_STORE.saveCommits(commitHistory);
+                    } else {
+                        STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+                    }
                     console.log('[VERSION] Loaded', commits.length, 'commits from IndexedDB');
                     return;
                 }
@@ -521,14 +625,18 @@ const VERSION_CONTROL = {
             }
         }
         
-        // Fallback to persisted storage (IndexedDB-backed)
-        const stored = STORAGE.getItem('ide_vfs_commits');
-        if (stored) {
-            try {
-                commitHistory = JSON.parse(stored);
-                console.log('[VERSION] Loaded', commitHistory.length, 'commits from storage');
-            } catch (e) {
-                commitHistory = [];
+        // Fallback to persisted storage (legacy single-workspace mode only;
+        // in multi-repo mode the per-repo keys loaded in VFS.init are
+        // authoritative, so the global mirror must not overwrite them).
+        if (typeof REPO_STORE === 'undefined' || !REPO_STORE.activeId) {
+            const stored = STORAGE.getItem('ide_vfs_commits');
+            if (stored) {
+                try {
+                    commitHistory = JSON.parse(stored);
+                    console.log('[VERSION] Loaded', commitHistory.length, 'commits from storage');
+                } catch (e) {
+                    commitHistory = [];
+                }
             }
         }
     },
@@ -537,20 +645,30 @@ const VERSION_CONTROL = {
         if (!commitHistoryList) return;
         
         commitHistoryList.innerHTML = '';
+
+        // Show only commits of the active repo + branch (bound history).
+        const activeBranch = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getBranch() : 'main';
+        const visible = commitHistory.filter((c) => (c.branch || 'main') === activeBranch);
         
-        if (commitHistory.length === 0) {
-            commitHistoryList.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">No commits yet</p>';
+        if (visible.length === 0) {
+            commitHistoryList.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">No commits on this branch yet</p>';
             return;
         }
         
-        for (const commit of commitHistory) {
+        for (const commit of visible) {
             const date = new Date(commit.timestamp);
             const div = document.createElement('div');
             div.className = 'bg-gray-800 border border-gray-700 rounded p-2 cursor-pointer hover:border-violet-500 transition';
+            // Show real git short SHA when linked, plus branch name.
+            const sha = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getCommitSha(commit.id) : null;
+            const branch = commit.branch || 'main';
+            const metaLine = sha
+                ? `${sha.slice(0, 7)} · ${branch} · ${Object.keys(commit.snapshot).length} files`
+                : `${branch} · ${Object.keys(commit.snapshot).length} files`;
             div.innerHTML = `
                 <div class="text-xs font-mono text-violet-400 truncate">${escapeHtml(commit.message)}</div>
                 <div class="text-[10px] text-gray-500 mt-1">${date.toLocaleString()}</div>
-                <div class="text-[10px] text-gray-600 mt-1">${Object.keys(commit.snapshot).length} files</div>
+                <div class="text-[10px] text-gray-600 mt-1 font-mono">${escapeHtml(metaLine)}</div>
             `;
             div.onclick = async () => {
                 const confirmed = await showAppConfirm(`Revert to this commit? This will replace current workspace.`, {
@@ -566,60 +684,22 @@ const VERSION_CONTROL = {
         }
     },
 
+    // ZIP export/import lives in zip-export.js (zero-dependency, offline-safe).
+    // These wrappers only delegate so the button wiring stays untouched.
     async exportAsZip() {
-        if (typeof JSZip === 'undefined') {
-            notifyError('ZIP library not loaded. Please check your internet connection.');
+        if (typeof ZIP_EXPORT === 'undefined' || !ZIP_EXPORT.exportActiveRepo) {
+            notifyError('ZIP export module not loaded. Please reload the page.');
             return;
         }
-        
-        const zip = new JSZip();
-        
-        for (const [path, file] of Object.entries(vfsFiles)) {
-            zip.file(path, file.content);
-        }
-        
-        try {
-            const blob = await zip.generateAsync({ type: 'blob' });
-            const url = URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'workspace-export-' + Date.now() + '.zip';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            
-            URL.revokeObjectURL(url);
-            console.log('[VERSION] Exported as ZIP');
-        } catch (e) {
-            console.error('[VERSION] Export error:', e);
-            notifyError('Failed to export ZIP: ' + e.message);
-        }
+        await ZIP_EXPORT.exportActiveRepo();
     },
 
     async importFromZip(file) {
-        try {
-            const zip = new JSZip();
-            const contents = await zip.loadAsync(file);
-            
-            const promises = [];
-            contents.forEach((relativePath, zipEntry) => {
-                if (!zipEntry.dir) {
-                    promises.push(
-                        zipEntry.async('string').then(content => {
-                            VFS.writeFile(relativePath, content);
-                        })
-                    );
-                }
-            });
-            
-            await Promise.all(promises);
-            console.log('[VERSION] Imported from ZIP');
-            notifySuccess('Project imported successfully!');
-        } catch (e) {
-            console.error('[VERSION] Import error:', e);
-            notifyError('Failed to import ZIP: ' + e.message);
+        if (typeof ZIP_EXPORT === 'undefined' || !ZIP_EXPORT.importRepoZip) {
+            notifyError('ZIP import module not loaded. Please reload the page.');
+            return;
         }
+        await ZIP_EXPORT.importRepoZip(file);
     }
 };
 
@@ -916,12 +996,23 @@ function loadActiveAgentSession() {
                     <li>• Explain code structure</li>
                 </ul>
             </div>`;
+        updateAgenticEmptyState();
         return;
     }
     session.messages.forEach(msg => {
         AI_AGENT.addMessageToChat(msg.role, msg.content);
     });
     agentChatWindow.scrollTop = agentChatWindow.scrollHeight;
+    updateAgenticEmptyState();
+}
+
+// Center welcome and input while the active chat has no messages.
+function updateAgenticEmptyState() {
+    const panel = document.getElementById('panelAgent');
+    if (!panel) return;
+    const session = getActiveAgentSession();
+    const isEmpty = !session || session.messages.length === 0;
+    panel.classList.toggle('is-empty', isEmpty);
 }
 
 // ==================== AI AGENT WITH TOOL CALLING ====================
@@ -1013,6 +1104,29 @@ const AI_AGENT = {
                     return JSON.stringify({ success: false, error: e.message }, null, 2);
                 }
             }
+        },
+        {
+            name: 'rename_path',
+            description: 'Renames or moves a file or folder to a new path',
+            parameters: {
+                type: 'object',
+                properties: {
+                    old_path: { type: 'string', description: 'Current file or folder path' },
+                    new_path: { type: 'string', description: 'New file or folder path' }
+                },
+                required: ['old_path', 'new_path'],
+                additionalProperties: false
+            },
+            execute: async (args) => {
+                try {
+                    const moved = await VFS.renamePath(args.old_path, args.new_path);
+                    renderFileTree();
+                    MONACO.renderTabs();
+                    return JSON.stringify({ success: true, message: `Renamed to ${args.new_path}`, moved }, null, 2);
+                } catch (e) {
+                    return JSON.stringify({ success: false, error: e.message }, null, 2);
+                }
+            }
         }
     ],
 
@@ -1049,6 +1163,7 @@ const AI_AGENT = {
         
         this.addMessageToChat('user', userContent);
         session.messages.push({ role: 'user', content: userContent });
+        updateAgenticEmptyState();
         // Auto-rename untitled chats from the first user message.
         if (session.name.startsWith('Chat #') && text) {
             session.name = text.slice(0, 28) + (text.length > 28 ? '...' : '');
@@ -2018,46 +2133,85 @@ async function handleLogout() {
 
 const PREVIEW = {
     isVisible: false,
-    
+    previewTab: null,
+
     toggle() {
         this.isVisible = !this.isVisible;
         previewPanel.classList.toggle('hidden', !this.isVisible);
-        
+
         if (this.isVisible) {
             this.render();
         }
     },
-    
-    render() {
-        if (!previewFrame) return;
-        
+
+    // Build standalone HTML from workspace files (shared by inline and new-tab preview).
+    buildHtml() {
         // Find HTML file to preview
         let htmlContent = '';
-        let cssContent = '';
-        let jsContent = '';
-        
+
         // Look for index.html or main HTML file
         const htmlFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.html'));
         const mainHtml = htmlFiles.find(p => p.includes('index')) || htmlFiles[0];
-        
-        if (mainHtml) {
-            htmlContent = vfsFiles[mainHtml].content;
+
+        if (!mainHtml) {
+            return null;
         }
-        
+
+        htmlContent = vfsFiles[mainHtml].content;
+
         // Inject CSS
         const cssFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.css'));
         if (cssFiles.length > 0) {
             const styleTag = '<style>\n' + cssFiles.map(f => vfsFiles[f].content).join('\n') + '\n</style>';
             htmlContent = htmlContent.replace('</head>', styleTag + '</head>');
         }
-        
+
         // Inject JS
         const jsFiles = Object.keys(vfsFiles).filter(p => p.endsWith('.js'));
         if (jsFiles.length > 0) {
             const scriptTag = '<script>\n' + jsFiles.map(f => vfsFiles[f].content).join('\n') + '\n<\/script>';
             htmlContent = htmlContent.replace('</body>', scriptTag + '</body>');
         }
-        
+
+        return htmlContent;
+    },
+
+    // Open preview in a separate browser tab.
+    openInNewTab() {
+        const htmlContent = this.buildHtml();
+        if (!htmlContent) {
+            notifyWarning('No HTML file to preview.');
+            return;
+        }
+
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+
+        // Reuse the preview tab when possible, otherwise open a new one.
+        if (this.previewTab && !this.previewTab.closed) {
+            this.previewTab.location.href = url;
+            this.previewTab.focus();
+        } else {
+            this.previewTab = window.open(url, '_blank');
+        }
+
+        if (!this.previewTab) {
+            notifyWarning('Popup blocked. Please allow popups to open preview.');
+            return;
+        }
+
+        // Release the blob URL after the new tab has loaded it.
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    },
+
+    render() {
+        if (!previewFrame) return;
+
+        const htmlContent = this.buildHtml();
+        if (!htmlContent) {
+            return;
+        }
+
         // Render in iframe
         const blob = new Blob([htmlContent], { type: 'text/html' });
         previewFrame.src = URL.createObjectURL(blob);
@@ -2084,6 +2238,17 @@ function renderFileTree() {
                 folderDiv.className = 'flex items-center gap-1 flex-1';
                 folderDiv.innerHTML = `<span>📁</span><span>${escapeHtml(name)}</span>`;
                 div.appendChild(folderDiv);
+
+                // Rename button for folders
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'text-gray-500 hover:text-violet-400 text-[10px] px-1';
+                renameBtn.innerHTML = '✏️';
+                renameBtn.title = 'Rename folder';
+                renameBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    renameFileOrFolder(itemPath);
+                };
+                div.appendChild(renameBtn);
                 
                 // Delete button for folders
                 const delBtn = document.createElement('button');
@@ -2118,6 +2283,17 @@ function renderFileTree() {
                 };
                 div.appendChild(fileDiv);
                 
+                // Rename button for files
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'text-gray-500 hover:text-violet-400 text-[10px] px-1';
+                renameBtn.innerHTML = '✏️';
+                renameBtn.title = 'Rename file';
+                renameBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    renameFileOrFolder(itemPath);
+                };
+                div.appendChild(renameBtn);
+
                 // Delete button for files
                 const delBtn = document.createElement('button');
                 delBtn.className = 'text-gray-500 hover:text-rose-400 text-[10px] px-1';
@@ -2135,6 +2311,138 @@ function renderFileTree() {
     }
     
     renderNode(tree);
+}
+
+// ==================== MULTI-REPO & BRANCH UI ====================
+
+// Refresh repo and branch dropdowns from REPO_STORE state.
+function renderRepoSelects() {
+    if (typeof REPO_STORE === 'undefined') return;
+    const repoSelect = document.getElementById('repoSelect');
+    if (repoSelect) {
+        repoSelect.innerHTML = '';
+        for (const repo of REPO_STORE.list()) {
+            const opt = document.createElement('option');
+            opt.value = repo.id;
+            opt.textContent = repo.name;
+            repoSelect.appendChild(opt);
+        }
+        repoSelect.value = REPO_STORE.activeId;
+    }
+    const branchSelect = document.getElementById('branchSelect');
+    if (branchSelect) {
+        branchSelect.innerHTML = '';
+        for (const name of REPO_STORE.listBranches()) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            branchSelect.appendChild(opt);
+        }
+        branchSelect.value = REPO_STORE.getBranch();
+    }
+}
+
+// Switch workspace to another repository (reset editor, tree, history).
+async function switchToRepo(repoId) {
+    if (typeof REPO_STORE === 'undefined') return;
+    REPO_STORE.switch(repoId);
+    vfsFiles = REPO_STORE.loadFiles();
+    commitHistory = REPO_STORE.loadCommits();
+    // Persist mirror for legacy readers and cloud sync.
+    STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
+    STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
+    // Reset editor state.
+    openFiles = [];
+    activeFilePath = null;
+    monacoModels = {};
+    if (monacoEditor) monacoEditor.setModel(null);
+    const firstFile = Object.keys(vfsFiles)[0];
+    if (firstFile && monacoEditor) {
+        try { await MONACO.openFile(firstFile); } catch (e) { console.error('[REPO] Open error:', e); }
+    }
+    renderFileTree();
+    MONACO.renderTabs();
+    VERSION_CONTROL.renderCommitHistory();
+    renderRepoSelects();
+    window.dispatchEvent(new CustomEvent('repo:switched', { detail: { repoId } }));
+    console.log('[REPO] Switched to:', repoId);
+}
+
+// Switch to another branch tip (restore its latest snapshot, keep files if empty).
+async function switchToBranch(branchName) {
+    if (typeof REPO_STORE === 'undefined') return;
+    REPO_STORE.switchBranch(branchName);
+    const tipId = REPO_STORE.findTipCommitId(commitHistory, branchName);
+    if (tipId) {
+        const tip = commitHistory.find((c) => c.id === tipId);
+        if (tip) {
+            vfsFiles = JSON.parse(JSON.stringify(tip.snapshot));
+            await VFS.saveToStorage();
+            openFiles = [];
+            activeFilePath = null;
+            monacoModels = {};
+            if (monacoEditor) monacoEditor.setModel(null);
+            const firstFile = Object.keys(vfsFiles)[0];
+            if (firstFile && monacoEditor) {
+                try { await MONACO.openFile(firstFile); } catch (e) { console.error('[BRANCH] Open error:', e); }
+            }
+            renderFileTree();
+            MONACO.renderTabs();
+        }
+    }
+    VERSION_CONTROL.renderCommitHistory();
+    renderRepoSelects();
+    console.log('[BRANCH] Switched to:', branchName);
+}
+
+// Delete the active branch with all its commits (repo binding keeps other branches).
+async function deleteActiveBranch() {
+    if (typeof REPO_STORE === 'undefined') return;
+    const target = REPO_STORE.getBranch();
+    const confirmed = await showAppConfirm(`Delete branch "${target}" with all its commits? This cannot be undone.`, {
+        title: 'Delete branch',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (!confirmed) return;
+    try {
+        const removedIds = commitHistory
+            .filter((c) => (c.branch || 'main') === target)
+            .map((c) => c.id);
+        commitHistory = commitHistory.filter((c) => (c.branch || 'main') !== target);
+        REPO_STORE.saveCommits(commitHistory);
+        REPO_STORE.pruneCommitShas(commitHistory.map((c) => c.id));
+        // Remove the branch commits from the global IndexedDB store as well.
+        if (typeof projectDB !== 'undefined' && projectDB.deleteCommit) {
+            for (const id of removedIds) {
+                try { await projectDB.deleteCommit(id); } catch (e) { console.error('[BRANCH] IndexedDB delete error:', e); }
+            }
+        }
+        const fallback = REPO_STORE.removeBranch(target);
+        await switchToBranch(fallback);
+        notifySuccess(`Branch "${target}" deleted.`);
+    } catch (e) {
+        notifyError('Failed to delete branch: ' + e.message);
+    }
+}
+
+async function renameFileOrFolder(path) {
+    const isFolder = !vfsFiles[path];
+    const newPath = await showAppPrompt(`Enter new ${isFolder ? 'folder' : 'file'} path:`, path, {
+        title: isFolder ? 'Rename folder' : 'Rename file',
+        placeholder: path,
+        confirmText: 'Rename',
+        required: true
+    });
+    if (!newPath) return;
+    try {
+        await VFS.renamePath(path, newPath);
+        renderFileTree();
+        MONACO.renderTabs();
+        notifySuccess(`Renamed to "${normalizeVfsPath(newPath)}".`);
+    } catch (e) {
+        notifyError('Failed to rename: ' + e.message);
+    }
 }
 
 async function deleteFileOrFolder(path) {
@@ -2223,6 +2531,48 @@ function closeAgentDrawer() {
     if (overlay) overlay.classList.add('hidden');
 }
 
+// ==================== AGENTIC-ONLY VIEW ====================
+
+// Chat-only mode: hides files, versions and editor, keeps the agent panel.
+const AGENTIC_VIEW = {
+    isActive: false,
+
+    toggle() {
+        if (this.isActive) {
+            this.exit();
+        } else {
+            this.enter();
+        }
+    },
+
+    enter() {
+        this.isActive = true;
+        document.body.classList.add('agentic-only');
+        closeFilesDrawer();
+        closeAgentDrawer();
+        // Always show the agent chat (not settings) in this mode.
+        switchRightTab('agent');
+        updateAgenticEmptyState();
+        this.updateButton();
+    },
+
+    exit() {
+        this.isActive = false;
+        document.body.classList.remove('agentic-only');
+        this.updateButton();
+        // Restore editor layout after it becomes visible again.
+        if (monacoEditor && typeof monacoEditor.layout === 'function') {
+            setTimeout(() => monacoEditor.layout(), 50);
+        }
+    },
+
+    updateButton() {
+        if (!agenticModeBtn) return;
+        agenticModeBtn.textContent = this.isActive ? 'Back to IDE' : 'Agentic Only';
+        agenticModeBtn.title = this.isActive ? 'Back to full IDE' : 'Show agent chat only';
+    }
+};
+
 // ==================== INITIALIZATION ====================
 
 async function init() {
@@ -2250,6 +2600,8 @@ async function init() {
     previewPanel = document.getElementById('previewPanel');
     previewFrame = document.getElementById('previewFrame');
     closePreviewBtn = document.getElementById('closePreviewBtn');
+    openPreviewTabBtn = document.getElementById('openPreviewTabBtn');
+    agenticModeBtn = document.getElementById('agenticModeBtn');
     monacoContainer = document.getElementById('monacoContainer');
     
     // Bot Store elements
@@ -2336,6 +2688,69 @@ async function init() {
     // Render UI
     renderFileTree();
     VERSION_CONTROL.renderCommitHistory();
+    renderRepoSelects();
+
+    // Multi-repo and branch controls (additive, existing handlers untouched).
+    const repoSelect = document.getElementById('repoSelect');
+    if (repoSelect) repoSelect.onchange = (e) => switchToRepo(e.target.value);
+    const newRepoBtn = document.getElementById('newRepoBtn');
+    if (newRepoBtn) newRepoBtn.onclick = async () => {
+        const name = await showAppPrompt('Enter repository name:', '', {
+            title: 'New repository',
+            placeholder: 'my-project',
+            confirmText: 'Create',
+            required: true
+        });
+        if (!name) return;
+        const repo = REPO_STORE.create(name);
+        await switchToRepo(repo.id);
+        notifySuccess(`Repository "${repo.name}" created!`);
+    };
+    const branchSelect = document.getElementById('branchSelect');
+    if (branchSelect) branchSelect.onchange = (e) => switchToBranch(e.target.value);
+    const newBranchBtn = document.getElementById('newBranchBtn');
+    if (newBranchBtn) newBranchBtn.onclick = async () => {
+        const name = await showAppPrompt('Enter branch name:', '', {
+            title: 'New branch',
+            placeholder: 'feature-x',
+            confirmText: 'Create',
+            required: true
+        });
+        if (!name) return;
+        try {
+            // New branch starts from the current branch (workspace files are kept).
+            const clean = REPO_STORE.createBranch(name);
+            await switchToBranch(clean);
+            notifySuccess(`Branch "${clean}" created!`);
+        } catch (e) {
+            notifyError('Failed to create branch: ' + e.message);
+        }
+    };
+    const deleteBranchBtn = document.getElementById('deleteBranchBtn');
+    if (deleteBranchBtn) deleteBranchBtn.onclick = () => deleteActiveBranch();
+    // Repository deletion (last repository is protected in REPO_STORE).
+    const deleteRepoBtn = document.getElementById('deleteRepoBtn');
+    if (deleteRepoBtn) deleteRepoBtn.onclick = async () => {
+        const active = REPO_STORE.getActive();
+        const confirmed = await showAppConfirm(`Delete repository "${active.name}" with all its files and history? This cannot be undone.`, {
+            title: 'Delete repository',
+            confirmText: 'Delete',
+            danger: true
+        });
+        if (!confirmed) return;
+        try {
+            const deletedId = active.id;
+            REPO_STORE.remove(deletedId);
+            // Purge the deleted repo commits from the global IndexedDB store.
+            if (typeof projectDB !== 'undefined' && projectDB.deleteCommitsByRepo) {
+                try { await projectDB.deleteCommitsByRepo(deletedId); } catch (e) { console.error('[REPO] IndexedDB cleanup error:', e); }
+            }
+            await switchToRepo(REPO_STORE.activeId);
+            notifySuccess('Repository deleted.');
+        } catch (e) {
+            notifyError('Failed to delete repository: ' + e.message);
+        }
+    };
     
     // Setup event listeners
     
@@ -2361,9 +2776,9 @@ async function init() {
     
     // File operations
     newFileBtn.onclick = async () => {
-        const name = await showAppPrompt('Enter file name (e.g., script.js):', '', {
+        const name = await showAppPrompt('Enter file name (e.g., folder/script.js):', '', {
             title: 'New file',
-            placeholder: 'script.js',
+            placeholder: 'folder/script.js',
             confirmText: 'Create',
             required: true
         });
@@ -2372,6 +2787,22 @@ async function init() {
             MONACO.openFile(name);
             renderFileTree();
         }
+    };
+
+    // Folder creation (VFS is file-based, so a placeholder keeps the folder visible).
+    const addFolderBtn = document.getElementById('addFolderBtn');
+    if (addFolderBtn) addFolderBtn.onclick = async () => {
+        const name = await showAppPrompt('Enter folder name (e.g., src):', '', {
+            title: 'New folder',
+            placeholder: 'src',
+            confirmText: 'Create',
+            required: true
+        });
+        if (!name) return;
+        const clean = name.trim().replace(/^\/+|\/+$/g, '');
+        if (!clean) return;
+        await VFS.writeFile(`${clean}/.keep`, '');
+        renderFileTree();
     };
     
     saveFileBtn.onclick = () => {
@@ -2392,9 +2823,13 @@ async function init() {
         }
     });
     
-    // Preview
-    togglePreviewBtn.onclick = () => PREVIEW.toggle();
+    // Preview (opens in a separate browser tab; inline panel kept as fallback)
+    togglePreviewBtn.onclick = () => PREVIEW.openInNewTab();
+    if (openPreviewTabBtn) openPreviewTabBtn.onclick = () => PREVIEW.openInNewTab();
     closePreviewBtn.onclick = () => PREVIEW.toggle();
+
+    // Agentic-only view (chat without editor)
+    if (agenticModeBtn) agenticModeBtn.onclick = () => AGENTIC_VIEW.toggle();
     
     // Version control
     createCommitBtn.onclick = async () => {

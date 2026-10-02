@@ -209,6 +209,35 @@ class ProjectDB {
     }
 
     /**
+     * Delete a single commit by ID (repo/branch cleanup).
+     * @param {string} commitId - Commit ID
+     */
+    async deleteCommit(commitId) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('commits', 'readwrite');
+            const req = tx.objectStore('commits').delete(commitId);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Delete all commits bound to a repository (repo cleanup).
+     * Legacy commits without repoId are treated as part of repo_main.
+     * @param {string} repoId - Repository ID
+     */
+    async deleteCommitsByRepo(repoId) {
+        await this.initPromise;
+        const all = await this.getAllCommits();
+        const targets = all.filter((c) => (c.repoId || 'repo_main') === repoId);
+        for (const c of targets) {
+            await this.deleteCommit(c.id);
+        }
+        return targets.length;
+    }
+
+    /**
      * Clear all files from IndexedDB
      */
     async clearAll() {
