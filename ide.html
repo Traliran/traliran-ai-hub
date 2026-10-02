@@ -152,7 +152,7 @@
                     Files
                 </button>
                 <button id="versionControlTabBtn" class="flex-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-200">
-                    Versions
+                    GIT
                 </button>
             </div>
 
@@ -178,7 +178,8 @@
                 <div class="flex items-center gap-1.5 mb-2">
                     <label class="text-xs font-bold text-gray-400 uppercase shrink-0" for="branchSelect">Branch</label>
                     <select id="branchSelect" class="flex-1 min-w-0 bg-gray-800 text-gray-200 text-xs rounded border border-gray-700 px-1.5 py-1 focus:border-violet-500 outline-none" title="Active branch"></select>
-                    <button id="newBranchBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-lg transition shrink-0" title="Create new branch">+</button>
+                    <button id="newBranchBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-lg transition shrink-0" title="Create new branch from current branch">+</button>
+                    <button id="deleteBranchBtn" class="bg-gray-800 hover:bg-rose-700 text-gray-200 text-xs px-2 py-1 rounded-lg transition shrink-0" title="Delete active branch with its commits">Delete</button>
                 </div>
                 <div class="mb-3">
                     <input type="text" id="commitMessageInput" placeholder="Commit message..." 

@@ -324,13 +324,8 @@ const VFS = {
                 }
             }
             
-            // If empty, create default files
-            if (Object.keys(vfsFiles).length === 0) {
-                await this.writeFile('README.md', '# Welcome to Traliran AI IDE\n\nStart coding! The AI agent can help you.\n');
-                await this.writeFile('index.html', '<!DOCTYPE html>\n<html>\n<head>\n    <title>My App</title>\n</head>\n<body>\n    <h1>Hello World</h1>\n    <script src="app.js"><\/script>\n</body>\n</html>\n');
-                await this.writeFile('app.js', '// Your JavaScript code here\nconsole.log("Hello from AI IDE!");\n');
-                await this.writeFile('styles.css', '/* Your styles here */\nbody {\n    font-family: system-ui;\n    margin: 2rem;\n}\n');
-            }
+            // New repositories stay empty until the user or agent adds files.
+            // No default files are created here.
         } catch (e) {
             console.error('[VFS] Load error:', e);
             vfsFiles = {};
@@ -540,11 +535,13 @@ const VFS = {
 const VERSION_CONTROL = {
     async createCommit(message) {
         const branch = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getBranch() : 'main';
+        const repoId = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.activeId : null;
         const commit = {
             id: 'commit_' + Date.now(),
             timestamp: Date.now(),
             message: message || 'Untitled commit',
             branch,
+            repoId,
             snapshot: JSON.parse(JSON.stringify(vfsFiles))
         };
         
@@ -606,11 +603,14 @@ const VERSION_CONTROL = {
                 return;
             }
         }
-        // Try IndexedDB first
+        // Try IndexedDB first (scoped to the active repo so other repos
+        // or a deleted repo can never leak commits into a new empty repo).
         if (typeof projectDB !== 'undefined' && projectDB.getAllCommits) {
             try {
-                const commits = await projectDB.getAllCommits();
-                if (commits && commits.length > 0) {
+                const all = await projectDB.getAllCommits();
+                const activeId = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.activeId : null;
+                const commits = (all || []).filter((c) => (c.repoId || 'repo_main') === activeId);
+                if (commits.length > 0) {
                     commitHistory = commits;
                     if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
                         REPO_STORE.saveCommits(commitHistory);
@@ -625,14 +625,18 @@ const VERSION_CONTROL = {
             }
         }
         
-        // Fallback to persisted storage (IndexedDB-backed)
-        const stored = STORAGE.getItem('ide_vfs_commits');
-        if (stored) {
-            try {
-                commitHistory = JSON.parse(stored);
-                console.log('[VERSION] Loaded', commitHistory.length, 'commits from storage');
-            } catch (e) {
-                commitHistory = [];
+        // Fallback to persisted storage (legacy single-workspace mode only;
+        // in multi-repo mode the per-repo keys loaded in VFS.init are
+        // authoritative, so the global mirror must not overwrite them).
+        if (typeof REPO_STORE === 'undefined' || !REPO_STORE.activeId) {
+            const stored = STORAGE.getItem('ide_vfs_commits');
+            if (stored) {
+                try {
+                    commitHistory = JSON.parse(stored);
+                    console.log('[VERSION] Loaded', commitHistory.length, 'commits from storage');
+                } catch (e) {
+                    commitHistory = [];
+                }
             }
         }
     },
@@ -641,13 +645,17 @@ const VERSION_CONTROL = {
         if (!commitHistoryList) return;
         
         commitHistoryList.innerHTML = '';
+
+        // Show only commits of the active repo + branch (bound history).
+        const activeBranch = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getBranch() : 'main';
+        const visible = commitHistory.filter((c) => (c.branch || 'main') === activeBranch);
         
-        if (commitHistory.length === 0) {
-            commitHistoryList.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">No commits yet</p>';
+        if (visible.length === 0) {
+            commitHistoryList.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">No commits on this branch yet</p>';
             return;
         }
         
-        for (const commit of commitHistory) {
+        for (const commit of visible) {
             const date = new Date(commit.timestamp);
             const div = document.createElement('div');
             div.className = 'bg-gray-800 border border-gray-700 rounded p-2 cursor-pointer hover:border-violet-500 transition';
@@ -2387,6 +2395,37 @@ async function switchToBranch(branchName) {
     console.log('[BRANCH] Switched to:', branchName);
 }
 
+// Delete the active branch with all its commits (repo binding keeps other branches).
+async function deleteActiveBranch() {
+    if (typeof REPO_STORE === 'undefined') return;
+    const target = REPO_STORE.getBranch();
+    const confirmed = await showAppConfirm(`Delete branch "${target}" with all its commits? This cannot be undone.`, {
+        title: 'Delete branch',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (!confirmed) return;
+    try {
+        const removedIds = commitHistory
+            .filter((c) => (c.branch || 'main') === target)
+            .map((c) => c.id);
+        commitHistory = commitHistory.filter((c) => (c.branch || 'main') !== target);
+        REPO_STORE.saveCommits(commitHistory);
+        REPO_STORE.pruneCommitShas(commitHistory.map((c) => c.id));
+        // Remove the branch commits from the global IndexedDB store as well.
+        if (typeof projectDB !== 'undefined' && projectDB.deleteCommit) {
+            for (const id of removedIds) {
+                try { await projectDB.deleteCommit(id); } catch (e) { console.error('[BRANCH] IndexedDB delete error:', e); }
+            }
+        }
+        const fallback = REPO_STORE.removeBranch(target);
+        await switchToBranch(fallback);
+        notifySuccess(`Branch "${target}" deleted.`);
+    } catch (e) {
+        notifyError('Failed to delete branch: ' + e.message);
+    }
+}
+
 async function renameFileOrFolder(path) {
     const isFolder = !vfsFiles[path];
     const newPath = await showAppPrompt(`Enter new ${isFolder ? 'folder' : 'file'} path:`, path, {
@@ -2679,6 +2718,7 @@ async function init() {
         });
         if (!name) return;
         try {
+            // New branch starts from the current branch (workspace files are kept).
             const clean = REPO_STORE.createBranch(name);
             await switchToBranch(clean);
             notifySuccess(`Branch "${clean}" created!`);
@@ -2686,6 +2726,8 @@ async function init() {
             notifyError('Failed to create branch: ' + e.message);
         }
     };
+    const deleteBranchBtn = document.getElementById('deleteBranchBtn');
+    if (deleteBranchBtn) deleteBranchBtn.onclick = () => deleteActiveBranch();
     // Repository deletion (last repository is protected in REPO_STORE).
     const deleteRepoBtn = document.getElementById('deleteRepoBtn');
     if (deleteRepoBtn) deleteRepoBtn.onclick = async () => {
@@ -2697,7 +2739,12 @@ async function init() {
         });
         if (!confirmed) return;
         try {
-            REPO_STORE.remove(active.id);
+            const deletedId = active.id;
+            REPO_STORE.remove(deletedId);
+            // Purge the deleted repo commits from the global IndexedDB store.
+            if (typeof projectDB !== 'undefined' && projectDB.deleteCommitsByRepo) {
+                try { await projectDB.deleteCommitsByRepo(deletedId); } catch (e) { console.error('[REPO] IndexedDB cleanup error:', e); }
+            }
             await switchToRepo(REPO_STORE.activeId);
             notifySuccess('Repository deleted.');
         } catch (e) {

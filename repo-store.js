@@ -178,6 +178,16 @@ const REPO_STORE = (() => {
         STORAGE.setItem(ACTIVE_KEY, this.activeId);
         this.meta = loadMeta(this.activeId);
       }
+      // Point the legacy mirror at the (new) active repo so deleted
+      // repo data can never resurface after a reload.
+      try {
+        const activeFiles = STORAGE.getItem(filesKey(this.activeId)) || '{}';
+        const activeCommits = STORAGE.getItem(commitsKey(this.activeId)) || '[]';
+        STORAGE.setItem('ide_vfs_files', activeFiles);
+        STORAGE.setItem('ide_vfs_commits', activeCommits);
+      } catch {
+        // Mirror refresh is best effort.
+      }
     },
 
     switch(id) {
@@ -201,14 +211,40 @@ const REPO_STORE = (() => {
     createBranch(name) {
       const clean = sanitizeBranch(name);
       if (!this.meta.branches) this.meta.branches = {};
-      if (!this.meta.branches[clean]) {
-        // New branch starts at current tip (may be null for empty history).
+      if (!(clean in this.meta.branches)) {
+        // New branch starts from the current branch tip (may be null).
         const cur = this.meta.currentBranch || 'main';
         this.meta.branches[clean] = this.meta.branches[cur] || null;
       }
       this.meta.currentBranch = clean;
       saveMeta(this.activeId, this.meta);
       return clean;
+    },
+
+    // Delete a branch and forget its tip. Commits themselves are removed
+    // by the caller (per-branch commit binding). Keeps at least one branch.
+    removeBranch(name) {
+      const clean = sanitizeBranch(name);
+      const names = Object.keys(this.meta.branches || { main: null });
+      if (names.length <= 1) throw new Error('Cannot delete the last branch');
+      if (!(clean in this.meta.branches)) throw new Error('Branch not found');
+      delete this.meta.branches[clean];
+      if (this.meta.currentBranch === clean) {
+        this.meta.currentBranch = Object.keys(this.meta.branches)[0];
+      }
+      saveMeta(this.activeId, this.meta);
+      return this.meta.currentBranch;
+    },
+
+    // Drop cached SHA links for commits that no longer exist (branch/repo delete).
+    pruneCommitShas(remainingIds) {
+      if (!this.meta.shaByCommitId) return;
+      const keep = new Set(remainingIds || []);
+      for (const key of Object.keys(this.meta.shaByCommitId)) {
+        const base = key.endsWith(':tree') ? key.slice(0, -5) : key;
+        if (!keep.has(base)) delete this.meta.shaByCommitId[key];
+      }
+      saveMeta(this.activeId, this.meta);
     },
 
     switchBranch(name) {
