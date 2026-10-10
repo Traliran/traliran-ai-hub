@@ -129,7 +129,7 @@ class McpClient {
         const initResult = await this._rpc('initialize', {
             protocolVersion: this.protocolVersion,
             capabilities: {},
-            clientInfo: { name: 'TraliranAIHub', version: '3.0' }
+            clientInfo: { name: 'TraliranAIHub', version: '3.0.1' }
         });
         if (initResult && initResult.protocolVersion) {
             this.protocolVersion = initResult.protocolVersion;

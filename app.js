@@ -840,6 +840,7 @@ function renderSessionsList() {
 }
 
 function loadActiveSessionChat() {
+    updateSummarizeButtonVisibility();
     const session = sessions.find(s => s.id === currentSessionId);
     chatWindow.innerHTML = '';
     updateWelcomeModelInfo();
@@ -938,10 +939,25 @@ function copyTextToClipboard(text, successMessage = 'Copied to clipboard!') {
 
 function runSandboxCode() {
     const code = sandboxCode.value;
-    const iframeDoc = sandboxIframe.contentDocument || sandboxIframe.contentWindow.document;
-    iframeDoc.open();
-    iframeDoc.write(code);
-    iframeDoc.close();
+    // Primary path: srcdoc keeps the code inside the sandboxed
+    // (opaque-origin) iframe. document.write via contentDocument is
+    // blocked once the sandbox attribute (without allow-same-origin)
+    // is present, so it is only a fallback for ancient browsers
+    // without srcdoc support.
+    sandboxIframe.setAttribute('srcdoc', code);
+    try {
+        const probe = sandboxIframe.contentDocument || sandboxIframe.contentWindow.document;
+        // If we can still reach the document, srcdoc is unsupported by
+        // this browser — fall back to direct write. Under a working
+        // sandbox the access above throws and we land in catch{}.
+        if (probe && typeof probe.write === 'function' && !('srcdoc' in sandboxIframe)) {
+            probe.open();
+            probe.write(code);
+            probe.close();
+        }
+    } catch (e) {
+        /* sandboxed opaque origin — srcdoc path already handled it */
+    }
 }
 
 tabEditor.addEventListener('click', () => {
@@ -1110,8 +1126,8 @@ function updateNoteContent() {
         note.content = noteContent.value;
         note.updatedAt = Date.now();
 
-        // Auto-tagging logic
-        const tagRegex = /#(\w+)/g;
+        // Auto-tagging logic (Unicode-aware: Cyrillic, CJK, etc.)
+        const tagRegex = /#([\p{L}\p{N}_]+)/gu;
         const tags = [...note.content.matchAll(tagRegex)].map(match => match[1]);
         note.tags = [...new Set(tags)];
 
