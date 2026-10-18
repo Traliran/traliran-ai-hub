@@ -1,14 +1,12 @@
 /**
  * Sync Manager - Handles cloud synchronization for VFS and other data
- * 
+ *
  * Features:
- * - Auto-sync VFS files to cloud when logged in
+ * - Auto-sync VFS to cloud when logged in (whole-collection snapshots)
  * - Queue-based sync for offline support
- * - Granular file-level sync for VFS
- * - Full snapshot sync for commits
- * 
+ *
  * Methods:
- * - SYNC_MANAGER.pushVFSFileToCloud(filePath)
+ * - SYNC_MANAGER.pushToCloud(collection)
  * - SYNC_MANAGER.pullFromCloud(collection)
  * - SYNC_MANAGER.pushAll()
  * - SYNC_MANAGER.pullAndMerge()
@@ -43,14 +41,6 @@ const SYNC_MANAGER = {
     window.addEventListener('offline', () => {
       this._isOnline = false;
       this.updateStatus('Offline - changes queued', true);
-    });
-    
-    // Listen for VFS updates and auto-sync
-    window.addEventListener('vfs:file-updated', (e) => {
-      const { path } = e.detail;
-      if (path) {
-        this.pushVFSFileToCloud(path);
-      }
     });
   },
 
@@ -111,8 +101,11 @@ const SYNC_MANAGER = {
 
     if (map.isSettings) {
       if (data && typeof data === 'object') {
+        // Whitelist settings keys so cloud data can never overwrite the
+        // local database connection config (gem_db_url / gem_db_token, ...).
         Object.entries(data).forEach(([key, val]) => {
-          if (key !== 'id' && typeof val === 'string') {
+          if (key === 'id' || typeof val !== 'string') return;
+          if (map.keys.includes(key) || key.startsWith('gem_key_')) {
             STORAGE.setItem(key, val);
           }
         });
@@ -124,10 +117,6 @@ const SYNC_MANAGER = {
       const storageKey = collection === 'ide_vfs' ? 'ide_vfs_files' : 'ide_vfs_commits';
       if (data !== null && data !== undefined) {
         STORAGE.setItem(storageKey, JSON.stringify(data));
-        // Dispatch event for UI updates
-        if (map.isVFS) {
-          window.dispatchEvent(new CustomEvent('vfs:synced-from-cloud', { detail: { files: data } }));
-        }
       }
       return;
     }
@@ -135,14 +124,6 @@ const SYNC_MANAGER = {
     if (map.key && data !== null && data !== undefined) {
       STORAGE.setItem(map.key, typeof data === 'string' ? data : JSON.stringify(data));
     }
-  },
-
-  wrapStorageSave(originalFn, collection) {
-    const self = this;
-    return function (...args) {
-      originalFn.apply(this, args);
-      self.pushToCloud(collection);
-    };
   },
 
   async pushToCloud(collection) {
@@ -170,32 +151,6 @@ const SYNC_MANAGER = {
         this._syncQueue.push({ type: 'push', collection });
       }
     }, 500);
-  },
-
-  // Push single VFS file to cloud (for granular sync)
-  async pushVFSFileToCloud(filePath) {
-    if (!DB_CONNECTOR.isLoggedIn()) return;
-    if (!this._isOnline) {
-      this._syncQueue.push({ type: 'push_file', path: filePath });
-      return;
-    }
-
-    if (this._debounceTimers['vfs_' + filePath]) {
-      clearTimeout(this._debounceTimers['vfs_' + filePath]);
-    }
-
-    this._debounceTimers['vfs_' + filePath] = setTimeout(async () => {
-      try {
-        const allFiles = this._readCollectionData('ide_vfs');
-        if (allFiles && allFiles[filePath]) {
-          const fileData = allFiles[filePath];
-          await DB_CONNECTOR.saveData('ide_vfs', filePath, fileData);
-          console.log('[SYNC] Pushed file to cloud:', filePath);
-        }
-      } catch (e) {
-        console.error('VFS file sync error:', e);
-      }
-    }, 1000);
   },
 
   async pullFromCloud(collection) {
@@ -258,16 +213,6 @@ const SYNC_MANAGER = {
           }
         } catch (e) {
           console.error('Queue processing error:', e);
-          this._syncQueue.push(item);
-        }
-      } else if (item.type === 'push_file') {
-        try {
-          const allFiles = this._readCollectionData('ide_vfs');
-          if (allFiles && allFiles[item.path]) {
-            await DB_CONNECTOR.saveData('ide_vfs', item.path, allFiles[item.path]);
-          }
-        } catch (e) {
-          console.error('File queue processing error:', e);
           this._syncQueue.push(item);
         }
       }

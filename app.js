@@ -90,9 +90,8 @@ const tempValue = document.getElementById('tempValue');
 const topPInput = document.getElementById('botTopP');
 const topPValue = document.getElementById('topPValue');
 const tokensInput = document.getElementById('botMaxTokens');
-const tokensValue = document.getElementById('tokensValue'); // may be null after UI change to number input (kept for backward compatibility)
 
-// Helper to get max tokens as unrestricted integer with fallback for compatibility
+// Maximum tokens per response (2048 when the field is empty or invalid).
 function getMaxTokens() {
     const parsed = parseInt(tokensInput.value, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -166,7 +165,6 @@ const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggleSidebar');
 const closeSidebarBtn = document.getElementById('closeSidebar');
 
-const TOKEN_COST_PER_1K = 0.03; // Approximate cost estimate for user-facing display
 const sidebarOverlay = document.getElementById('sidebarOverlay');
 const chatsPanel = document.getElementById('chatsPanel');
 const toggleChatsBtn = document.getElementById('toggleChats');
@@ -206,8 +204,8 @@ summarizeChatBtn.addEventListener('click', async () => {
         return;
     }
     
-    const providerName = apiProvider.value;
-    const hasKey = PROVIDERS[providerName].hasKey;
+    const providerName = resolveProviderName(apiProvider.value);
+    const hasKey = providerRequiresKey(providerName);
     const apiKey = apiKeyValue.value.trim();
     const endpoint = apiEndpoint.value.trim();
     const topP = parseFloat(topPInput.value);
@@ -283,86 +281,12 @@ summarizeChatBtn.addEventListener('click', async () => {
     }
 });
 
-marked.use({ breaks: true, gfm: true });
-
-const PROVIDERS = {
-    groq: { url: 'https://api.groq.com/openai/v1', hasKey: true, type: 'openai' },
-    google: { url: 'https://generativelanguage.googleapis.com/v1beta/openai', hasKey: true, type: 'openai' },
-    openrouter: { url: 'https://openrouter.ai/api/v1', hasKey: true, type: 'openai' },
-    openai: { url: 'https://api.openai.com/v1', hasKey: true, type: 'openai' },
-    deepseek: { url: 'https://api.deepseek.com/v1', hasKey: true, type: 'openai' },
-    qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', hasKey: true, type: 'openai' },
-    glm: { url: 'https://open.bigmodel.cn/api/paas/v4', hasKey: true, type: 'openai' },
-    claude: { url: 'https://api.anthropic.com/v1', hasKey: true, type: 'anthropic' },
-    ollama: { url: 'http://localhost:11434/v1', hasKey: false, type: 'openai' },
-    llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
-};
-
 let notes = [];
 let currentNoteId = null;
 
 function safeEncode(str) {
     if (!str) return '';
     return encodeURIComponent(str).replace(/'/g, '%27');
-}
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-function normalizeContentToText(content) {
-    content = unwrapMessageContent(content);
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-        return content.map(part => {
-            if (typeof part === 'string') return part;
-            if (part?.type === 'text' || part?.type === 'input_text') return part.text || part.content || '';
-            if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') return '[Image attachment]';
-            if (part?.type === 'video_url' || part?.type === 'video' || part?.type === 'input_video') return '[Video attachment]';
-            return '';
-        }).filter(Boolean).join('\n');
-    }
-    return '';
-}
-
-// Unwrap legacy double-wrapped content: some stored messages keep the shape
-// { role: 'user', content: [...] } inside the message content field.
-function unwrapMessageContent(content) {
-    if (content && typeof content === 'object' && !Array.isArray(content) && Array.isArray(content.content)) {
-        return content.content;
-    }
-    return content;
-}
-
-// Convert stored content to the standard OpenAI chat format:
-// [{ type: 'text', text }, { type: 'image_url', image_url: { url } }].
-// Legacy parts stored as { type: 'image_url', url } are migrated here.
-function normalizeContentForApi(content) {
-    content = unwrapMessageContent(content);
-    if (typeof content === 'string' || !Array.isArray(content)) return content;
-    return content.map(part => {
-        if (typeof part === 'string') return { type: 'text', text: part };
-        if (part?.type === 'text') return { type: 'text', text: part.text || part.content || '' };
-        if (part?.type === 'image_url') {
-            const url = typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url || part.url || '');
-            if (!url) return { type: 'text', text: '[Image attachment]' };
-            return { type: 'image_url', image_url: { url } };
-        }
-        if (part?.type === 'video_url' || part?.type === 'video') {
-            return { type: 'text', text: `[Video attachment: ${part.url || part.video_url?.url || 'video'} — video bytes are not sent, describe it in text instead.]` };
-        }
-        if (part?.type === 'image' || part?.type === 'input_image') {
-            const url = part.url || part.src || '';
-            if (!url) return { type: 'text', text: '[Image attachment]' };
-            return { type: 'image_url', image_url: { url } };
-        }
-        if (part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
-        return { type: 'text', text: part?.text || part?.content || '' };
-    });
 }
 
 function buildMediaHtmlFromContent(content) {
@@ -466,7 +390,7 @@ function renderMcpList() {
             danger: true
         });
         if (confirmed) {
-            MCP_MANAGER.remove(b.dataset.id);
+            await MCP_MANAGER.remove(b.dataset.id);
             renderMcpList();
             updateMcpBadge();
         }
@@ -514,12 +438,20 @@ function updateMcpBadge() {
 }
 
 function loadApiSettings() {
-    const provider = STORAGE.getItem('gem_provider') || 'groq';
+    const storedProvider = STORAGE.getItem('gem_provider') || 'groq';
+    const provider = resolveProviderName(storedProvider);
+    // Migrate a legacy provider alias (e.g. IDE's "anthropic" -> "claude").
+    if (provider !== storedProvider) {
+        if (!STORAGE.getItem(`gem_key_${provider}`) && STORAGE.getItem(`gem_key_${storedProvider}`)) {
+            STORAGE.setItem(`gem_key_${provider}`, STORAGE.getItem(`gem_key_${storedProvider}`));
+        }
+        STORAGE.setItem('gem_provider', provider);
+    }
     apiProvider.value = provider;
     handleProviderChange(provider);
 
     apiKeyValue.value = STORAGE.getItem(`gem_key_${provider}`) || '';
-    apiEndpoint.value = STORAGE.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url;
+    apiEndpoint.value = STORAGE.getItem(`gem_endpoint_${provider}`) || getProviderDescriptor(provider).url;
     botNameInput.value = STORAGE.getItem('gem_bot_name') || 'System AI';
     botPromptInput.value = STORAGE.getItem('gem_system_prompt') || '';
     personalInfoInput.value = STORAGE.getItem('gem_personal_info') || '';
@@ -532,7 +464,6 @@ function loadApiSettings() {
 
     const savedTokens = STORAGE.getItem('gem_tokens') || '2048';
     tokensInput.value = savedTokens;
-    if (tokensValue) tokensValue.textContent = savedTokens;
 
     fetchActiveModels();
     updateWelcomeModelInfo();
@@ -550,6 +481,8 @@ function saveApiSettings() {
     STORAGE.setItem('gem_topp', topPInput.value);
     STORAGE.setItem('gem_tokens', tokensInput.value);
     updateStatusCard();
+    SYNC_MANAGER.pushToCloud('hub_settings');
+    SYNC_MANAGER.pushToCloud('hub_personal');
 }
 
 // Single fixed pure-black theme. No theme switching.
@@ -568,7 +501,8 @@ function updateWelcomeModelInfo() {
 }
 
 function handleProviderChange(provider) {
-    const details = PROVIDERS[provider];
+    const name = resolveProviderName(provider);
+    const details = getProviderDescriptor(name);
     if (details.hasKey) {
         apiKeyContainer.classList.remove('hidden');
         endpointContainer.classList.add('hidden');
@@ -576,18 +510,19 @@ function handleProviderChange(provider) {
         apiKeyContainer.classList.add('hidden');
         endpointContainer.classList.remove('hidden');
     }
-    apiEndpoint.value = STORAGE.getItem(`gem_endpoint_${provider}`) || details.url;
-    apiKeyValue.value = STORAGE.getItem(`gem_key_${provider}`) || '';
+    apiEndpoint.value = STORAGE.getItem(`gem_endpoint_${name}`) || details.url;
+    apiKeyValue.value = STORAGE.getItem(`gem_key_${name}`) || '';
     selectedMultiModels = [];
     updateMultiModelUI();
 }
 
 function getProviderConfig(providerName) {
-    const details = PROVIDERS[providerName] || PROVIDERS.openai;
+    const name = resolveProviderName(providerName);
+    const details = getProviderDescriptor(name);
     return {
-        providerName,
-        endpoint: STORAGE.getItem(`gem_endpoint_${providerName}`) || details.url,
-        apiKey: STORAGE.getItem(`gem_key_${providerName}`) || '',
+        providerName: name,
+        endpoint: STORAGE.getItem(`gem_endpoint_${name}`) || details.url,
+        apiKey: STORAGE.getItem(`gem_key_${name}`) || '',
         hasKey: details.hasKey,
         type: details.type
     };
@@ -596,27 +531,7 @@ function getProviderConfig(providerName) {
 async function fetchProviderModels(providerName) {
     const cfg = getProviderConfig(providerName);
     if (cfg.hasKey && !cfg.apiKey) return [];
-
-    if (providerName === 'claude') {
-        return ['claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest'];
-    }
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (cfg.hasKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
-
-    const response = await fetch(`${cfg.endpoint}/models`, { method: 'GET', headers });
-    if (!response.ok) throw new Error(`Status Error: ${response.status}`);
-
-    const json = await response.json();
-    let models = json.data && Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-
-    return models
-        .filter(m => {
-            const id = (m.id || m.name || '').toLowerCase();
-            return !id.includes('whisper') && !id.includes('tts') && !id.includes('embed') && !id.includes('guard');
-        })
-        .map(m => m.id || m.name)
-        .filter(Boolean);
+    return fetchModelList(cfg.endpoint, cfg.apiKey, cfg.hasKey, cfg.providerName);
 }
 
 async function populateMultiModelList() {
@@ -752,6 +667,7 @@ function loadSessions() {
 
 function saveSessionsToStorage() {
     STORAGE.setItem('gem_sessions', JSON.stringify(sessions));
+    SYNC_MANAGER.pushToCloud('hub_sessions');
 }
 
 function createNewSession() {
@@ -847,20 +763,22 @@ function loadActiveSessionChat() {
     if (!session || session.messages.length === 0) {
         welcomeMessage.classList.remove('hidden');
         chatWindow.appendChild(welcomeMessage);
+        updateSummarizeButtonVisibility();
         return;
     }
     welcomeMessage.classList.add('hidden');
     session.messages.forEach((msg, idx) => {
-        renderMessageToDOM(msg.role, msg.content, session.botName, idx);
+        renderMessageToDOM(msg.role, msg.content, msg.botName || session.botName, idx);
     });
     chatWindow.scrollTop = chatWindow.scrollHeight;
+    updateSummarizeButtonVisibility();
 }
 
 async function fetchActiveModels() {
-    const provider = apiProvider.value;
-    const hasKey = PROVIDERS[provider].hasKey;
+    const provider = resolveProviderName(apiProvider.value);
+    const hasKey = providerRequiresKey(provider);
     const key = apiKeyValue.value.trim();
-    const endpoint = apiEndpoint.value.trim();
+    const endpoint = apiEndpoint.value.trim() || getProviderDescriptor(provider).url;
 
     if (hasKey && !key) {
         botModelSelect.innerHTML = '<option value="">(Provide API key for models)</option>';
@@ -870,29 +788,7 @@ async function fetchActiveModels() {
     botModelSelect.innerHTML = '<option value="">Loading models...</option>';
 
     try {
-        if (provider === 'claude') {
-            const fallbackModels = ['claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest'];
-            botModelSelect.innerHTML = '';
-            fallbackModels.forEach(model => botModelSelect.add(new Option(model, model)));
-            botModelSelect.selectedIndex = 0;
-            STORAGE.setItem(`gem_selected_model_${provider}`, botModelSelect.value);
-            updateStatusCard();
-            return;
-        }
-
-        const headers = { 'Content-Type': 'application/json' };
-        if (hasKey) headers.Authorization = `Bearer ${key}`;
-
-        const response = await fetch(`${endpoint}/models`, { method: 'GET', headers });
-        if (!response.ok) throw new Error(`Status Error: ${response.status}`);
-
-        const json = await response.json();
-        let models = json.data && Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-
-        models = models.filter(m => {
-            const id = (m.id || m.name || '').toLowerCase();
-            return !id.includes('whisper') && !id.includes('tts') && !id.includes('embed') && !id.includes('guard');
-        });
+        const models = await fetchModelList(endpoint, key, hasKey, provider);
 
         if (models.length === 0) {
             botModelSelect.innerHTML = '<option value="">No models found</option>';
@@ -902,8 +798,7 @@ async function fetchActiveModels() {
 
         const savedSelected = STORAGE.getItem(`gem_selected_model_${provider}`);
         botModelSelect.innerHTML = '';
-        models.forEach(m => {
-            const modelId = m.id || m.name;
+        models.forEach(modelId => {
             botModelSelect.add(new Option(modelId, modelId));
         });
 
@@ -1070,6 +965,7 @@ function loadNotes() {
 
 function saveNotesToStorage() {
     STORAGE.setItem('gem_notes', JSON.stringify(notes));
+    SYNC_MANAGER.pushToCloud('hub_notes');
 }
 function createNewNote() {
     const id = 'note_' + Date.now();
@@ -1190,8 +1086,8 @@ async function complementNote() {
         return;
     }
 
-    const providerName = apiProvider.value;
-    const hasKey = PROVIDERS[providerName].hasKey;
+    const providerName = resolveProviderName(apiProvider.value);
+    const hasKey = providerRequiresKey(providerName);
     const apiKey = apiKeyValue.value.trim();
     const endpoint = apiEndpoint.value.trim();
     const model = botModelSelect.value;
@@ -1284,7 +1180,8 @@ function exportNoteToMD() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Defer revocation so slow browsers do not cancel the download.
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function loadRagKnowledgeBase() {
@@ -1380,33 +1277,33 @@ function renderMessageToDOM(role, content, botName, index) {
             return `
                 <div class="relative group/code my-4">
                     <div class="absolute right-2 top-2 z-10 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity">
-                        <button onclick="copyTextToClipboard(decodeURIComponent('${encodedCode}'), 'Code copied!')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-xl border border-gray-700 cursor-pointer transition">Copy</button>
-                        ${isRunnable ? `<button onclick="window.sendToSandbox('${encodedCode}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded-xl cursor-pointer transition">Sandbox</button>` : ''}
+                        <button type="button" data-copy-code="${encodedCode}" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-xl border border-gray-700 cursor-pointer transition">Copy</button>
+                        ${isRunnable ? `<button type="button" data-sandbox-code="${encodedCode}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2 py-1 rounded-xl cursor-pointer transition">Sandbox</button>` : ''}
                     </div>
-                    <div class="text-[11px] bg-gray-950/80 px-4 py-1 text-gray-400 rounded-t-lg font-mono border-t border-x border-gray-800">${codeLang || 'code'}</div>
-                    <pre class="!mt-0 !rounded-t-none"><code class="language-${codeLang}">${escapeHtml(codeText)}</code></pre>
+                    <div class="text-[11px] bg-gray-950/80 px-4 py-1 text-gray-400 rounded-t-lg font-mono border-t border-x border-gray-800">${escapeHtml(codeLang) || 'code'}</div>
+                    <pre class="!mt-0 !rounded-t-none"><code class="language-${escapeHtml(codeLang)}">${escapeHtml(codeText)}</code></pre>
                 </div>
             `;
         };
 
         const mediaHtml = buildMediaHtmlFromContent(content);
-        formattedContent = `${thinkingHtml}<div class="md-content">${marked.parse(cleanText, { renderer: customRenderer })}</div>${mediaHtml ? `<div class="mt-3">${mediaHtml}</div>` : ''}`;
+        formattedContent = `${thinkingHtml}<div class="md-content">${renderMarkdown(cleanText, customRenderer)}</div>${mediaHtml ? `<div class="mt-3">${mediaHtml}</div>` : ''}`;
     }
 
     const encodedText = safeEncode(typeof content === 'string' ? content : normalizeContentToText(content));
     const regenerateBtnHtml = (role !== 'user' && index !== undefined) ? `
-        <button onclick="window.regenerateMessage(${index})" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">Regenerate</button>
+        <button type="button" data-regenerate-index="${index}" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">Regenerate</button>
     ` : '';
 
     const copyResponseButton = role !== 'user' ? `
         <div class="flex justify-end mt-2 opacity-0 group-hover/msg:opacity-100 transition-opacity gap-3">
-            <button onclick="copyTextToClipboard(decodeURIComponent('${encodedText}'), 'Response copied!')" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">Copy Response</button>
+            <button type="button" data-copy-response="${encodedText}" class="text-[11px] text-gray-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition">Copy Response</button>
             ${regenerateBtnHtml}
         </div>
     ` : '';
 
     messageDiv.innerHTML = `
-        <span class="text-xs text-gray-500 mb-1 px-1">${senderName}</span>
+        <span class="text-xs text-gray-500 mb-1 px-1">${escapeHtml(senderName)}</span>
         <div class="max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
             ${formattedContent}
             ${copyResponseButton}
@@ -1415,21 +1312,21 @@ function renderMessageToDOM(role, content, botName, index) {
     chatWindow.appendChild(messageDiv);
 }
 
-function extractAssistantContent(response, providerName) {
-    if (providerName === 'claude') {
-        const content = Array.isArray(response.content) ? response.content : (response.content || '');
-        const text = Array.isArray(response.content)
-            ? response.content.filter(part => part.type === 'text').map(part => part.text).join('\n')
-            : (response.content || '');
-        return { content, reasoning_content: '' };
+// Delegated handlers for the code/response action buttons (data-* attributes
+// survive HTML sanitisation, unlike inline onclick handlers).
+chatWindow.addEventListener('click', (e) => {
+    const target = e.target.closest('[data-copy-code],[data-sandbox-code],[data-copy-response],[data-regenerate-index]');
+    if (!target) return;
+    if (target.dataset.copyCode !== undefined) {
+        copyTextToClipboard(decodeURIComponent(target.dataset.copyCode), 'Code copied!');
+    } else if (target.dataset.sandboxCode !== undefined) {
+        window.sendToSandbox(target.dataset.sandboxCode);
+    } else if (target.dataset.copyResponse !== undefined) {
+        copyTextToClipboard(decodeURIComponent(target.dataset.copyResponse), 'Response copied!');
+    } else if (target.dataset.regenerateIndex !== undefined) {
+        regenerateMessage(parseInt(target.dataset.regenerateIndex, 10));
     }
-
-    const choice = response.choices?.[0]?.message || {};
-    return {
-        content: choice.content || '',
-        reasoning_content: choice.reasoning_content || choice.thinking_content || ''
-    };
-}
+});
 
 function buildLanguageHint(sourceText = '') {
     // Keep the prompt in English: ask the model to mirror the user language,
@@ -1447,11 +1344,7 @@ function estimateTokenCount(text) {
     return Math.max(1, Math.ceil(normalized.length / 4));
 }
 
-function formatUsd(value) {
-    return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 });
-}
-
-function updateUsageIndicator({ tokens = 0, cost = 0, streaming = false } = {}) {
+function updateUsageIndicator({ tokens = 0, streaming = false } = {}) {
     if (!usageInfo || !streamingStatus) return;
     const wrapper = usageInfo.parentElement;
     if (tokens || streaming) {
@@ -1499,167 +1392,6 @@ function updateStreamingPlaceholder(placeholderData, text) {
     if (!placeholderData?.contentDiv) return;
     placeholderData.contentDiv.textContent = text;
     chatWindow.scrollTop = chatWindow.scrollHeight;
-}
-
-async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal, onDelta) {
-    const headers = { 'Content-Type': 'application/json' };
-    if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-    bodyPayload.stream = true;
-
-    const response = await fetch(`${endpoint}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bodyPayload),
-        signal
-    });
-
-    if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-        const result = await response.json();
-        return { content: result.choices?.[0]?.message?.content || '' };
-    }
-
-    const decoder = new TextDecoder();
-    let accumulated = '';
-    let buffer = '';
-    const toolCallsMap = {};
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (let line of lines) {
-            line = line.trim();
-            if (!line) continue;
-            if (line === 'data: [DONE]') {
-                continue;
-            }
-            if (line.startsWith('data:')) {
-                const payload = line.slice(5).trim();
-                if (!payload) continue;
-                try {
-                    const eventData = JSON.parse(payload);
-                    const choice = eventData.choices?.[0];
-                    const delta = choice?.delta?.content || '';
-                    accumulated += delta;
-                    if (delta) onDelta(delta);
-
-                    const tcDeltas = choice?.delta?.tool_calls;
-                    if (Array.isArray(tcDeltas)) {
-                        for (const tc of tcDeltas) {
-                            const idx = tc.index != null ? tc.index : 0;
-                            if (!toolCallsMap[idx]) toolCallsMap[idx] = { id: '', type: 'function', function: { name: '', arguments: '' } };
-                            if (tc.id) toolCallsMap[idx].id = tc.id;
-                            if (tc.type) toolCallsMap[idx].type = tc.type;
-                            if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name;
-                            if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments;
-                        }
-                    }
-                } catch (error) {
-                    // ignore parse errors for partial chunks
-                }
-            }
-        }
-    }
-
-    const toolCalls = Object.keys(toolCallsMap).map(k => toolCallsMap[k]);
-    return { content: accumulated, toolCalls };
-}
-
-function getEstimatedCostFromText(promptText, outputText) {
-    const promptTokens = estimateTokenCount(promptText);
-    const outputTokens = estimateTokenCount(outputText);
-    const totalTokens = promptTokens + outputTokens;
-    const estimatedCost = (totalTokens / 1000) * TOKEN_COST_PER_1K;
-    return { totalTokens, estimatedCost };
-}
-
-function convertContentForAnthropic(content) {
-    content = unwrapMessageContent(content);
-    if (typeof content === 'string') return content;
-    if (!Array.isArray(content)) return normalizeContentToText(content);
-
-    return content.map(part => {
-        if (typeof part === 'string') return { type: 'text', text: part };
-        if (part?.type === 'text' || part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
-        if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') {
-            const dataUrl = typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url || part.url || '');
-            if (dataUrl.startsWith('data:')) {
-                const [meta, payload] = dataUrl.split(',');
-                const mime = meta.match(/data:(.+);/)?.[1] || 'image/png';
-                return { type: 'image', source: { type: 'base64', media_type: mime, data: payload } };
-            }
-            return { type: 'text', text: '[Image attachment]' };
-        }
-        if (part?.type === 'video_url' || part?.type === 'video' || part?.type === 'input_video') {
-            return { type: 'text', text: '[Video attachment]' };
-        }
-        return { type: 'text', text: '' };
-    }).filter(item => item && (item.text || item.type === 'image'));
-}
-
-async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal) {
-    const provider = PROVIDERS[providerName] || PROVIDERS.openai;
-    if (provider.type === 'anthropic') {
-        const headers = {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-        };
-
-        const systemMessage = bodyPayload.messages.find(msg => msg.role === 'system');
-        const anthropicPayload = {
-            model: bodyPayload.model,
-            max_tokens: bodyPayload.max_tokens || 1024,
-            messages: bodyPayload.messages.filter(msg => msg.role !== 'system').map(msg => ({
-                role: msg.role === 'assistant' ? 'assistant' : 'user',
-                content: convertContentForAnthropic(msg.content)
-            })),
-            temperature: bodyPayload.temperature,
-            top_p: bodyPayload.top_p
-        };
-
-        if (systemMessage) {
-            anthropicPayload.system = typeof systemMessage.content === 'string' ? systemMessage.content : normalizeContentToText(systemMessage.content);
-        }
-
-        const response = await fetch(`${endpoint}/messages`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(anthropicPayload),
-            signal
-        });
-
-        if (!response.ok) {
-            const errJson = await response.json().catch(() => ({}));
-            throw new Error(errJson.error?.message || `HTTP ${response.status}`);
-        }
-        return response.json();
-    }
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-    const response = await fetch(`${endpoint}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bodyPayload),
-        signal
-    });
-
-    if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
-    }
-    return response.json();
 }
 
 function buildMcpSystemNote() {
@@ -1823,12 +1555,12 @@ async function runAgenticSingleModel(session, modelId, providerName, endpoint, a
     updateSummarizeButtonVisibility();
 
     const promptText = buildPromptText(conv);
-    updateUsageIndicator({ tokens: estimateTokenCount(promptText), cost: (estimateTokenCount(promptText) / 1000) * TOKEN_COST_PER_1K, streaming: false });
+    updateUsageIndicator({ tokens: estimateTokenCount(promptText), streaming: false });
 }
 
 async function triggerAiResponse(session) {
-    const providerName = apiProvider.value;
-    const hasKey = PROVIDERS[providerName].hasKey;
+    const providerName = resolveProviderName(apiProvider.value);
+    const hasKey = providerRequiresKey(providerName);
     const apiKey = apiKeyValue.value.trim();
     const endpoint = apiEndpoint.value.trim();
     const temperature = parseFloat(tempInput.value);
@@ -1906,8 +1638,7 @@ async function triggerAiResponse(session) {
             const thinking = parsed.reasoning_content || '';
             if (thinking) content = `<think>${thinking}</think>\n${content}`;
 
-            const usage = getEstimatedCostFromText(promptText, content);
-            updateUsageIndicator({ tokens: usage.totalTokens, cost: usage.estimatedCost, streaming: false });
+            updateUsageIndicator({ tokens: estimateTokenCount(promptText) + estimateTokenCount(content), streaming: false });
 
             session.messages.push({ role: 'assistant', content });
             saveSessionsToStorage();
@@ -1956,7 +1687,7 @@ async function triggerAiResponse(session) {
             session.messages.push({ role: 'assistant', content: multiMarkdown });
             saveSessionsToStorage();
             renderMessageToDOM('assistant', multiMarkdown, 'Hub Comparator', session.messages.length - 1);
-            updateUsageIndicator({ tokens: estimateTokenCount(buildPromptText(messagesToSend)), cost: (estimateTokenCount(buildPromptText(messagesToSend)) / 1000) * TOKEN_COST_PER_1K, streaming: false });
+            updateUsageIndicator({ tokens: estimateTokenCount(buildPromptText(messagesToSend)), streaming: false });
             updateSummarizeButtonVisibility();
         }
         chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -2018,7 +1749,7 @@ async function sendMessage() {
 
     if (session.name.startsWith('Chat #')) {
         const baseName = text || `Image ${attachedFileName}`;
-        session.name = baseName.slice(0, 24) + (baseName.length > 24 ? '...' : '...');
+        session.name = baseName.slice(0, 24) + (baseName.length > 24 ? '...' : '');
     }
 
     const baseSystemPrompt = botPromptInput.value.trim();
@@ -2062,10 +1793,16 @@ startGroupDebateBtn.addEventListener('click', async () => {
         return;
     }
 
-    const providerName = apiProvider.value;
+    const providerName = resolveProviderName(apiProvider.value);
     const apiKey = apiKeyValue.value.trim();
     const endpoint = apiEndpoint.value.trim();
     const model = botModelSelect.value;
+    if (providerRequiresKey(providerName) && !apiKey) {
+        notifyWarning('Please enter your API key!');
+        groupChatModal.classList.add('hidden');
+        openSidebarUniversal();
+        return;
+    }
     if (!model) {
         notifyWarning('Please select an active model in the configuration panel first!');
         groupChatModal.classList.add('hidden');
@@ -2113,14 +1850,15 @@ startGroupDebateBtn.addEventListener('click', async () => {
                     top_p: 0.95,
                     max_tokens: maxTokens
                 };
-                const res = await fetchSingleCompletion(endpoint, apiKey, PROVIDERS[providerName].hasKey, payload, providerName);
+                const res = await fetchSingleCompletion(endpoint, apiKey, providerRequiresKey(providerName), payload, providerName);
                 if (loadingDiv) loadingDiv.remove();
 
-                const rawContent = res.choices[0].message.content || '';
-                const thinking = res.choices[0].message.reasoning_content || res.choices[0].message.thinking_content || '';
+                const parsed = extractAssistantContent(res, providerName);
+                const rawContent = parsed.content || '';
+                const thinking = parsed.reasoning_content || '';
                 const finalContent = thinking ? `<think>${thinking}</think>\n${rawContent}` : rawContent;
 
-                session.messages.push({ role: 'assistant', content: `**[${agent.name}]**\n\n${finalContent}` });
+                session.messages.push({ role: 'assistant', content: `**[${agent.name}]**\n\n${finalContent}`, botName: agent.name });
                 saveSessionsToStorage();
                 renderMessageToDOM('assistant', finalContent, agent.name, session.messages.length - 1);
                 chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -2148,14 +1886,14 @@ botNameInput.addEventListener('input', saveApiSettings);
 botPromptInput.addEventListener('input', saveApiSettings);
 personalInfoInput.addEventListener('input', saveApiSettings);
 botModelSelect.addEventListener('change', () => {
-    STORAGE.setItem(`gem_selected_model_${apiProvider.value}`, botModelSelect.value);
+    STORAGE.setItem(`gem_selected_model_${resolveProviderName(apiProvider.value)}`, botModelSelect.value);
     updateStatusCard();
 });
 
 tempInput.addEventListener('input', (e) => { tempValue.textContent = e.target.value; saveApiSettings(); });
 topPInput.addEventListener('input', (e) => { topPValue.textContent = e.target.value; saveApiSettings(); });
-tokensInput.addEventListener('input', () => { if (tokensValue) tokensValue.textContent = tokensInput.value; saveApiSettings(); });
-tokensInput.addEventListener('change', () => { if (tokensValue) tokensValue.textContent = tokensInput.value; saveApiSettings(); });
+tokensInput.addEventListener('input', saveApiSettings);
+tokensInput.addEventListener('change', saveApiSettings);
 
 refreshModelsBtn.addEventListener('click', fetchActiveModels);
 newChatBtn.addEventListener('click', createNewSession);
@@ -2499,7 +2237,7 @@ exportNoteBtn.addEventListener('click', exportNoteToMD);
 
 exportJsonBtn.addEventListener('click', () => {
     const config = {
-        provider: apiProvider.value,
+        provider: resolveProviderName(apiProvider.value),
         apiKey: apiKeyValue.value.trim(),
         endpoint: apiEndpoint.value.trim(),
         botName: botNameInput.value.trim(),
@@ -2526,7 +2264,8 @@ importJsonInput.addEventListener('change', (e) => {
     reader.onload = function(event) {
         try {
             const config = JSON.parse(event.target.result);
-            if (config.provider) apiProvider.value = config.provider;
+            const importedProvider = config.provider ? resolveProviderName(config.provider) : null;
+            if (importedProvider && PROVIDERS[importedProvider]) apiProvider.value = importedProvider;
             handleProviderChange(apiProvider.value);
             if (config.apiKey) apiKeyValue.value = config.apiKey;
             if (config.endpoint) apiEndpoint.value = config.endpoint;
@@ -2535,9 +2274,9 @@ importJsonInput.addEventListener('change', (e) => {
             if (config.personalInfo !== undefined) personalInfoInput.value = config.personalInfo;
             if (config.temperature !== undefined) { tempInput.value = config.temperature; tempValue.textContent = config.temperature; }
             if (config.topP !== undefined) { topPInput.value = config.topP; topPValue.textContent = config.topP; }
-            if (config.maxTokens !== undefined) { tokensInput.value = config.maxTokens; if (tokensValue) tokensValue.textContent = config.maxTokens; }
+            if (config.maxTokens !== undefined) tokensInput.value = config.maxTokens;
             saveApiSettings();
-            if (config.selectedModel) STORAGE.setItem(`gem_selected_model_${config.provider}`, config.selectedModel);
+            if (config.selectedModel) STORAGE.setItem(`gem_selected_model_${resolveProviderName(apiProvider.value)}`, config.selectedModel);
             fetchActiveModels();
             notifySuccess('Configuration Loaded!');
             closeSidebarUniversal();
@@ -2550,14 +2289,15 @@ importJsonInput.addEventListener('change', (e) => {
 });
 
 function updateStatusCard() {
-    const provider = apiProvider.value.toUpperCase();
+    const provider = resolveProviderName(apiProvider.value).toUpperCase();
     const model = selectedMultiModels.length > 0 ? `[Multi Mode: ${selectedMultiModels.length} models]` : (botModelSelect.value || 'no active model');
-    const name = botNameInput.value.trim() || 'Default AI';
-    const prompt = botPromptInput.value.trim();
+    const name = escapeHtml(botNameInput.value.trim() || 'Default AI');
+    const prompt = escapeHtml(botPromptInput.value.trim());
+    const providerLine = `Provider: ${escapeHtml(provider)} | ${escapeHtml(model)}`;
     if (!prompt) {
-        activeStatusText.innerHTML = `${name} (No Prompt)<br><span class="text-[10px] text-gray-500 font-mono">Provider: ${provider} | ${model}</span>`;
+        activeStatusText.innerHTML = `${name} (No Prompt)<br><span class="text-[10px] text-gray-500 font-mono">${providerLine}</span>`;
     } else {
-        activeStatusText.innerHTML = `<strong class="text-emerald-400">${name}</strong><br><span class="text-gray-400 block truncate text-[11px]">${prompt}</span><span class="text-[10px] text-gray-500 font-mono block">Provider: ${provider} | ${model}</span>`;
+        activeStatusText.innerHTML = `<strong class="text-emerald-400">${name}</strong><br><span class="text-gray-400 block truncate text-[11px]">${prompt}</span><span class="text-[10px] text-gray-500 font-mono block">${providerLine}</span>`;
     }
     updateWelcomeModelInfo();
 }
@@ -2597,16 +2337,6 @@ function updateSyncStatus(text, isError) {
         }
     }
 }
-
-saveSessionsToStorage = SYNC_MANAGER.wrapStorageSave(saveSessionsToStorage, 'hub_sessions');
-saveNotesToStorage = SYNC_MANAGER.wrapStorageSave(saveNotesToStorage, 'hub_notes');
-
-const _origSaveApiSettings = saveApiSettings;
-saveApiSettings = function () {
-    _origSaveApiSettings.apply(this, arguments);
-    SYNC_MANAGER.pushToCloud('hub_settings');
-    SYNC_MANAGER.pushToCloud('hub_personal');
-};
 
 // Auth modal
 const authModal = document.getElementById('authModal');
@@ -2746,6 +2476,9 @@ updateSyncStatus();
 
 document.addEventListener('DOMContentLoaded', async () => {
     await STORAGE.ready();
+    // Show the hub version in the new-chat welcome panel.
+    const appVersionLabel = document.getElementById('appVersionLabel');
+    if (appVersionLabel) appVersionLabel.textContent = APP_VERSION;
     loadApiSettings();
     loadSessions();
     loadNotes();

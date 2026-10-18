@@ -124,29 +124,38 @@ const GIT_ENGINE = (() => {
     const objects = new Map(); // sha -> raw bytes.
     const shaByCommitId = {};
     const tipByBranch = {};
+    const emittedShas = new Set();
     let prevSha = null;
 
     for (const commit of ordered) {
       const { rootSha, objects: treeObjects } = await buildTreeForSnapshot(commit.snapshot || {});
       for (const [sha, raw] of treeObjects) objects.set(sha, raw);
 
+      const branch = commit.branch || currentBranch || DEFAULT_BRANCH;
+      // Parent is the previous commit on the SAME branch, not the previous
+      // commit globally (which would fuse all branches into one line).
+      let parentSha = tipByBranch[branch] || null;
+      if (!parentSha && branches && branches[branch] && emittedShas.has(branches[branch])) {
+        // First commit on a branch created from an already-emitted tip.
+        parentSha = branches[branch];
+      }
+
       const timestampSec = Math.floor((commit.timestamp || Date.now()) / 1000);
-      const raw = commitRaw(rootSha, prevSha, commit.message || 'Untitled commit', timestampSec);
+      const raw = commitRaw(rootSha, parentSha, commit.message || 'Untitled commit', timestampSec);
       const sha = await sha1Hex(raw);
       objects.set(sha, raw);
 
       shaByCommitId[commit.id] = sha;
-      prevSha = sha;
-      const branch = commit.branch || currentBranch || DEFAULT_BRANCH;
+      emittedShas.add(sha);
       tipByBranch[branch] = sha;
+      prevSha = sha;
     }
 
-    // Ensure every known branch has a ref (empty branches point at tip).
+    // Branches without commits in this history keep their own tip (which may be
+    // an existing commit); never borrow another branch's tip.
     for (const name of Object.keys(branches || {})) {
-      if (!tipByBranch[name] && prevSha) tipByBranch[name] = branches[name] || prevSha;
-    }
-    if (currentBranch && prevSha && !tipByBranch[currentBranch]) {
-      tipByBranch[currentBranch] = prevSha;
+      const tip = branches[name];
+      if (!tipByBranch[name] && tip && emittedShas.has(tip)) tipByBranch[name] = tip;
     }
 
     // Deflate all objects for .git/objects/.
@@ -183,27 +192,5 @@ const GIT_ENGINE = (() => {
     return { gitFiles, shaByCommitId, tipByBranch };
   }
 
-  // Split imported ZIP entries into workspace files and git meta.
-  function splitZipEntries(entries) {
-    // entries: [{ path, data }] with data as string (text files only here).
-    const files = {};
-    let meta = null;
-    for (const e of entries) {
-      if (e.path.startsWith('.git/')) {
-        if (e.path === '.git/traliran-meta.json') {
-          try {
-            meta = JSON.parse(typeof e.data === 'string' ? e.data : enc.decode(e.data));
-          } catch {
-            meta = null;
-          }
-        }
-        continue; // Never import .git internals into the workspace.
-      }
-      if (e.path.endsWith('/')) continue;
-      files[e.path] = e.data;
-    }
-    return { files, meta };
-  }
-
-  return { DEFAULT_BRANCH, sha1Hex, buildGitFiles, splitZipEntries };
+  return { DEFAULT_BRANCH, sha1Hex, buildGitFiles };
 })();

@@ -189,6 +189,9 @@
             var extraLen = readU16(data, pos + 30);
             var commentLen = readU16(data, pos + 32);
             var localOffset = readU32(data, pos + 42);
+            // Compressed size from the central directory is authoritative: for
+            // streamed archives (data-descriptor flag) the local header stores 0.
+            var compSize = readU32(data, pos + 20);
             var nameBytes = data.slice(pos + 46, pos + 46 + nameLen);
             var name = dec.decode(nameBytes);
             pos += 46 + nameLen + extraLen + commentLen;
@@ -197,7 +200,6 @@
             var localNameLen = readU16(data, localOffset + 26);
             var localExtraLen = readU16(data, localOffset + 28);
             var dataStart = localOffset + 30 + localNameLen + localExtraLen;
-            var compSize = readU32(data, localOffset + 18);
             var raw = data.slice(dataStart, dataStart + compSize);
 
             var content;
@@ -229,34 +231,29 @@
 
     function collectRepoData() {
         // Prefer the IndexedDB cache so export reflects persisted state.
-        var activeId = null;
-        try {
-            if (typeof STORAGE !== 'undefined') activeId = STORAGE.getItem('ide_active_repo_id');
-        } catch (e) { activeId = null; }
-        if (!activeId && typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+        var activeId = STORAGE.getItem('ide_active_repo_id');
+        if (!activeId && REPO_STORE.activeId) {
             activeId = REPO_STORE.activeId;
         }
 
         var repoName = 'workspace';
         try {
-            if (typeof REPO_STORE !== 'undefined' && REPO_STORE.getActive) {
-                repoName = REPO_STORE.getActive().name || repoName;
-            }
+            repoName = REPO_STORE.getActive().name || repoName;
         } catch (e) { /* Keep default name. */ }
 
         var files = readJsonCache(activeId ? ('ide_repo_' + activeId + '_files') : 'ide_vfs_files', null)
             || readJsonCache('ide_vfs_files', null)
-            || (typeof vfsFiles !== 'undefined' ? vfsFiles : {});
+            || vfsFiles;
 
         var commits = readJsonCache(activeId ? ('ide_repo_' + activeId + '_commits') : 'ide_vfs_commits', null)
             || readJsonCache('ide_vfs_commits', null)
-            || (typeof commitHistory !== 'undefined' ? commitHistory : []);
+            || commitHistory;
 
         var gitMeta = readJsonCache(activeId ? ('ide_repo_' + activeId + '_git') : '', null) || null;
         var branches = (gitMeta && gitMeta.branches) || null;
         var currentBranch = (gitMeta && gitMeta.currentBranch) || null;
         try {
-            if ((!branches || !currentBranch) && typeof REPO_STORE !== 'undefined' && REPO_STORE.meta) {
+            if ((!branches || !currentBranch) && REPO_STORE.meta) {
                 branches = branches || REPO_STORE.meta.branches;
                 currentBranch = currentBranch || REPO_STORE.meta.currentBranch;
             }
@@ -279,22 +276,12 @@
     }
 
     // --- .git payload ---
-    // Uses the real git object builder when available so the exported
-    // archive is a valid git repository with branches. Otherwise falls
-    // back to a minimal skeleton so the archive is still a valid repo.
+    // Uses the real git object builder so the exported archive is a valid
+    // git repository with branches.
 
     async function collectGitFiles(repo) {
-        if (typeof GIT_ENGINE !== 'undefined' && GIT_ENGINE.buildGitFiles) {
-            var built = await GIT_ENGINE.buildGitFiles(repo.commits, repo.branches, repo.currentBranch);
-            return built.gitFiles || [];
-        }
-        return [
-            { path: '.git/HEAD', data: enc.encode('ref: refs/heads/' + repo.currentBranch + '\n') },
-            {
-                path: '.git/config',
-                data: enc.encode('[core]\n\trepositoryformatversion = 0\n\tfilemode = false\n\tbare = false\n')
-            }
-        ];
+        var built = await GIT_ENGINE.buildGitFiles(repo.commits, repo.branches, repo.currentBranch);
+        return built.gitFiles || [];
     }
 
     function toBytes(value) {
@@ -358,11 +345,6 @@
                 data: enc.encode(JSON.stringify(repo.commits))
             });
 
-            if (entries.length === 0) {
-                fail('Nothing to export: the repository is empty.');
-                return;
-            }
-
             var bytes = buildZip(entries);
             var blob = new Blob([bytes], { type: 'application/zip' });
             downloadBlob(blob, sanitizeRepoName(repo.repoName) + '.zip');
@@ -387,20 +369,30 @@
                 return;
             }
 
+            // Decode only UTF-8 text entries; binary files are skipped so they
+            // are never corrupted into replacement-character garbage.
             var textByName = {};
+            var binarySkipped = 0;
+            var fatalDecoder = new TextDecoder('utf-8', { fatal: true });
             for (var i = 0; i < entries.length; i++) {
-                textByName[entries[i].name] = dec.decode(entries[i].data);
+                var entryName = entries[i].name;
+                if (entryName.startsWith('.git/')) {
+                    textByName[entryName] = dec.decode(entries[i].data);
+                    continue;
+                }
+                try {
+                    textByName[entryName] = fatalDecoder.decode(entries[i].data);
+                } catch (e) {
+                    binarySkipped++;
+                    console.warn('[ZIP_EXPORT] Skipping non-text file:', entryName);
+                }
             }
 
-            // Restore branches first so files land on the right branch.
+            // Restore branches, tips and the SHA map first so files land on the right branch.
             var hasGit = Object.keys(textByName).some(function (n) { return n.startsWith('.git/'); });
             try {
-                if (textByName['.git/traliran-meta.json'] && typeof REPO_STORE !== 'undefined') {
-                    var meta = JSON.parse(textByName['.git/traliran-meta.json']);
-                    if (meta && meta.currentBranch) {
-                        try { REPO_STORE.createBranch(meta.currentBranch); }
-                        catch (e) { REPO_STORE.switchBranch(meta.currentBranch); }
-                    }
+                if (textByName['.git/traliran-meta.json'] && REPO_STORE.restoreMeta) {
+                    REPO_STORE.restoreMeta(JSON.parse(textByName['.git/traliran-meta.json']));
                 }
             } catch (e) {
                 console.error('[ZIP_EXPORT] Branch restore skipped:', e);
@@ -417,25 +409,30 @@
                 console.error('[ZIP_EXPORT] Commit backup skipped:', e);
             }
 
+            // Re-bind imported commits to the active repository so repo-scoped
+            // queries (load/delete) can find them after import.
+            if (restoredCommits && REPO_STORE.activeId) {
+                var activeRepoId = REPO_STORE.activeId;
+                restoredCommits = restoredCommits.map(function (c) {
+                    return Object.assign({}, c, { repoId: activeRepoId });
+                });
+            }
+
             // Write working tree files (.git internals never enter the VFS).
             var jobs = [];
             var names = Object.keys(textByName).sort();
             for (var k = 0; k < names.length; k++) {
                 var name = names[k];
                 if (name.startsWith('.git/')) continue;
-                if (typeof VFS !== 'undefined' && VFS.writeFile) {
-                    jobs.push(VFS.writeFile(name, textByName[name]));
-                }
+                jobs.push(VFS.writeFile(name, textByName[name]));
             }
             await Promise.all(jobs);
 
-            if (restoredCommits && typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
+            if (restoredCommits && REPO_STORE.activeId) {
                 REPO_STORE.saveCommits(restoredCommits);
-            } else if (restoredCommits && typeof STORAGE !== 'undefined') {
-                STORAGE.setItem('ide_vfs_commits', JSON.stringify(restoredCommits));
             }
             try {
-                if (restoredCommits && typeof commitHistory !== 'undefined') {
+                if (restoredCommits) {
                     commitHistory = restoredCommits;
                 }
             } catch (e) { /* Imported files are already written. */ }
@@ -451,7 +448,9 @@
                 console.error('[ZIP_EXPORT] View refresh skipped:', e);
             }
 
-            done(hasGit ? 'Git repository imported successfully!' : 'Project imported successfully!');
+            var summary = hasGit ? 'Git repository imported successfully!' : 'Project imported successfully!';
+            if (binarySkipped > 0) summary += ' (' + binarySkipped + ' binary file(s) skipped)';
+            done(summary);
         } catch (e) {
             fail('Failed to import ZIP: ' + (e && e.message ? e.message : e));
         }
@@ -460,8 +459,6 @@
     var api = {
         exportActiveRepo: exportActiveRepo,
         importRepoZip: importRepoZip,
-        // Exposed for unit testing only.
-        _zip: { buildZip: buildZip, parseZip: parseZip, crc32: crc32 }
     };
 
     global.ZIP_EXPORT = api;

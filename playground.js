@@ -5,19 +5,6 @@ let ragSessions = [];
 let currentRagSessionId = null;
 let currentAbortController = null;
 
-const PROVIDERS = {
-    groq: { url: 'https://api.groq.com/openai/v1', hasKey: true, type: 'openai' },
-    google: { url: 'https://generativelanguage.googleapis.com/v1beta/openai', hasKey: true, type: 'openai' },
-    openrouter: { url: 'https://openrouter.ai/api/v1', hasKey: true, type: 'openai' },
-    openai: { url: 'https://api.openai.com/v1', hasKey: true, type: 'openai' },
-    deepseek: { url: 'https://api.deepseek.com/v1', hasKey: true, type: 'openai' },
-    qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', hasKey: true, type: 'openai' },
-    glm: { url: 'https://open.bigmodel.cn/api/paas/v4', hasKey: true, type: 'openai' },
-    claude: { url: 'https://api.anthropic.com/v1', hasKey: true, type: 'anthropic' },
-    ollama: { url: 'http://localhost:11434/v1', hasKey: false, type: 'openai' },
-    llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
-};
-
 // DOM Elements
 const kbUpload = document.getElementById('kbUpload');
 const kbFileList = document.getElementById('kbFileList');
@@ -46,8 +33,6 @@ const ragChatsList = document.getElementById('ragChatsList');
 const newRagChatBtn = document.getElementById('newRagChatBtn');
 const newRagChatTopBtn = document.getElementById('newRagChatTopBtn');
 const ragActiveChatName = document.getElementById('ragActiveChatName');
-
-marked.use({ breaks: true, gfm: true });
 
 // ---------- RAG chat sessions (multi-chat history) ----------
 function getActiveRagSession() {
@@ -158,7 +143,7 @@ function loadActiveRagSession() {
         chatWindow.appendChild(welcomeMessage);
     } else {
         welcomeMessage.classList.add('hidden');
-        session.messages.forEach(msg => renderMessage(msg.role, msg.content, true));
+        session.messages.forEach(msg => renderMessage(msg.role, msg.content));
     }
     if (ragActiveChatName) ragActiveChatName.textContent = session ? session.name : 'New Chat';
     chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -183,18 +168,18 @@ if (newRagChatBtn) newRagChatBtn.addEventListener('click', createNewRagSession);
 if (newRagChatTopBtn) newRagChatTopBtn.addEventListener('click', createNewRagSession);
 
 function loadConfig() {
-    const provider = STORAGE.getItem('gem_provider') || 'groq';
+    const provider = resolveProviderName(STORAGE.getItem('gem_provider') || 'groq');
     const model = STORAGE.getItem(`gem_selected_model_${provider}`) || 'unknown';
     const botName = STORAGE.getItem('gem_bot_name') || 'RAG Assistant';
-    
+
     activeModelDisplay.textContent = `${botName} | ${provider.toUpperCase()} | ${model}`;
-    
+
     return {
         provider,
         model,
         botName,
         apiKey: STORAGE.getItem(`gem_key_${provider}`) || '',
-        endpoint: STORAGE.getItem(`gem_endpoint_${provider}`) || PROVIDERS[provider].url,
+        endpoint: STORAGE.getItem(`gem_endpoint_${provider}`) || getProviderDescriptor(provider).url,
         systemPrompt: STORAGE.getItem('gem_system_prompt') || 'You are a knowledgeable AI assistant.',
         personalInfo: STORAGE.getItem('gem_personal_info') || ''
     };
@@ -215,6 +200,7 @@ function loadKnowledgeBase() {
 function saveKnowledgeBase() {
     STORAGE.setItem('gem_rag_kb', JSON.stringify(knowledgeBase));
     renderKbFiles();
+    SYNC_MANAGER.pushToCloud('rag_knowledge');
 }
 
 function renderKbFiles() {
@@ -229,7 +215,7 @@ function renderKbListInto(container) {
         container.innerHTML = '<p class="text-[10px] text-gray-600 italic">No files loaded.</p>';
         return;
     }
-    knowledgeBase.forEach((file, index) => {
+    knowledgeBase.forEach((file) => {
         const div = document.createElement('div');
         div.className = 'flex items-center justify-between p-2 bg-gray-800 border border-gray-700 rounded-lg text-xs group';
         const nameSpan = document.createElement('span');
@@ -240,7 +226,9 @@ function renderKbListInto(container) {
         removeBtn.textContent = 'Remove';
         removeBtn.setAttribute('aria-label', 'Remove ' + file.name);
         removeBtn.onclick = () => {
-            knowledgeBase.splice(index, 1);
+            // Resolve by identity so a stale render can never remove the wrong file.
+            const idx = knowledgeBase.indexOf(file);
+            if (idx > -1) knowledgeBase.splice(idx, 1);
             saveKnowledgeBase();
         };
         div.appendChild(nameSpan);
@@ -314,87 +302,26 @@ if (clearKbModalBtn) clearKbModalBtn.addEventListener('click', async () => {
     }
 });
 
-function escapeHtml(value) {
-    return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function renderMessage(role, content, fromHistory) {
+function renderMessage(role, content) {
     // Hide the welcome banner whenever a real message is rendered.
     welcomeMessage.classList.add('hidden');
     const msgDiv = document.createElement('div');
     msgDiv.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} w-full`;
-    
+
     const bgClass = role === 'user' ? 'bg-emerald-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-100';
-    
+    const isUser = role === 'user';
+    const bodyHtml = isUser
+        ? escapeHtml(content).replace(/\n/g, '<br>')
+        : renderMarkdown(typeof content === 'string' ? content : normalizeContentToText(content));
+
     msgDiv.innerHTML = `
-        <span class="text-xs text-gray-500 mb-1 px-1">${role === 'user' ? 'You' : 'AI'}</span>
+        <span class="text-xs text-gray-500 mb-1 px-1">${isUser ? 'You' : 'AI'}</span>
         <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
-            <div class="md-content">${role === 'user' ? escapeHtml(content).replace(/\\n/g, '<br>') : marked.parse(content)}</div>
+            <div class="md-content">${bodyHtml}</div>
         </div>
     `;
     chatWindow.appendChild(msgDiv);
     chatWindow.scrollTop = chatWindow.scrollHeight;
-}
-
-async function fetchStreamingCompletion(config, messages, signal, onDelta) {
-    const { provider, apiKey, endpoint, model } = config;
-    const providerDetails = PROVIDERS[provider];
-    
-    const headers = { 'Content-Type': 'application/json' };
-    if (providerDetails.hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-    const body = {
-        model: model,
-        messages,
-        stream: true,
-        temperature: 0.7,
-        max_tokens: 4096,
-        stream_options: { "include_usage": true }
-    };
-
-    // Simple handler for Claude (non-openai) if needed, but here we focus on OpenAI-compatible
-    const response = await fetch(`${endpoint}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let accumulated = '';
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') continue;
-                try {
-                    const json = JSON.parse(data);
-
-                    if (json.usage) {
-                        const { prompt_tokens, completion_tokens, total_tokens } = json.usage;
-                        usageInfo.textContent = `Tokens: ${total_tokens} (P: ${prompt_tokens}, C: ${completion_tokens})`;
-                    }
-
-                    if (json.choices && json.choices[0]?.delta?.content) {
-                        const delta = json.choices[0].delta.content;
-                        accumulated += delta;
-                        onDelta(delta);
-                    }
-                } catch (e) {}
-            }
-        }
-    }
-    return accumulated;
 }
 
 async function sendMessage() {
@@ -409,7 +336,7 @@ async function sendMessage() {
     if (!session) return;
 
     const config = loadConfig();
-    if (PROVIDERS[config.provider].hasKey && !config.apiKey) {
+    if (providerRequiresKey(config.provider) && !config.apiKey) {
         notifyWarning('API Key missing! Please configure it in the Hub.');
         return;
     }
@@ -471,15 +398,33 @@ ${kbContext || 'No files uploaded yet.'}
         document.getElementById('usageIndicator').classList.add('flex');
         streamingStatus.textContent = 'Streaming...';
 
-        const finalContent = await fetchStreamingCompletion(
-            config, 
-            messages, 
-            currentAbortController.signal, 
+        const bodyPayload = {
+            model: config.model,
+            messages,
+            temperature: 0.7,
+            max_tokens: 4096,
+            stream_options: { include_usage: true }
+        };
+
+        const streamResult = await fetchStreamingCompletion(
+            config.endpoint,
+            config.apiKey,
+            providerRequiresKey(config.provider),
+            bodyPayload,
+            config.provider,
+            currentAbortController.signal,
             (delta) => {
                 contentDiv.textContent += delta;
                 chatWindow.scrollTop = chatWindow.scrollHeight;
+            },
+            (usage) => {
+                const total = usage.total_tokens ?? usage.output_tokens ?? 0;
+                const prompt = usage.input_tokens ?? usage.prompt_tokens ?? 0;
+                const completion = usage.output_tokens ?? usage.completion_tokens ?? 0;
+                usageInfo.textContent = `Tokens: ${total} (P: ${prompt}, C: ${completion})`;
             }
         );
+        const finalContent = streamResult.content || '';
 
         session.messages.push({ role: 'assistant', content: finalContent });
         saveRagSessionsToStorage();
@@ -527,9 +472,9 @@ userInput.addEventListener('input', function() {
 openSettingsBtn.addEventListener('click', () => {
     const config = loadConfig();
     currentConfigDisplay.innerHTML = `
-        <div><strong>Provider:</strong> ${config.provider}</div>
-        <div><strong>Model:</strong> ${config.model}</div>
-        <div><strong>Bot Name:</strong> ${config.botName}</div>
+        <div><strong>Provider:</strong> ${escapeHtml(config.provider)}</div>
+        <div><strong>Model:</strong> ${escapeHtml(config.model)}</div>
+        <div><strong>Bot Name:</strong> ${escapeHtml(config.botName)}</div>
         <div><strong>Key:</strong> ${config.apiKey ? '********' : 'Missing'}</div>
     `;
     settingsModal.classList.remove('hidden');
@@ -540,8 +485,6 @@ refreshConfigBtn.addEventListener('click', () => {
     loadConfig();
     openSettingsBtn.click();
 });
-
-saveKnowledgeBase = SYNC_MANAGER.wrapStorageSave(saveKnowledgeBase, 'rag_knowledge');
 
 function setupPlaygroundSync() {
     const loginIndicator = document.createElement('div');

@@ -101,14 +101,6 @@ const REPO_STORE = (() => {
       return [...this.repos];
     },
 
-    getFilesKey() {
-      return filesKey(this.activeId);
-    },
-
-    getCommitsKey() {
-      return commitsKey(this.activeId);
-    },
-
     // Persist active files + mirror to legacy keys for cloud sync compat.
     saveFiles(filesObj) {
       const json = JSON.stringify(filesObj);
@@ -157,13 +149,6 @@ const REPO_STORE = (() => {
       STORAGE.setItem(commitsKey(repo.id), JSON.stringify([]));
       saveMeta(repo.id, defaultMeta('main'));
       return repo;
-    },
-
-    rename(id, name) {
-      const repo = this.repos.find((r) => r.id === id);
-      if (!repo) return;
-      repo.name = sanitizeName(name, repo.name);
-      saveIndex(this.repos);
     },
 
     remove(id) {
@@ -271,6 +256,23 @@ const REPO_STORE = (() => {
 
     getCommitSha(commitId) {
       return (this.meta.shaByCommitId && this.meta.shaByCommitId[commitId]) || null;
+    },
+
+    // Merge git meta (branches + SHA map) imported from a .git archive into
+    // the active repository, so imported history/branches are fully restored.
+    restoreMeta(meta) {
+      if (!meta || typeof meta !== 'object') return;
+      const current = this.meta || defaultMeta();
+      const branches = { ...(current.branches || {}), ...(meta.branches || {}) };
+      const currentBranch = meta.currentBranch || current.currentBranch || 'main';
+      if (!(currentBranch in branches)) branches[currentBranch] = null;
+      this.meta = {
+        ...current,
+        currentBranch,
+        branches,
+        shaByCommitId: { ...(current.shaByCommitId || {}), ...(meta.shaByCommitId || {}) },
+      };
+      saveMeta(this.activeId, this.meta);
     },
 
     // Find latest snapshot commit id for a branch tip (by stored branch name).
