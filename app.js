@@ -2460,6 +2460,9 @@ updateSyncStatus();
 
 document.addEventListener('DOMContentLoaded', async () => {
     await STORAGE.ready();
+    // Show the hub version in the new-chat welcome panel.
+    const appVersionLabel = document.getElementById('appVersionLabel');
+    if (appVersionLabel) appVersionLabel.textContent = APP_VERSION;
     loadApiSettings();
     loadSessions();
     loadNotes();

@@ -1,6 +1,7 @@
 # 💎 Traliran AI Hub
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](#)
 
 A lightweight, serverless, and privacy-first AI web client and sandbox running directly in your browser. Features a built-in code execution environment, a full-fledged AI IDE, and a parallel model benchmarking tool. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) without middlemen.
 
@@ -44,7 +45,7 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 
 ## 🛡️ 100% Privacy-First & Serverless
 * **Zero Middleman Servers:** The application is 100% client-side and runs directly in your browser.
-* **Direct Routing:** Your API keys are stored strictly in your browser's `LocalStorage` and sent straight to official provider endpoints. No logs, no data collection, no leaks.
+* **Direct Routing:** Your API keys are stored strictly in your browser's local storage (IndexedDB) and sent straight to official provider endpoints. No logs, no data collection, no leaks.
 * **AGPLv3 Guaranteed:** Complete freedom to audit, inspect, and self-host, backed by a strong copyleft license.
 
 ---
@@ -78,7 +79,7 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 
 MCP lets you plug external tools into the chat. The client (`mcp.js`) speaks JSON-RPC 2.0 over Streamable HTTP to any remote MCP server and turns its tools into OpenAI-style function tools used by the agentic loop.
 
-**Connect a server:** open **🧩 MCP Servers**, enter a name + URL (and an optional `Bearer` auth header), hit **Add & Connect**. Servers are saved in `LocalStorage` and auto-reconnect on startup. You can also add one from the console:
+**Connect a server:** open **🧩 MCP Servers**, enter a name + URL (and an optional `Bearer` auth header), hit **Add & Connect**. Servers are saved in your browser's local storage (IndexedDB) and auto-reconnect on startup. You can also add one from the console:
 
 ```js
 const entry = MCP_MANAGER.add({ name: 'MyServer', url: 'https://host/mcp', authHeader: '' });

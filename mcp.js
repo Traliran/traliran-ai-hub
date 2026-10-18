@@ -10,6 +10,9 @@
 
 const MCP_STORAGE_KEY = 'gem_mcp_servers';
 
+// Single source of truth for the displayed hub version.
+const APP_VERSION = '3.1.0';
+
 function sanitizeMcpName(name) {
     return (name || 'server')
         .replace(/[^a-zA-Z0-9_]/g, '_')
@@ -141,7 +144,7 @@ class McpClient {
         const initResult = await this._rpc('initialize', {
             protocolVersion: this.protocolVersion,
             capabilities: {},
-            clientInfo: { name: 'TraliranAIHub', version: '3.0' }
+            clientInfo: { name: 'TraliranAIHub', version: APP_VERSION }
         });
         if (initResult && initResult.protocolVersion) {
             this.protocolVersion = initResult.protocolVersion;
