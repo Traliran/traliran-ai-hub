@@ -85,7 +85,6 @@
     function notifySuccess(message, duration) { return notify(message, 'success', duration); }
     function notifyWarning(message, duration) { return notify(message, 'warning', duration); }
     function notifyError(message, duration) { return notify(message, 'error', duration); }
-    function notifyInfo(message, duration) { return notify(message, 'info', duration); }
 
     function closeDialogOverlay() {
         var overlay = document.getElementById(DIALOG_OVERLAY_ID);
@@ -133,34 +132,6 @@
         document.body.appendChild(overlay);
         document.addEventListener('keydown', escHandler, true);
         return { overlay: overlay, card: card };
-    }
-
-    // In-app replacement for native alert(): shows a modal with a single OK button.
-    function showAppAlert(message, title) {
-        return new Promise(function (resolve) {
-            var parts = buildOverlay({ title: title || 'Notice', message: String(message == null ? '' : message) });
-            var actions = document.createElement('div');
-            actions.className = 'app-dialog-actions';
-            var okBtn = document.createElement('button');
-            okBtn.type = 'button';
-            okBtn.className = 'app-dialog-btn app-dialog-btn-primary';
-            okBtn.textContent = 'OK';
-            okBtn.addEventListener('click', function () {
-                closeDialogOverlay();
-                resolve();
-            });
-            actions.appendChild(okBtn);
-            parts.card.appendChild(actions);
-            if (parts.overlay) {
-                parts.overlay.addEventListener('click', function (e) {
-                    if (e.target === parts.overlay) {
-                        closeDialogOverlay();
-                        resolve();
-                    }
-                });
-            }
-            setTimeout(function () { okBtn.focus(); }, 30);
-        });
     }
 
     // In-app replacement for native confirm(): resolves to true/false.
@@ -279,19 +250,6 @@
     window.notifySuccess = notifySuccess;
     window.notifyWarning = notifyWarning;
     window.notifyError = notifyError;
-    window.notifyInfo = notifyInfo;
-    window.showToast = notify;
-    window.showAppAlert = showAppAlert;
     window.showAppConfirm = showAppConfirm;
     window.showAppPrompt = showAppPrompt;
-    window.AppDialogs = {
-        notify: notify,
-        success: notifySuccess,
-        warning: notifyWarning,
-        error: notifyError,
-        info: notifyInfo,
-        alert: showAppAlert,
-        confirm: showAppConfirm,
-        prompt: showAppPrompt
-    };
 })();

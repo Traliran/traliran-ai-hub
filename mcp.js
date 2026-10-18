@@ -43,25 +43,37 @@ async function parseJsonRpcResponse(response) {
         const decoder = new TextDecoder();
         let buffer = '';
         let collected = null;
+        // Accumulator lives outside the read loop so events split across chunks survive.
+        let dataLine = '';
+        const consumeEvent = () => {
+            if (!dataLine) return;
+            try {
+                const parsed = JSON.parse(dataLine);
+                if (parsed.result !== undefined || parsed.error !== undefined) collected = parsed;
+            } catch (_) { /* ignore malformed event */ }
+            dataLine = '';
+        };
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop();
-            let dataLine = '';
-            for (const line of lines) {
+            for (const raw of lines) {
+                const line = raw.replace(/\r$/, '');
                 if (line.startsWith('data:')) {
                     dataLine += line.slice(5).trim();
-                } else if (line.trim() === '' && dataLine) {
-                    try {
-                        const parsed = JSON.parse(dataLine);
-                        if (parsed.result !== undefined || parsed.error !== undefined) collected = parsed;
-                    } catch (_) { /* ignore partial */ }
-                    dataLine = '';
+                } else if (line === '') {
+                    consumeEvent();
                 }
             }
         }
+        // Flush an event that was not terminated by a trailing blank line.
+        if (buffer) {
+            const tail = buffer.replace(/\r$/, '');
+            if (tail.startsWith('data:')) dataLine += tail.slice(5).trim();
+        }
+        consumeEvent();
         if (!collected) throw new Error('Empty SSE response from MCP server');
         return collected;
     }
@@ -145,6 +157,17 @@ class McpClient {
         const result = await this._rpc('tools/call', { name, arguments: args || {} });
         return formatMcpResult(result);
     }
+
+    // Terminate the Streamable HTTP session (best effort).
+    async close() {
+        this.connected = false;
+        this.tools = [];
+        if (!this.sessionId) return;
+        try {
+            await fetch(this.url, { method: 'DELETE', headers: this._headers() });
+        } catch (_) { /* best effort */ }
+        this.sessionId = null;
+    }
 }
 
 const MCP_MANAGER = {
@@ -168,6 +191,8 @@ const MCP_MANAGER = {
     async connectOne(id) {
         const cfg = this.servers.find(s => s.id === id);
         if (!cfg) return;
+        // Close any previous client for this server before reconnecting.
+        await this.disconnectOne(id);
         const client = new McpClient(cfg);
         const tools = await client.connect();
         this.clients[id] = client;
@@ -187,13 +212,17 @@ const MCP_MANAGER = {
         return this.connectedCount();
     },
 
-    disconnectOne(id) {
+    async disconnectOne(id) {
+        const existing = this.clients[id];
+        if (existing) {
+            try { await existing.close(); } catch (_) { /* best effort */ }
+        }
         delete this.clients[id];
     },
 
-    remove(id) {
+    async remove(id) {
+        await this.disconnectOne(id);
         this.servers = this.servers.filter(s => s.id !== id);
-        delete this.clients[id];
         this.save();
         this._rebuildRegistry();
     },
@@ -221,9 +250,13 @@ const MCP_MANAGER = {
             for (const tool of client.tools) {
                 let fnName = `${prefix}_${tool.name}`;
                 if (fnName.length > 64) fnName = fnName.slice(0, 64);
+                // Deterministic suffix on collision so rebuilt names stay stable.
+                const base = fnName.slice(0, 60);
+                let suffix = 1;
                 while (this._registry[fnName] || usedNames[fnName]) {
                     usedNames[fnName] = true;
-                    fnName = fnName.slice(0, 60) + '_' + Math.random().toString(36).slice(2, 5);
+                    fnName = base + '_' + suffix;
+                    suffix++;
                 }
                 usedNames[fnName] = true;
                 this._registry[fnName] = { clientId: id, toolName: tool.name };

@@ -1,21 +1,16 @@
 /**
- * IndexedDB Wrapper for Project Storage + VFS Operations
- * Replaces ephemeral file system with persistent browser storage
- * 
+ * IndexedDB wrapper for project storage.
+ *
  * Features:
- * - File CRUD operations with automatic event emission
+ * - Version-control commits (IndexedDB 'commits' store)
+ * - Key/value storage backing the STORAGE facade ('kv' store)
  * - Cloud sync via DB_CONNECTOR when logged in
- * - Version Control snapshots
- * - Reactive events: vfs:file-updated, vfs:file-deleted, vfs:saved
- * 
- * VFS Methods exported for ide.js usage:
- * - projectDB.saveFile(path, content, language)
- * - projectDB.getFile(path)
- * - projectDB.getAllFiles()
- * - projectDB.deleteFile(path)
+ *
+ * projectDB methods used by ide.js:
  * - projectDB.saveCommit(commitData)
  * - projectDB.getAllCommits()
- * - projectDB.getCommit(commitId)
+ * - projectDB.deleteCommit(commitId)
+ * - projectDB.deleteCommitsByRepo(repoId)
  */
 
 class ProjectDB {
@@ -64,98 +59,6 @@ class ProjectDB {
     }
 
     /**
-     * Save a file to IndexedDB and emit vfs:file-updated event
-     * @param {string} path - File path
-     * @param {string} content - File content
-     * @param {string} language - Language identifier
-     */
-    async saveFile(path, content, language = 'javascript') {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readwrite');
-            const store = tx.objectStore('files');
-            
-            const record = {
-                path,
-                content,
-                language,
-                lastModified: Date.now()
-            };
-
-            const req = store.put(record);
-            req.onsuccess = () => {
-                // Dispatch custom event for UI updates
-                window.dispatchEvent(new CustomEvent('vfs:file-updated', { 
-                    detail: { path, content, language } 
-                }));
-                console.log('[VFS WRITE] IndexedDB:', path, 'bytes:', content.length);
-                resolve(record);
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    /**
-     * Read a file from IndexedDB
-     * @param {string} path - File path
-     * @returns {Promise<string|null>} File content or null
-     */
-    async getFile(path) {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readonly');
-            const store = tx.objectStore('files');
-            const req = store.get(path);
-
-            req.onsuccess = () => {
-                console.log('[VFS READ] IndexedDB:', path);
-                resolve(req.result ? req.result.content : null);
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    /**
-     * Get all files from IndexedDB
-     * @returns {Promise<Object>} Object with paths as keys and content as values
-     */
-    async getAllFiles() {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readonly');
-            const store = tx.objectStore('files');
-            const req = store.getAll();
-
-            req.onsuccess = () => {
-                const files = {};
-                req.result.forEach(f => files[f.path] = f.content);
-                resolve(files);
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    /**
-     * Delete a file from IndexedDB and emit vfs:file-deleted event
-     * @param {string} path - File path
-     */
-    async deleteFile(path) {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readwrite');
-            const store = tx.objectStore('files');
-            const req = store.delete(path);
-
-            req.onsuccess = () => {
-                window.dispatchEvent(new CustomEvent('vfs:file-deleted', { detail: { path } }));
-                console.log('[VFS DELETE] IndexedDB:', path);
-                resolve(true);
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    /**
      * Save a version control commit snapshot
      * @param {Object} commitData - Commit object with id, timestamp, message, snapshot
      */
@@ -193,22 +96,6 @@ class ProjectDB {
     }
 
     /**
-     * Get a specific commit by ID
-     * @param {string} commitId - Commit ID
-     * @returns {Promise<Object|null>} Commit object or null
-     */
-    async getCommit(commitId) {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('commits', 'readonly');
-            const store = tx.objectStore('commits');
-            const req = store.get(commitId);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    /**
      * Delete a single commit by ID (repo/branch cleanup).
      * @param {string} commitId - Commit ID
      */
@@ -237,19 +124,6 @@ class ProjectDB {
         return targets.length;
     }
 
-    /**
-     * Clear all files from IndexedDB
-     */
-    async clearAll() {
-        await this.initPromise;
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction('files', 'readwrite');
-            const store = tx.objectStore('files');
-            const req = store.clear();
-            req.onsuccess = () => resolve(true);
-            req.onerror = () => reject(req.error);
-        });
-    }
 }
 
 // Global instance - accessible by ide.js and other modules
@@ -495,19 +369,16 @@ const DB_CONNECTOR = {
     });
   },
 
-  _clearConfig() {
-    Object.keys(this._config || {}).forEach(k => {
-      STORAGE.removeItem(`gem_db_${k}`);
-    });
-    this._config = null;
-  },
-
   detectType(url) {
     if (!url) return '';
     const u = url.toLowerCase();
     if (u.includes('firebase') || u.includes('firestore') || u.includes('identitytoolkit')) return 'firebase';
     if (u.includes('supabase')) return 'supabase';
-    if (u.includes('pocketbase') || u.includes('pb.')) return 'pocketbase';
+    // Match "pocketbase" anywhere, or a dedicated "pb." host label
+    // (avoids false positives from an incidental "pb." substring in a path).
+    let host = '';
+    try { host = new URL(url).hostname.toLowerCase(); } catch { host = ''; }
+    if (u.includes('pocketbase') || host.startsWith('pb.') || host.includes('.pb.')) return 'pocketbase';
     return 'generic';
   },
 
@@ -529,10 +400,6 @@ const DB_CONNECTOR = {
 
   getUserEmail() {
     return this._loadConfig().email;
-  },
-
-  getDbType() {
-    return this._loadConfig().type;
   },
 
   async register(email, password) {
@@ -650,10 +517,6 @@ const DB_CONNECTOR = {
     this._saveConfig();
   },
 
-  getToken() {
-    return this._loadConfig().token;
-  },
-
   async _firestoreRequest(method, collection, docId, body) {
     const cfg = this._loadConfig();
     const baseUrl = `https://firestore.googleapis.com/v1/projects/${cfg.url}/databases/(default)/documents/${collection}`;
@@ -670,10 +533,15 @@ const DB_CONNECTOR = {
 
   async _supabaseRequest(method, collection, docId, body) {
     const cfg = this._loadConfig();
-    const headers = { 'Content-Type': 'application/json', apikey: cfg.key, Prefer: 'return=representation' };
+    // INSERT (POST) must upsert on the primary key to avoid duplicate rows.
+    const prefer = method === 'POST'
+      ? 'resolution=merge-duplicates,return=representation'
+      : 'return=representation';
+    const headers = { 'Content-Type': 'application/json', apikey: cfg.key, Prefer: prefer };
     if (cfg.token) headers['Authorization'] = `Bearer ${cfg.token}`;
     let url = `${cfg.url}/rest/v1/${collection}`;
     if (docId) url += `?id=eq.${encodeURIComponent(docId)}`;
+    else if (method === 'POST') url += '?on_conflict=id';
     const resp = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -731,20 +599,22 @@ const DB_CONNECTOR = {
         return obj ? (obj.data || obj) : null;
       }
 
-      let result = await this._request('GET', collection, null);
-
-      if (cfg.type === 'supabase' && Array.isArray(result)) {
-        if (result.length === 0) return null;
+      if (cfg.type === 'supabase') {
+        const result = await this._request('GET', collection, null);
+        if (!Array.isArray(result) || result.length === 0) return null;
         return result[0]?.data || result[0] || null;
       }
 
       if (cfg.type === 'pocketbase') {
+        const result = await this._request('GET', collection, null);
         const items = result.items || result;
         if (Array.isArray(items) && items.length === 0) return null;
         return items[0]?.data || items[0] || null;
       }
 
-      return result;
+      // Generic REST backend: read the same document id that saveData writes.
+      const result = await this._request('GET', collection, 'current');
+      return (result && result.data !== undefined) ? result.data : result;
     } catch (e) {
       if (e.message?.includes('404') || e.message?.includes('NOT_FOUND') || e.message?.includes('No rows')) return null;
       throw e;
@@ -763,20 +633,45 @@ const DB_CONNECTOR = {
     }
 
     if (cfg.type === 'supabase') {
+      // Upsert on the "id" primary key (merge-duplicates handled in _supabaseRequest).
       const payload = { id: docId, data };
       return this._request('POST', collection, null, payload);
     }
 
     if (cfg.type === 'pocketbase') {
-      const payload = { id: docId, data };
-      return this._request('PATCH', collection, docId, payload);
+      // PocketBase ids must be 15 chars, so derive a stable one from the logical
+      // docId. Update first; create the record on the initial 404.
+      const recordId = this._pocketbaseIdFor(docId);
+      try {
+        return await this._request('PATCH', collection, recordId, { data });
+      } catch (e) {
+        if (e.message?.includes('404')) {
+          return await this._request('POST', collection, null, { id: recordId, data });
+        }
+        throw e;
+      }
     }
 
     return this._request('PUT', collection, docId, { id: docId, data });
   },
 
-  async deleteData(collection, id) {
-    return this._request('DELETE', collection, id || 'all', null);
+  // Derive a deterministic PocketBase-valid id (15 chars, [a-z0-9]) from a key.
+  _pocketbaseIdFor(key) {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let hash = 2166136261;
+    const str = String(key || 'default');
+    for (let i = 0; i < str.length; i++) {
+      hash ^= str.charCodeAt(i);
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    let out = '';
+    let h = hash || 1;
+    while (out.length < 15) {
+      out += alphabet[h % alphabet.length];
+      h = Math.floor(h / alphabet.length) + 7 * (out.length + 1);
+      if (h <= 0) h = out.length * 41 + 13;
+    }
+    return out;
   },
 
   _firestoreDocToObject(doc) {

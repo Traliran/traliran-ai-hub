@@ -70,183 +70,7 @@ let agentModelDisplay, tokenUsageDisplay;
 let loginBtn, loginBtnText, loginModal, closeLoginModal, loginDbUrl, loginDbKey, loginEmail, loginPassword;
 let doLoginBtn, doRegisterBtn, doLogoutBtn, loginStatus;
 
-// ==================== PROVIDERS CONFIG ====================
-
-const PROVIDERS = {
-    groq: { url: 'https://api.groq.com/openai/v1', hasKey: true, type: 'openai' },
-    google: { url: 'https://generativelanguage.googleapis.com/v1beta/openai', hasKey: true, type: 'openai' },
-    openrouter: { url: 'https://openrouter.ai/api/v1', hasKey: true, type: 'openai' },
-    openai: { url: 'https://api.openai.com/v1', hasKey: true, type: 'openai' },
-    deepseek: { url: 'https://api.deepseek.com/v1', hasKey: true, type: 'openai' },
-    qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', hasKey: true, type: 'openai' },
-    glm: { url: 'https://open.bigmodel.cn/api/paas/v4', hasKey: true, type: 'openai' },
-    claude: { url: 'https://api.anthropic.com/v1', hasKey: true, type: 'anthropic' },
-    ollama: { url: 'http://localhost:11434/v1', hasKey: false, type: 'openai' },
-    llamacpp: { url: 'http://localhost:8080/v1', hasKey: false, type: 'openai' }
-};
-
-// ==================== API CLIENT FUNCTIONS (from app.js) ====================
-
-function normalizeContentToText(content) {
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-        return content.map(part => {
-            if (typeof part === 'string') return part;
-            if (part?.type === 'text' || part?.type === 'input_text') return part.text || part.content || '';
-            if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') return '[Image]';
-            if (part?.type === 'video_url' || part?.type === 'video' || part?.type === 'input_video') return '[Video]';
-            return '';
-        }).join('');
-    }
-    return '';
-}
-
-function convertContentForAnthropic(content) {
-    if (typeof content === 'string') return content;
-    if (!Array.isArray(content)) return normalizeContentToText(content);
-
-    return content.map(part => {
-        if (typeof part === 'string') return { type: 'text', text: part };
-        if (part?.type === 'text' || part?.type === 'input_text') return { type: 'text', text: part.text || part.content || '' };
-        if (part?.type === 'image_url' || part?.type === 'image' || part?.type === 'input_image') {
-            const dataUrl = typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url || part.url || '');
-            if (dataUrl.startsWith('data:')) {
-                const [meta, payload] = dataUrl.split(',');
-                const mime = meta.match(/data:(.+);/)?.[1] || 'image/png';
-                return { type: 'image', source: { type: 'base64', media_type: mime, data: payload } };
-            }
-            return { type: 'text', text: '[Image attachment]' };
-        }
-        if (part?.type === 'video_url' || part?.type === 'video' || part?.type === 'input_video') {
-            return { type: 'text', text: '[Video attachment]' };
-        }
-        return { type: 'text', text: '' };
-    }).filter(item => item && (item.text || item.type === 'image'));
-}
-
-async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal) {
-    const provider = PROVIDERS[providerName] || PROVIDERS.openai;
-    if (provider.type === 'anthropic') {
-        const headers = {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-        };
-
-        const systemMessage = bodyPayload.messages.find(msg => msg.role === 'system');
-        const anthropicPayload = {
-            model: bodyPayload.model,
-            max_tokens: bodyPayload.max_tokens || 1024,
-            messages: bodyPayload.messages.filter(msg => msg.role !== 'system').map(msg => ({
-                role: msg.role === 'assistant' ? 'assistant' : 'user',
-                content: convertContentForAnthropic(msg.content)
-            })),
-            temperature: bodyPayload.temperature,
-            top_p: bodyPayload.top_p
-        };
-
-        if (systemMessage) {
-            anthropicPayload.system = typeof systemMessage.content === 'string' ? systemMessage.content : normalizeContentToText(systemMessage.content);
-        }
-
-        const response = await fetch(`${endpoint}/messages`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(anthropicPayload),
-            signal
-        });
-
-        if (!response.ok) {
-            const errJson = await response.json().catch(() => ({}));
-            throw new Error(errJson.error?.message || `HTTP ${response.status}`);
-        }
-        return response.json();
-    }
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-    const response = await fetch(`${endpoint}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bodyPayload),
-        signal
-    });
-
-    if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
-    }
-    return response.json();
-}
-
-async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal, onDelta) {
-    const headers = { 'Content-Type': 'application/json' };
-    if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-    bodyPayload.stream = true;
-
-    const response = await fetch(`${endpoint}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bodyPayload),
-        signal
-    });
-
-    if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-        const result = await response.json();
-        return { content: result.choices?.[0]?.message?.content || '' };
-    }
-
-    const decoder = new TextDecoder();
-    let accumulated = '';
-    let buffer = '';
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\\n');
-        buffer = lines.pop();
-        for (let line of lines) {
-            line = line.trim();
-            if (!line) continue;
-            if (line === 'data: [DONE]') {
-                continue;
-            }
-            if (line.startsWith('data:')) {
-                const payload = line.slice(5).trim();
-                if (!payload) continue;
-                try {
-                    const eventData = JSON.parse(payload);
-                    const delta = eventData.choices?.[0]?.delta?.content || '';
-                    accumulated += delta;
-                    if (delta) onDelta(delta);
-                } catch (error) {
-                    // ignore parse errors for partial chunks
-                }
-            }
-        }
-    }
-
-    return { content: accumulated };
-}
-
 // ==================== UTILITY FUNCTIONS ====================
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
 
 function getLanguageFromPath(path) {
     const ext = path.split('.').pop().toLowerCase();
@@ -305,25 +129,10 @@ const VFS = {
     async loadFromStorage() {
         try {
             // Multi-repo: resolve active repo first (migrates legacy workspace).
-            if (typeof REPO_STORE !== 'undefined') REPO_STORE.init();
-            const useRepos = typeof REPO_STORE !== 'undefined';
+            REPO_STORE.init();
+            vfsFiles = REPO_STORE.loadFiles();
+            commitHistory = REPO_STORE.loadCommits();
 
-            if (useRepos) {
-                vfsFiles = REPO_STORE.loadFiles();
-                commitHistory = REPO_STORE.loadCommits();
-            } else {
-                const stored = STORAGE.getItem('ide_vfs_files');
-                if (stored) {
-                    vfsFiles = JSON.parse(stored);
-                }
-
-                // Load commits
-                const commitsStored = STORAGE.getItem('ide_vfs_commits');
-                if (commitsStored) {
-                    commitHistory = JSON.parse(commitsStored);
-                }
-            }
-            
             // New repositories stay empty until the user or agent adds files.
             // No default files are created here.
         } catch (e) {
@@ -335,11 +144,7 @@ const VFS = {
     async saveToStorage() {
         try {
             // Persist to active repo (+ legacy mirror for cloud sync compat).
-            if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
-                REPO_STORE.saveFiles(vfsFiles);
-            } else {
-                STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
-            }
+            REPO_STORE.saveFiles(vfsFiles);
             window.dispatchEvent(new CustomEvent('vfs:saved'));
         } catch (e) {
             console.error('[VFS] Save error:', e);
@@ -347,28 +152,32 @@ const VFS = {
     },
 
     async writeFile(path, content) {
-        console.log('[VFS WRITE]', path, 'bytes:', content.length);
-        const language = getLanguageFromPath(path);
-        
-        vfsFiles[path] = {
-            content,
+        const cleanPath = normalizeVfsPath(path);
+        if (!cleanPath) throw new Error(`Invalid path: ${path}`);
+        if (cleanPath.startsWith('.git/')) throw new Error('Cannot write inside .git/');
+        const text = content == null ? '' : String(content);
+        const language = getLanguageFromPath(cleanPath);
+        console.log('[VFS WRITE]', cleanPath, 'bytes:', text.length);
+
+        vfsFiles[cleanPath] = {
+            content: text,
             language,
             lastModified: Date.now()
         };
 
         await this.saveToStorage();
-        
-        // Emit update event
-        window.dispatchEvent(new CustomEvent('vfs:file-updated', { 
-            detail: { path, content, language } 
+
+        // Emit update event (used by the editor to refresh the open tab).
+        window.dispatchEvent(new CustomEvent('vfs:file-updated', {
+            detail: { path: cleanPath, content: text, language }
         }));
 
-        // Sync to cloud if logged in
+        // Sync to cloud if logged in (whole-collection snapshot).
         if (isLoggedIn && DB_CONNECTOR.isLoggedIn()) {
-            this.syncToCloud(path);
+            this.syncToCloud();
         }
 
-        return vfsFiles[path];
+        return vfsFiles[cleanPath];
     },
 
     async readFile(path) {
@@ -459,10 +268,12 @@ const VFS = {
     },
 
     listFiles(dir = '') {
+        // Strict segment prefix: "src" must not match "src2/main.js".
+        const prefix = dir ? dir.replace(/\/+$/, '') + '/' : '';
         const files = [];
         for (const path of Object.keys(vfsFiles)) {
             if (path.startsWith('.git/')) continue; // Keep git internals out of agent tools.
-            if (dir === '' || path.startsWith(dir + '/') || path.startsWith(dir)) {
+            if (!prefix || path.startsWith(prefix)) {
                 files.push(path);
             }
         }
@@ -491,15 +302,12 @@ const VFS = {
         });
     },
 
-    async syncToCloud(path) {
+    async syncToCloud() {
         try {
-            // Use SYNC_MANAGER if available for better queue handling
-            if (typeof SYNC_MANAGER !== 'undefined' && SYNC_MANAGER.pushVFSFileToCloud) {
-                await SYNC_MANAGER.pushVFSFileToCloud(path);
-            } else {
-                await DB_CONNECTOR.saveData('ide_vfs', path, vfsFiles[path]);
-            }
-            console.log('[VFS] Synced to cloud:', path);
+            // Push the whole ide_vfs collection as a single 'current' snapshot so
+            // cloud pull can never mix per-file and whole-collection formats.
+            await SYNC_MANAGER.pushToCloud('ide_vfs');
+            console.log('[VFS] Synced to cloud');
         } catch (e) {
             console.error('[VFS] Cloud sync error:', e);
         }
@@ -508,21 +316,11 @@ const VFS = {
     async syncFromCloud() {
         if (!DB_CONNECTOR.isLoggedIn()) return;
         try {
-            // Use SYNC_MANAGER if available for proper collection handling
-            if (typeof SYNC_MANAGER !== 'undefined' && SYNC_MANAGER.pullFromCloud) {
-                const data = await SYNC_MANAGER.pullFromCloud('ide_vfs');
-                if (data && typeof data === 'object') {
-                    vfsFiles = { ...vfsFiles, ...data };
-                    await this.saveToStorage();
-                    console.log('[VFS] Synced from cloud via SYNC_MANAGER');
-                }
-            } else {
-                const data = await DB_CONNECTOR.fetchData('ide_vfs');
-                if (data && typeof data === 'object') {
-                    vfsFiles = { ...vfsFiles, ...data };
-                    await this.saveToStorage();
-                    console.log('[VFS] Synced from cloud');
-                }
+            const data = await SYNC_MANAGER.pullFromCloud('ide_vfs');
+            if (data && typeof data === 'object') {
+                vfsFiles = { ...vfsFiles, ...data };
+                await this.saveToStorage();
+                console.log('[VFS] Synced from cloud');
             }
         } catch (e) {
             console.error('[VFS] Cloud pull error:', e);
@@ -534,8 +332,8 @@ const VFS = {
 
 const VERSION_CONTROL = {
     async createCommit(message) {
-        const branch = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getBranch() : 'main';
-        const repoId = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.activeId : null;
+        const branch = REPO_STORE.getBranch();
+        const repoId = REPO_STORE.activeId;
         const commit = {
             id: 'commit_' + Date.now(),
             timestamp: Date.now(),
@@ -547,11 +345,7 @@ const VERSION_CONTROL = {
         
         commitHistory.unshift(commit);
         // Persist to active repo (+ legacy mirror for cloud sync compat).
-        if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
-            REPO_STORE.saveCommits(commitHistory);
-        } else {
-            STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
-        }
+        REPO_STORE.saveCommits(commitHistory);
         
         // Also save to IndexedDB for persistence
         if (typeof projectDB !== 'undefined' && projectDB.saveCommit) {
@@ -565,13 +359,11 @@ const VERSION_CONTROL = {
         console.log('[VERSION] Created commit:', commit.id);
         // Link a real git SHA for this commit (non-blocking for snapshot logic).
         try {
-            if (typeof REPO_STORE !== 'undefined' && typeof GIT_ENGINE !== 'undefined') {
-                const { shaByCommitId } = await GIT_ENGINE.buildGitFiles(
-                    commitHistory, REPO_STORE.meta.branches, REPO_STORE.getBranch()
-                );
-                const sha = shaByCommitId[commit.id] || null;
-                if (sha) REPO_STORE.linkCommitSha(commit.id, sha, null, branch);
-            }
+            const { shaByCommitId } = await GIT_ENGINE.buildGitFiles(
+                commitHistory, REPO_STORE.meta.branches, REPO_STORE.getBranch()
+            );
+            const sha = shaByCommitId[commit.id] || null;
+            if (sha) REPO_STORE.linkCommitSha(commit.id, sha, null, branch);
         } catch (e) {
             console.error('[VERSION] Git SHA link error:', e);
         }
@@ -597,46 +389,24 @@ const VERSION_CONTROL = {
 
     async loadCommitsFromStorage() {
         // Multi-repo: commits already loaded from active repo in VFS.init.
-        if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
-            if (commitHistory.length > 0) {
-                console.log('[VERSION] Kept', commitHistory.length, 'commits from active repo');
-                return;
-            }
+        if (commitHistory.length > 0) {
+            console.log('[VERSION] Kept', commitHistory.length, 'commits from active repo');
+            return;
         }
-        // Try IndexedDB first (scoped to the active repo so other repos
-        // or a deleted repo can never leak commits into a new empty repo).
+        // Try IndexedDB (scoped to the active repo so other repos or a
+        // deleted repo can never leak commits into a new empty repo).
         if (typeof projectDB !== 'undefined' && projectDB.getAllCommits) {
             try {
                 const all = await projectDB.getAllCommits();
-                const activeId = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.activeId : null;
+                const activeId = REPO_STORE.activeId;
                 const commits = (all || []).filter((c) => (c.repoId || 'repo_main') === activeId);
                 if (commits.length > 0) {
                     commitHistory = commits;
-                    if (typeof REPO_STORE !== 'undefined' && REPO_STORE.activeId) {
-                        REPO_STORE.saveCommits(commitHistory);
-                    } else {
-                        STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
-                    }
+                    REPO_STORE.saveCommits(commitHistory);
                     console.log('[VERSION] Loaded', commits.length, 'commits from IndexedDB');
-                    return;
                 }
             } catch (e) {
                 console.error('[VERSION] IndexedDB load error:', e);
-            }
-        }
-        
-        // Fallback to persisted storage (legacy single-workspace mode only;
-        // in multi-repo mode the per-repo keys loaded in VFS.init are
-        // authoritative, so the global mirror must not overwrite them).
-        if (typeof REPO_STORE === 'undefined' || !REPO_STORE.activeId) {
-            const stored = STORAGE.getItem('ide_vfs_commits');
-            if (stored) {
-                try {
-                    commitHistory = JSON.parse(stored);
-                    console.log('[VERSION] Loaded', commitHistory.length, 'commits from storage');
-                } catch (e) {
-                    commitHistory = [];
-                }
             }
         }
     },
@@ -647,7 +417,7 @@ const VERSION_CONTROL = {
         commitHistoryList.innerHTML = '';
 
         // Show only commits of the active repo + branch (bound history).
-        const activeBranch = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getBranch() : 'main';
+        const activeBranch = REPO_STORE.getBranch();
         const visible = commitHistory.filter((c) => (c.branch || 'main') === activeBranch);
         
         if (visible.length === 0) {
@@ -660,7 +430,7 @@ const VERSION_CONTROL = {
             const div = document.createElement('div');
             div.className = 'bg-gray-800 border border-gray-700 rounded p-2 cursor-pointer hover:border-violet-500 transition';
             // Show real git short SHA when linked, plus branch name.
-            const sha = (typeof REPO_STORE !== 'undefined') ? REPO_STORE.getCommitSha(commit.id) : null;
+            const sha = REPO_STORE.getCommitSha(commit.id);
             const branch = commit.branch || 'main';
             const metaLine = sha
                 ? `${sha.slice(0, 7)} · ${branch} · ${Object.keys(commit.snapshot).length} files`
@@ -687,18 +457,10 @@ const VERSION_CONTROL = {
     // ZIP export/import lives in zip-export.js (zero-dependency, offline-safe).
     // These wrappers only delegate so the button wiring stays untouched.
     async exportAsZip() {
-        if (typeof ZIP_EXPORT === 'undefined' || !ZIP_EXPORT.exportActiveRepo) {
-            notifyError('ZIP export module not loaded. Please reload the page.');
-            return;
-        }
         await ZIP_EXPORT.exportActiveRepo();
     },
 
     async importFromZip(file) {
-        if (typeof ZIP_EXPORT === 'undefined' || !ZIP_EXPORT.importRepoZip) {
-            notifyError('ZIP import module not loaded. Please reload the page.');
-            return;
-        }
         await ZIP_EXPORT.importRepoZip(file);
     }
 };
@@ -793,7 +555,9 @@ const MONACO = {
 
         if (activeFilePath === path) {
             if (openFiles.length > 0) {
-                this.openFile(openFiles[Math.max(0, idx - 1)]);
+                // After the splice, index `idx` holds the next tab (or the last one).
+                const nextIdx = Math.min(Math.max(idx, 0), openFiles.length - 1);
+                this.openFile(openFiles[nextIdx]);
             } else {
                 activeFilePath = null;
                 monacoEditor.setModel(null);
@@ -1093,7 +857,12 @@ const AI_AGENT = {
             execute: async (args) => {
                 try {
                     const content = await VFS.readFile(args.path);
-                    const regex = new RegExp(args.search_pattern, 'g');
+                    const pattern = String(args.search_pattern || '');
+                    // Guard against pathological agent-supplied patterns (length cap).
+                    if (!pattern || pattern.length > 1000) {
+                        return JSON.stringify({ success: false, error: 'Invalid search pattern' }, null, 2);
+                    }
+                    const regex = new RegExp(pattern, 'g');
                     if (!regex.test(content)) {
                         return JSON.stringify({ success: false, error: 'Pattern not found in file' }, null, 2);
                     }
@@ -1209,13 +978,14 @@ Be helpful, precise, and professional. All communication must be in English.`;
                 ...session.messages.slice(-10) // Last 10 messages for context
             ];
 
-            // Get API config
-            const provider = apiConfig.provider || STORAGE.getItem('gem_provider') || 'groq';
+            // Get API config. Prefer explicit config, fall back to per-provider storage keys.
+            const provider = resolveProviderName(apiConfig.provider || STORAGE.getItem('gem_provider') || 'groq');
+            const hasKey = providerRequiresKey(provider);
             const apiKey = apiConfig.apiKey || STORAGE.getItem('gem_key_' + provider) || '';
-            const model = apiConfig.model || STORAGE.getItem('gem_model') || '';
-            const baseEndpoint = PROVIDERS[provider]?.url || '';
+            const model = apiConfig.model || STORAGE.getItem('gem_selected_model_' + provider) || STORAGE.getItem('gem_model') || '';
+            const baseEndpoint = apiConfig.endpoint || STORAGE.getItem('gem_endpoint_' + provider) || STORAGE.getItem('gem_endpoint') || getProviderDescriptor(provider).url;
 
-            if (!apiKey && PROVIDERS[provider]?.hasKey) {
+            if (hasKey && !apiKey) {
                 this.addMessageToChat('assistant', 'Warning: Please configure your API key in Settings first.');
                 session.messages.push({ role: 'assistant', content: 'Warning: Please configure your API key in Settings first.' });
                 saveAgentSessionsToStorage();
@@ -1354,10 +1124,9 @@ If no tool is needed, just respond normally with your answer.`;
     async callLLM(messages, provider, apiKey, model, endpoint) {
         console.log('[AI TOOL CALL] Calling LLM:', provider, model);
         
-        const url = endpoint || PROVIDERS[provider]?.url;
-        const hasKey = PROVIDERS[provider]?.hasKey !== false;
-        const providerConfig = PROVIDERS[provider];
-        
+        const providerConfig = getProviderDescriptor(provider);
+        const url = endpoint || providerConfig.url;
+
         // Tools are now in system prompt, no need to send via API
         
         try {
@@ -1418,8 +1187,9 @@ If no tool is needed, just respond normally with your answer.`;
             // For OpenAI-compatible APIs (Groq, OpenAI, etc.)
             console.log('[AI TOOL CALL] Using OpenAI-compatible API');
             const headers = { 'Content-Type': 'application/json' };
-            
-            if (hasKey && apiKey) {
+
+            // Send Authorization whenever a key is present (custom endpoints included).
+            if (apiKey) {
                 if (provider === 'openrouter') {
                     headers['Authorization'] = `Bearer ${apiKey}`;
                     headers['HTTP-Referer'] = window.location.origin;
@@ -1523,7 +1293,7 @@ If no tool is needed, just respond normally with your answer.`;
         const body = document.createElement('div');
         body.className = 'prose prose-invert prose-sm max-w-none text-gray-200';
         if (role === 'assistant') {
-            body.innerHTML = marked.parse(typeof content === 'string' ? content : normalizeContentToText(content));
+            body.innerHTML = renderMarkdown(typeof content === 'string' ? content : normalizeContentToText(content));
         } else if (Array.isArray(content)) {
             const textPart = normalizeContentToText(content);
             const textDiv = document.createElement('div');
@@ -1557,7 +1327,7 @@ If no tool is needed, just respond normally with your answer.`;
         let argStr = Object.entries(args).map(([k, v]) => `${k}: ${v}`).join(', ');
         if (argStr.length > 80) argStr = argStr.substring(0, 77) + '...';
         
-        div.innerHTML = `🔧 <span class="text-violet-400">${toolName}</span>(${argStr})`;
+        div.innerHTML = `🔧 <span class="text-violet-400">${escapeHtml(toolName)}</span>(${escapeHtml(argStr)})`;
         agentChatWindow.appendChild(div);
         agentChatWindow.scrollTop = agentChatWindow.scrollHeight;
     },
@@ -1728,7 +1498,7 @@ function openBotEditor(botId = null) {
     
     // Populate model dropdown
     editBotModel.innerHTML = '';
-    const currentModel = STORAGE.getItem('gem_model') || apiConfig.model;
+    const currentModel = apiConfig.model || STORAGE.getItem('gem_selected_model_' + resolveProviderName(apiConfig.provider)) || STORAGE.getItem('gem_model');
     if (currentModel) {
         const opt = document.createElement('option');
         opt.value = currentModel;
@@ -1826,9 +1596,12 @@ function exportBots() {
     const a = document.createElement('a');
     a.href = url;
     a.download = 'traliran-ide-bots.json';
+    document.body.appendChild(a);
     a.click();
-    
-    URL.revokeObjectURL(url);
+    a.remove();
+
+    // Defer revocation so the download is not interrupted in some browsers.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function importBots(event) {
@@ -1926,19 +1699,23 @@ function updateModelSuggestions() {
 }
 
 async function fetchActiveModels() {
-    const provider = document.getElementById('apiProvider').value;
+    const provider = resolveProviderName(document.getElementById('apiProvider').value);
     const modelSelect = document.getElementById('apiModel');
     const hint = document.getElementById('modelHint');
     const apiKey = document.getElementById('apiKey').value.trim();
-    // Map 'anthropic' (HTML select value) to 'claude' (PROVIDERS key)
-    const providerKey = provider === 'anthropic' ? 'claude' : provider;
-    const providerConfig = PROVIDERS[providerKey];
-    const hasKey = providerConfig?.hasKey !== false;
-    const endpoint = document.getElementById('apiBaseUrl').value.trim() || providerConfig?.url || '';
+    const hasKey = providerRequiresKey(provider);
+    const customUrl = document.getElementById('apiBaseUrl').value.trim();
+    // Custom providers are not in PROVIDERS, so only a user-supplied URL is valid.
+    const endpoint = customUrl || (PROVIDERS[provider] ? getProviderDescriptor(provider).url : '');
 
     if (hasKey && !apiKey) {
         modelSelect.innerHTML = '<option value="">(Enter API key to load models)</option>';
         if (hint) hint.textContent = 'Paste your API key above and click refresh.';
+        return;
+    }
+    if (!endpoint) {
+        modelSelect.innerHTML = '<option value="">(Enter base URL to load models)</option>';
+        if (hint) hint.textContent = 'Provide a base URL above and click refresh.';
         return;
     }
 
@@ -1946,30 +1723,7 @@ async function fetchActiveModels() {
     modelSelect.innerHTML = '<option value="">Loading models...</option>';
 
     try {
-        if (providerKey === 'claude') {
-            const fallbackModels = ['claude-3-5-sonnet-latest', 'claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest'];
-            modelSelect.innerHTML = '';
-            fallbackModels.forEach(m => modelSelect.add(new Option(m, m)));
-            if (previousValue && [...modelSelect.options].some(o => o.value === previousValue)) {
-                modelSelect.value = previousValue;
-            }
-            if (hint) hint.textContent = `${fallbackModels.length} models loaded (static list for Anthropic).`;
-            return;
-        }
-
-        const headers = { 'Content-Type': 'application/json' };
-        if (hasKey) headers['Authorization'] = `Bearer ${apiKey}`;
-
-        const response = await fetch(`${endpoint}/models`, { method: 'GET', headers });
-        if (!response.ok) throw new Error(`Status: ${response.status}`);
-
-        const json = await response.json();
-        let models = json.data && Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-
-        models = models.filter(m => {
-            const id = (m.id || m.name || '').toLowerCase();
-            return !id.includes('whisper') && !id.includes('tts') && !id.includes('embed') && !id.includes('guard');
-        });
+        const models = await fetchModelList(endpoint, apiKey, hasKey, provider);
 
         if (models.length === 0) {
             modelSelect.innerHTML = '<option value="">No models found</option>';
@@ -1978,10 +1732,7 @@ async function fetchActiveModels() {
         }
 
         modelSelect.innerHTML = '';
-        models.forEach(m => {
-            const modelId = m.id || m.name;
-            modelSelect.add(new Option(modelId, modelId));
-        });
+        models.forEach(m => modelSelect.add(new Option(m, m)));
 
         if (previousValue && [...modelSelect.options].some(o => o.value === previousValue)) {
             modelSelect.value = previousValue;
@@ -1995,13 +1746,14 @@ async function fetchActiveModels() {
 }
 
 async function saveApiSettings() {
-    const provider = document.getElementById('apiProvider').value;
+    const provider = resolveProviderName(document.getElementById('apiProvider').value);
     const apiKey = document.getElementById('apiKey').value.trim();
     const model = document.getElementById('apiModel').value.trim();
     const baseUrl = document.getElementById('apiBaseUrl').value.trim();
     const statusEl = document.getElementById('settingsStatus');
+    const hasKey = providerRequiresKey(provider);
 
-    if (!apiKey) {
+    if (hasKey && !apiKey) {
         statusEl.textContent = '✗ API Key required';
         statusEl.className = 'text-center text-xs mt-2 h-4 text-red-400';
         return;
@@ -2013,15 +1765,16 @@ async function saveApiSettings() {
     }
 
     try {
+        // Store per-provider keys (shared with Hub and Playground).
         STORAGE.setItem('gem_provider', provider);
         STORAGE.setItem('gem_key_' + provider, apiKey);
-        STORAGE.setItem('gem_model', model);
-        if (baseUrl) STORAGE.setItem('gem_endpoint', baseUrl);
+        STORAGE.setItem('gem_selected_model_' + provider, model);
+        if (baseUrl) STORAGE.setItem('gem_endpoint_' + provider, baseUrl);
 
         apiConfig.provider = provider;
         apiConfig.apiKey = apiKey;
         apiConfig.model = model;
-        apiConfig.endpoint = baseUrl;
+        apiConfig.endpoint = baseUrl || getProviderDescriptor(provider).url;
 
         if (agentModelDisplay) agentModelDisplay.textContent = `Model: ${model}`;
 
@@ -2043,11 +1796,13 @@ window.fetchActiveModels = fetchActiveModels;
 // ==================== AUTH & SETTINGS SYNC ====================
 
 function loadApiConfig() {
-    apiConfig.provider = STORAGE.getItem('gem_provider') || 'groq';
-    apiConfig.apiKey = STORAGE.getItem('gem_key_' + apiConfig.provider) || '';
-    apiConfig.endpoint = STORAGE.getItem('gem_endpoint') || '';
-    apiConfig.model = STORAGE.getItem('gem_model') || '';
-    
+    const provider = resolveProviderName(STORAGE.getItem('gem_provider') || 'groq');
+    apiConfig.provider = provider;
+    apiConfig.apiKey = STORAGE.getItem('gem_key_' + provider) || '';
+    // Per-provider keys first, then the legacy global keys for older installs.
+    apiConfig.endpoint = STORAGE.getItem('gem_endpoint_' + provider) || STORAGE.getItem('gem_endpoint') || '';
+    apiConfig.model = STORAGE.getItem('gem_selected_model_' + provider) || STORAGE.getItem('gem_model') || '';
+
     if (agentModelDisplay) {
         agentModelDisplay.textContent = `Model: ${apiConfig.model || '--'}`;
     }
@@ -2317,7 +2072,6 @@ function renderFileTree() {
 
 // Refresh repo and branch dropdowns from REPO_STORE state.
 function renderRepoSelects() {
-    if (typeof REPO_STORE === 'undefined') return;
     const repoSelect = document.getElementById('repoSelect');
     if (repoSelect) {
         repoSelect.innerHTML = '';
@@ -2344,7 +2098,6 @@ function renderRepoSelects() {
 
 // Switch workspace to another repository (reset editor, tree, history).
 async function switchToRepo(repoId) {
-    if (typeof REPO_STORE === 'undefined') return;
     REPO_STORE.switch(repoId);
     vfsFiles = REPO_STORE.loadFiles();
     commitHistory = REPO_STORE.loadCommits();
@@ -2370,7 +2123,6 @@ async function switchToRepo(repoId) {
 
 // Switch to another branch tip (restore its latest snapshot, keep files if empty).
 async function switchToBranch(branchName) {
-    if (typeof REPO_STORE === 'undefined') return;
     REPO_STORE.switchBranch(branchName);
     const tipId = REPO_STORE.findTipCommitId(commitHistory, branchName);
     if (tipId) {
@@ -2397,7 +2149,6 @@ async function switchToBranch(branchName) {
 
 // Delete the active branch with all its commits (repo binding keeps other branches).
 async function deleteActiveBranch() {
-    if (typeof REPO_STORE === 'undefined') return;
     const target = REPO_STORE.getBranch();
     const confirmed = await showAppConfirm(`Delete branch "${target}" with all its commits? This cannot be undone.`, {
         title: 'Delete branch',
