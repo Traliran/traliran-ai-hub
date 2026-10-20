@@ -1,7 +1,6 @@
 # 💎 Traliran AI Hub
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](#)
 
 A lightweight, serverless, and privacy-first AI web client and sandbox running directly in your browser. Features a built-in code execution environment, a full-fledged AI IDE, and a parallel model benchmarking tool. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) without middlemen.
 
@@ -55,6 +54,8 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 *   **Multi-Provider Support:** Seamlessly switch between top cloud APIs (Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude) and local LLMs (Ollama, Llama.cpp).
 *   **⚡ Multi-Model Setup & Compare:** Select multiple models simultaneously — including across different providers (Groq + OpenAI + Claude, local models, etc.), each using its own configured API key. The app triggers parallel requests and renders side-by-side comparative cards with per-model and per-provider labels for instant benchmarking.
 *   **💡 Model Thinking Support:** Native rendering for reasoning models (like DeepSeek-R1). Structural thoughts are captured and organized into a clean, collapsible hidden dropdown block.
+*   **🧠 Conversation Summary:** Summarize the current discussion into your Personal AI context with one click (available once at least two AI responses exist).
+*   **🧑 Personal AI Context:** Store a persistent profile about yourself (role, expertise, preferences, goals) in settings; it is injected into every AI prompt across the Hub.
 *   **👥 AI Group Debate Mode:** Turn your raw ideas into fully analyzed concepts. Run a multi-agent discussion loop where specialized personas (Optimist, Critic, and Technologist) cross-examine your thesis over multiple rounds.
 *   **⚡ AI IDE - Integrated Development Environment:** A full-fledged in-browser IDE for code generation, editing, and project management, powered by your chosen AI model.
     *   **Multi-Repository Workspaces:** Create, switch, and delete repositories. Each repo keeps its own files, commits, branches, and git refs; new repos start empty.
@@ -73,6 +74,27 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 *   **🏪 Assistant Store:** Access a marketplace of free and premium, highly-optimized AI assistant presets and custom prompts for various tasks (e.g., Polyglot Translator, Code & Text Editor, Ideation Generator).
 *   **⚙️ Advanced Parameters Control:** Fine-tune system behaviors with on-the-fly adjustable sliders for Temperature, Top P, and Max Tokens configuration.
 *   **🧩 MCP (Model Context Protocol):** Connect remote MCP servers over Streamable HTTP and expose their tools to the AI as function-calling tools — just like an IDE agent. The model decides when to call a tool, the hub proxies the call, feeds the result back, and repeats. Works with any Streamable HTTP MCP endpoint; configure servers in the **🧩 MCP Servers** modal.
+
+---
+
+## 🗂️ Notes & Local Storage
+
+The Notes app has its own page at **`/notes`** and is linked from the Hub sidebar. Both pages share the same IndexedDB data, so your notes are available in both places without an extra sync step.
+
+Pick a storage mode in the Notes sidebar:
+
+| Mode | Behaviour | Browser support |
+| --- | --- | --- |
+| **Local (IndexedDB)** | Default when no cloud database is connected. Notes stay in the browser. | All modern browsers |
+| **Cloud DB** | Mirrors notes through the configured Firebase / Supabase / PocketBase / generic backend. | All modern browsers |
+| **Local folder (.md)** | One Markdown file per note, with `id`, `title`, `updated` and `tags` front matter. Two-way sync every minute while the Notes tab is open. | Chrome / Edge (desktop, HTTPS or localhost) |
+| **Local folder (import)** | Imports every `.md` file from the selected folder (including subfolders) into IndexedDB; **Re-import** refreshes them. Edits stay in IndexedDB and are never written back. | Firefox and browsers without folder write access |
+
+Folder notes are matched by their front-matter `id` (or by a stable file-name hash when there is no front matter), so files edited in an external editor can be re-imported without duplicates. When the same note exists locally and in the folder, the newer version wins; deleting a file in a writable folder removes the matching note. In Chrome/Edge the Notes page warns once per session if the linked folder becomes unavailable.
+
+Firefox and Safari do not expose write access to real folders — a platform limitation, not an app setting. They can import Markdown files into IndexedDB (read-only), but changes are not written back to disk. Use Chrome/Edge for two-way folder sync, or export notes manually when you need `.md` files on disk.
+
+The editor also supports Markdown preview, automatic `#tag` extraction (Unicode-aware, so Cyrillic and CJK tags work), full-text search, single-note import/export, **AI Complement** using the provider/model configured in the Hub, and **Export to RAG**.
 
 ---
 
