@@ -124,6 +124,49 @@ class ProjectDB {
         return targets.length;
     }
 
+    /**
+     * Save a metadata record (used for persistent handles and small settings).
+     * @param {string} key - Metadata key
+     * @param {*} value - Structured-cloneable value
+     */
+    async saveMeta(key, value) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('meta', 'readwrite');
+            const req = tx.objectStore('meta').put({ key, value });
+            req.onsuccess = () => resolve(value);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Read a metadata record, or null when it does not exist.
+     * @param {string} key - Metadata key
+     */
+    async getMeta(key) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('meta', 'readonly');
+            const req = tx.objectStore('meta').get(key);
+            req.onsuccess = () => resolve(req.result ? req.result.value : null);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Delete a metadata record.
+     * @param {string} key - Metadata key
+     */
+    async deleteMeta(key) {
+        await this.initPromise;
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('meta', 'readwrite');
+            const req = tx.objectStore('meta').delete(key);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
 }
 
 // Global instance - accessible by ide.js and other modules

@@ -11,7 +11,7 @@
 const MCP_STORAGE_KEY = 'gem_mcp_servers';
 
 // Single source of truth for the displayed hub version.
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.2.0';
 
 function sanitizeMcpName(name) {
     return (name || 'server')
