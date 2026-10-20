@@ -29,6 +29,7 @@ const notesFolderControls = document.getElementById('notesFolderControls');
 const notesFolderStatus = document.getElementById('notesFolderStatus');
 const chooseNotesFolderBtn = document.getElementById('chooseNotesFolderBtn');
 const syncNotesFolderBtn = document.getElementById('syncNotesFolderBtn');
+const notesFolderInput = document.getElementById('notesFolderInput');
 
 const NOTES_STORAGE_KEY = 'gem_notes_storage';
 const NOTES_FOLDER_SYNC_INTERVAL = 60000;
@@ -37,6 +38,7 @@ let notes = [];
 let currentNoteId = null;
 let notesFolderSyncTimer = null;
 let notesFolderAccessWarned = false;
+let notesFolderReadonlyWarned = false;
 let notesFolderSyncing = false;
 
 function getNotesStorageMode() {
@@ -47,12 +49,14 @@ function getNotesStorageMode() {
 }
 
 // Why local folders are unavailable in this browser/context (empty when usable).
+// Read-only imports still count as usable: Firefox can open a directory through
+// a file input even though it cannot write to it.
 function notesFolderUnavailableReason() {
     if (!window.isSecureContext) {
-        return 'Local folders require HTTPS or localhost, in Chrome or Edge on desktop.';
+        return 'Local folders require HTTPS or localhost.';
     }
-    if (typeof window.showDirectoryPicker !== 'function') {
-        return 'This browser does not support local folders. Use Chrome or Edge on desktop.';
+    if (!NOTES_FOLDER.canWrite() && !NOTES_FOLDER.canImport()) {
+        return 'This browser cannot open local folders. Use Chrome, Edge, Firefox or Safari.';
     }
     return '';
 }
@@ -83,6 +87,15 @@ function saveNotesToStorage() {
 // Local folder VFS (Markdown files)
 // ---------------------------------------------------------------------------
 
+function notesFolderImportedName() {
+    return STORAGE.getItem('gem_notes_folder_name') || '';
+}
+
+function notesFolderImportedAt() {
+    const ts = Number(STORAGE.getItem('gem_notes_folder_imported_at') || 0);
+    return ts ? new Date(ts).toLocaleString() : '';
+}
+
 function updateNotesFolderUi() {
     if (!notesStorageModeSelect) return;
     const mode = getNotesStorageMode();
@@ -91,18 +104,40 @@ function updateNotesFolderUi() {
     if (notesFolderControls) notesFolderControls.classList.toggle('hidden', !isFolder);
 
     const reason = notesFolderUnavailableReason();
+    const writable = NOTES_FOLDER.canWrite();
+
+    const folderOption = notesStorageModeSelect.querySelector('option[value="folder"]');
+    if (folderOption) {
+        folderOption.textContent = writable ? 'Local folder (.md)' : 'Local folder (.md, import)';
+    }
+
     if (chooseNotesFolderBtn) {
         // Keep the button clickable so an unsupported browser gets a clear
         // explanation instead of a silent no-op.
         chooseNotesFolderBtn.disabled = false;
-        chooseNotesFolderBtn.title = reason || 'Link a local folder for Markdown notes';
+        chooseNotesFolderBtn.textContent = writable ? 'Choose folder' : 'Import folder';
+        chooseNotesFolderBtn.title = reason || (writable
+            ? 'Link a local folder for Markdown notes'
+            : 'Import Markdown files from a folder (read-only in this browser)');
+    }
+    if (syncNotesFolderBtn) {
+        syncNotesFolderBtn.textContent = writable ? 'Sync now' : 'Re-import';
+        syncNotesFolderBtn.title = writable
+            ? 'Sync with the folder now'
+            : 'Import the folder again';
     }
     if (!notesFolderStatus) return;
 
     if (reason) {
         notesFolderStatus.textContent = reason;
-    } else if (NOTES_FOLDER.hasFolder()) {
+    } else if (writable && NOTES_FOLDER.hasFolder()) {
         notesFolderStatus.textContent = 'Folder: ' + NOTES_FOLDER.getFolderName();
+    } else if (!writable) {
+        const name = notesFolderImportedName();
+        const when = notesFolderImportedAt();
+        notesFolderStatus.textContent = name
+            ? 'Imported from "' + name + '"' + (when ? ' at ' + when : '') + ' — read-only. Edits stay in IndexedDB.'
+            : 'Import-only in this browser: edits stay in IndexedDB. Use Chrome or Edge for two-way sync.';
     } else {
         notesFolderStatus.textContent = 'No folder linked yet.';
     }
@@ -242,12 +277,59 @@ async function syncNotesFromFolder(options) {
     }
 }
 
+// Merge notes read from a folder into IndexedDB. Used by browsers without
+// writable folder access (Firefox/Safari): newer files win, nothing is deleted.
+function mergeImportedFolderNotes(folderNotes) {
+    let imported = 0;
+    let updated = 0;
+
+    folderNotes.forEach(folderNote => {
+        const local = notes.find(n => n.id === folderNote.id);
+        if (!local) {
+            notes.push(folderNote);
+            imported++;
+            return;
+        }
+        if (folderNote.updatedAt > (local.updatedAt || 0)) {
+            local.title = folderNote.title;
+            local.content = folderNote.content;
+            local.tags = folderNote.tags;
+            local.updatedAt = folderNote.updatedAt;
+            updated++;
+            refreshOpenNote(local);
+        }
+    });
+
+    if (imported || updated) {
+        STORAGE.setItem('gem_notes', JSON.stringify(notes));
+        renderNotesList();
+    }
+    return { imported, updated, total: folderNotes.length };
+}
+
+function importNotesFolderFromDisk() {
+    if (!notesFolderInput) {
+        notifyError('Folder import is not available in this browser.');
+        return;
+    }
+    notesFolderInput.value = '';
+    notesFolderInput.click();
+}
+
 async function chooseNotesFolder() {
     const reason = notesFolderUnavailableReason();
     if (reason) {
         notifyWarning(reason, 8000);
         return;
     }
+
+    // Browsers without the File System Access API cannot write to a real
+    // folder. Import the Markdown files instead of pretending to sync.
+    if (!NOTES_FOLDER.canWrite()) {
+        importNotesFolderFromDisk();
+        return;
+    }
+
     try {
         console.info('[Notes] Opening the folder picker...');
         if (notesFolderStatus) notesFolderStatus.textContent = 'Waiting for the folder picker...';
@@ -276,6 +358,10 @@ async function onNotesStorageModeChange() {
     if (mode === 'cloud' && !DB_CONNECTOR.isLoggedIn()) {
         notifyWarning('No cloud database is connected. Notes stay in local IndexedDB until you sign in from the Hub.', 7000);
     }
+    if (mode === 'folder' && !NOTES_FOLDER.canWrite() && !notesFolderReadonlyWarned) {
+        notesFolderReadonlyWarned = true;
+        notifyWarning('This browser can only import a folder (read-only). Edits stay in IndexedDB; use Chrome or Edge for two-way sync.', 9000);
+    }
     await applyNotesStorageMode(true);
     if (getNotesStorageMode() === 'cloud') {
         SYNC_MANAGER.pushToCloud('hub_notes');
@@ -283,6 +369,10 @@ async function onNotesStorageModeChange() {
 }
 
 async function onSyncNotesFolderClick() {
+    if (!NOTES_FOLDER.canWrite()) {
+        importNotesFolderFromDisk();
+        return;
+    }
     if (!NOTES_FOLDER.hasFolder()) {
         await chooseNotesFolder();
         return;
@@ -579,6 +669,49 @@ notesSearch.addEventListener('input', renderNotesList);
 if (notesStorageModeSelect) notesStorageModeSelect.addEventListener('change', onNotesStorageModeChange);
 if (chooseNotesFolderBtn) chooseNotesFolderBtn.addEventListener('click', chooseNotesFolder);
 if (syncNotesFolderBtn) syncNotesFolderBtn.addEventListener('click', onSyncNotesFolderClick);
+if (notesFolderInput) {
+    notesFolderInput.addEventListener('change', async (e) => {
+        const files = [...(e.target.files || [])].filter(f => /\.md$/i.test(f.name));
+        e.target.value = '';
+        if (files.length === 0) {
+            notifyWarning('No Markdown (.md) files found in the selected folder.');
+            return;
+        }
+
+        if (notesFolderStatus) notesFolderStatus.textContent = 'Importing ' + files.length + ' file(s)...';
+        try {
+            const folderNotes = [];
+            for (const file of files) {
+                // The relative path keeps ids stable and avoids collisions
+                // between same-named files in different subfolders.
+                const relativePath = file.webkitRelativePath || file.name;
+                const note = NOTES_FOLDER._parse(await file.text(), relativePath, file.lastModified);
+                // Keep ids stable via the relative path, but show only the
+                // file name when the Markdown file has no title front matter.
+                if (note.title === relativePath.replace(/\.md$/i, '')) {
+                    note.title = file.name.replace(/\.md$/i, '');
+                }
+                // Imported notes are local-only; there is no writable folder
+                // handle behind them.
+                delete note.folderFile;
+                folderNotes.push(note);
+            }
+
+            const result = mergeImportedFolderNotes(folderNotes);
+            const folderName = (files[0].webkitRelativePath || '').split('/')[0] || 'Local folder';
+            STORAGE.setItem(NOTES_STORAGE_KEY, 'folder');
+            STORAGE.setItem('gem_notes_folder_name', folderName);
+            STORAGE.setItem('gem_notes_folder_imported_at', String(Date.now()));
+            updateNotesFolderUi();
+            notifySuccess('Imported ' + result.total + ' note(s) from "' + folderName + '" (' +
+                result.imported + ' new, ' + result.updated + ' updated).');
+        } catch (err) {
+            console.error('[Notes] Folder import failed:', err);
+            updateNotesFolderUi();
+            notifyError('Folder import failed: ' + (err && err.message ? err.message : err));
+        }
+    });
+}
 document.addEventListener('visibilitychange', () => {
     // Catch up immediately when the tab becomes active again.
     if (!document.hidden && getNotesStorageMode() === 'folder' && NOTES_FOLDER.hasFolder()) {

@@ -291,8 +291,21 @@ const NOTES_FOLDER = {
   _writeTimers: {},
   _lock: Promise.resolve(),
 
+  // Two-way sync needs the File System Access API (Chrome/Edge).
   isSupported() {
     return typeof window.showDirectoryPicker === 'function';
+  },
+
+  canWrite() {
+    return this.isSupported();
+  },
+
+  // Firefox/Safari can still open a directory through a file input, but only
+  // for reading (the browser never grants write access to the real folder).
+  canImport() {
+    if (typeof document === 'undefined') return false;
+    const input = document.createElement('input');
+    return 'webkitdirectory' in input || 'directory' in input;
   },
 
   hasFolder() {
