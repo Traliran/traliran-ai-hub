@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#000000">
+    <title>Notes — Traliran AI Hub</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="../styles.css">
+</head>
+<body class="bg-gray-950 text-gray-100 h-screen overflow-hidden font-sans">
+    <div class="h-full flex overflow-hidden">
+        <div id="notesOverlay" class="hidden fixed inset-0 bg-black/60 z-30 md:hidden"></div>
+        <aside id="notesSidebar" class="fixed inset-y-0 left-0 w-[86vw] max-w-[320px] md:w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-40 transition-transform duration-300 -translate-x-full md:translate-x-0 md:static">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center gap-2">
+                <div class="min-w-0">
+                    <a href="../index.html" class="text-[10px] text-gray-500 hover:text-emerald-300 transition">&larr; Back to Hub</a>
+                    <h1 class="font-bold text-emerald-400 leading-tight">My Notes</h1>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="newNoteBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1 px-2 rounded transition cursor-pointer">
+                        + New
+                    </button>
+                    <button id="closeNotesSidebar" class="md:hidden text-gray-400 hover:text-white p-1" title="Close notes list" aria-label="Close notes list"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                </div>
+            </div>
+            <div class="p-3">
+                <input type="text" id="notesSearch" placeholder="Search notes or #tags..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-500 transition">
+            </div>
+            <div class="px-3 pb-3 border-b border-gray-800 space-y-1.5">
+                <label for="notesStorageMode" class="block text-[10px] font-semibold uppercase tracking-wide text-gray-500">Storage</label>
+                <select id="notesStorageMode" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-500 transition">
+                    <option value="local" selected>Local (IndexedDB)</option>
+                    <option value="cloud">Cloud DB</option>
+                    <option value="folder">Local folder (.md)</option>
+                </select>
+                <div id="notesFolderControls" class="hidden space-y-1.5">
+                    <p id="notesFolderStatus" class="text-[10px] text-gray-500 break-words">No folder linked yet.</p>
+                    <div class="flex gap-1.5">
+                        <button id="chooseNotesFolderBtn" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 text-[10px] font-semibold py-1.5 px-2 rounded border border-gray-700 transition cursor-pointer">Choose folder</button>
+                        <button id="syncNotesFolderBtn" class="bg-emerald-700/30 hover:bg-emerald-700/50 text-emerald-300 text-[10px] font-semibold py-1.5 px-2 rounded border border-emerald-600/30 transition cursor-pointer" title="Sync with the folder now">Sync now</button>
+                    </div>
+                </div>
+            </div>
+            <div id="notesList" class="flex-1 overflow-y-auto chat-scroll p-2 flex flex-col gap-2">
+                <!-- Notes entries -->
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col h-full min-w-0 relative bg-gray-950">
+            <div class="p-3 sm:p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-2 bg-gray-900/50">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <button id="toggleNotesSidebar" class="md:hidden bg-gray-800 hover:bg-gray-700 text-gray-200 p-2 rounded-lg transition shrink-0" title="Notes list" aria-label="Toggle notes list"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+                    <input type="text" id="noteTitle" placeholder="Note Title..." class="bg-transparent text-lg sm:text-xl font-bold text-gray-100 focus:outline-none w-full min-w-0">
+                </div>
+                <div class="flex gap-2 flex-wrap items-center max-w-full overflow-x-auto chat-scroll">
+                    <button id="importNoteBtn" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer" title="Import MD file"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Import</button>
+                    <button id="exportToRagBtn" class="text-xs bg-emerald-700/30 hover:bg-emerald-700/50 text-emerald-300 px-3 py-1 rounded border border-emerald-600/30 transition cursor-pointer" title="Export this note to the RAG knowledge base"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> Export to RAG</button>
+                    <button id="exportNoteBtn" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer" title="Export as MD file"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg> Export</button>
+                    <input type="file" id="noteFileInput" accept=".md" class="hidden">
+                    <button id="toggleNotePreview" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition cursor-pointer"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview</button>
+                    <button id="deleteNoteBtn" class="text-xs bg-rose-900/30 hover:bg-rose-900/50 text-rose-400 px-3 py-1 rounded border border-rose-800/50 transition cursor-pointer"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg> Delete</button>
+                </div>
+            </div>
+
+            <div class="flex-1 flex overflow-hidden">
+                <textarea id="noteContent" placeholder="Start writing in Markdown... Use #tags for automatic organization." class="flex-1 bg-transparent p-6 focus:outline-none resize-none font-mono text-sm leading-relaxed chat-scroll"></textarea>
+                <div id="notePreview" class="hidden flex-1 p-6 overflow-y-auto chat-scroll md-content"></div>
+            </div>
+
+            <div id="noteTagsContainer" class="p-3 border-t border-gray-800 flex flex-wrap gap-2 bg-gray-900/30">
+                <!-- Auto-applied tags -->
+            </div>
+
+            <button id="aiComplementBtn" class="fixed bottom-8 right-8 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-90 z-50 cursor-pointer" title="AI Complement"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.88 5.76a2 2 0 001.36 1.36L21 12l-5.76 1.88a2 2 0 00-1.36 1.36L12 21l-1.88-5.76a2 2 0 00-1.36-1.36L3 12l5.76-1.88a2 2 0 001.36-1.36L12 3z"/></svg>
+            </button>
+        </main>
+    </div>
+
+    <script src="../db-connector.js"></script>
+    <script src="../sync-manager.js"></script>
+    <script src="../ui-dialogs.js"></script>
+    <script src="../shared/providers.js"></script>
+    <script src="../shared/content-utils.js"></script>
+    <script src="../shared/api-client.js"></script>
+    <script src="notes.js"></script>
+</body>
+</html>

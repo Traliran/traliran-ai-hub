@@ -67,6 +67,7 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
     *   **Cloud Sync (optional):** Sync workspace via Firebase, Supabase, PocketBase, or a generic backend, with an offline queue.
     *   **Project Management:** Download your entire workspace as a `.zip` or reset it.
 *   **📚 RAG Playground:** Build a local knowledge base, run dedicated RAG chats over it, and export Hub notes straight into the knowledge base.
+*   **🗂️ Notes Page:** A dedicated Notes app at `/notes` (synced with the Hub through the shared IndexedDB). Notes can live only in IndexedDB, sync through the configured cloud DB (Firebase / Supabase / PocketBase), or mirror to a local folder as Markdown files. The local folder mode uses the File System Access API, syncs both ways every minute while the Notes tab is open, and warns once per session if the folder becomes unavailable.
 *   **☁️ Cloud Sync:** Optional Firebase / Supabase / PocketBase / generic-backend sync with offline queueing for sessions, notes, VFS files, commits, and agent chats.
 *   **💻 Built-in Sandbox Interpreter:** Execute, preview, and test generated HTML/JS/CSS code snippets securely in an isolated iframe without leaving the main chat workspace.
 *   **🏪 Assistant Store:** Access a marketplace of free and premium, highly-optimized AI assistant presets and custom prompts for various tasks (e.g., Polyglot Translator, Code & Text Editor, Ideation Generator).

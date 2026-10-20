@@ -103,23 +103,6 @@ const openHelpBtn = document.getElementById('openHelpBtn');
 const closeHelpModal = document.getElementById('closeHelpModal');
 const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
 const startIntroBtn = document.getElementById('startIntroBtn');
-const openNotesBtn = document.getElementById('openNotesBtn');
-const notesPage = document.getElementById('notesPage');
-const closeNotesPage = document.getElementById('closeNotesPage');
-const newNoteBtn = document.getElementById('newNoteBtn');
-const notesList = document.getElementById('notesList');
-const notesSearch = document.getElementById('notesSearch');
-const noteTitle = document.getElementById('noteTitle');
-const noteContent = document.getElementById('noteContent');
-const notePreview = document.getElementById('notePreview');
-const toggleNotePreview = document.getElementById('toggleNotePreview');
-const deleteNoteBtn = document.getElementById('deleteNoteBtn');
-const importNoteBtn = document.getElementById('importNoteBtn');
-const exportToRagBtn = document.getElementById('exportToRagBtn');
-const exportNoteBtn = document.getElementById('exportNoteBtn');
-const noteFileInput = document.getElementById('noteFileInput');
-const noteTagsContainer = document.getElementById('noteTagsContainer');
-const aiComplementBtn = document.getElementById('aiComplementBtn');
 const storeModal = document.getElementById('storeModal');
 const openStoreBtn = document.getElementById('openStoreBtn');
 const closeStoreModal = document.getElementById('closeStoreModal');
@@ -280,9 +263,6 @@ summarizeChatBtn.addEventListener('click', async () => {
         summarizeChatBtn.disabled = false;
     }
 });
-
-let notes = [];
-let currentNoteId = null;
 
 function safeEncode(str) {
     if (!str) return '';
@@ -951,279 +931,6 @@ async function showIntroStep() {
 }
 
 startIntroBtn.addEventListener('click', startIntro);
-
-function loadNotes() {
-    const saved = STORAGE.getItem('gem_notes');
-    if (saved) {
-        try { notes = JSON.parse(saved); } catch (e) { notes = []; }
-    }
-    if (notes.length === 0) {
-        createNewNote();
-    }
-    renderNotesList();
-}
-
-function saveNotesToStorage() {
-    STORAGE.setItem('gem_notes', JSON.stringify(notes));
-    SYNC_MANAGER.pushToCloud('hub_notes');
-}
-function createNewNote() {
-    const id = 'note_' + Date.now();
-    const newNote = {
-        id,
-        title: '',
-        content: '',
-        tags: [],
-        updatedAt: Date.now()
-    };
-    notes.unshift(newNote);
-    currentNoteId = id;
-        saveNotesToStorage();
-        renderNotesList();
-    openNote(id);
-}
-
-function openNote(id) {
-    currentNoteId = id;
-    const note = notes.find(n => n.id === id);
-    if (note) {
-        noteTitle.value = note.title;
-        noteContent.value = note.content;
-        updateNoteTags();
-    }
-    renderNotesList();
-    closeNotesSidebarDrawer();
-}
-
-// Notes sidebar drawer: hidden slide-over panel on phones, static column on desktop.
-function openNotesSidebarDrawer() {
-    const sidebar = document.getElementById('notesSidebar');
-    const overlay = document.getElementById('notesOverlay');
-    if (!sidebar) return;
-    if (window.innerWidth >= 768) return;
-    sidebar.classList.remove('-translate-x-full');
-    if (overlay) overlay.classList.remove('hidden');
-}
-
-function closeNotesSidebarDrawer() {
-    const sidebar = document.getElementById('notesSidebar');
-    const overlay = document.getElementById('notesOverlay');
-    if (!sidebar) return;
-    if (window.innerWidth >= 768) return;
-    sidebar.classList.add('-translate-x-full');
-    if (overlay) overlay.classList.add('hidden');
-}
-
-function updateNoteContent() {
-    if (!currentNoteId) return;
-    const note = notes.find(n => n.id === currentNoteId);
-    if (note) {
-        note.title = noteTitle.value;
-        note.content = noteContent.value;
-        note.updatedAt = Date.now();
-
-        // Auto-tagging logic (Unicode-aware: Cyrillic, CJK, etc.)
-        const tagRegex = /#([\p{L}\p{N}_]+)/gu;
-        const tags = [...note.content.matchAll(tagRegex)].map(match => match[1]);
-        note.tags = [...new Set(tags)];
-
-        saveNotesToStorage();
-        renderNotesList();
-        updateNoteTags();
-    }
-}
-
-function updateNoteTags() {
-    if (!currentNoteId) return;
-    const note = notes.find(n => n.id === currentNoteId);
-    if (!note) return;
-
-    noteTagsContainer.innerHTML = '';
-    note.tags.forEach(tag => {
-        const tagEl = document.createElement('span');
-        tagEl.className = 'text-[10px] bg-emerald-900/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full';
-        tagEl.textContent = `#${tag}`;
-        noteTagsContainer.appendChild(tagEl);
-    });
-}
-
-function renderNotesList() {
-    const search = notesSearch.value.toLowerCase();
-    notesList.innerHTML = '';
-
-    const filtered = notes.filter(n =>
-        n.title.toLowerCase().includes(search) ||
-        n.content.toLowerCase().includes(search) ||
-        n.tags.some(t => t.toLowerCase().includes(search.replace('#', '')))
-    );
-
-    filtered.forEach(note => {
-        const isActive = note.id === currentNoteId;
-        const div = document.createElement('div');
-        div.className = `p-3 rounded-lg cursor-pointer transition flex flex-col gap-1 ${isActive ? 'bg-emerald-600/20 border border-emerald-500/40 text-white' : 'hover:bg-gray-800 text-gray-300'}`;
-        div.onclick = () => openNote(note.id);
-
-        div.innerHTML = `
-            <span class="text-xs font-bold truncate">${note.title || 'Untitled Note'}</span>
-            <span class="text-[10px] text-gray-500 truncate">${note.content.slice(0, 30).replace(/\n/g, ' ')}...</span>
-        `;
-        notesList.appendChild(div);
-    });
-}
-
-// AI Complement functionality
-async function complementNote() {
-    console.log('AI Complement button clicked');
-    if (!currentNoteId) {
-        console.warn('No active note selected');
-        return;
-    }
-
-    const note = notes.find(n => n.id === currentNoteId);
-    if (!note || !note.content) {
-        console.warn('Note is empty, nothing to complement');
-        notifyWarning('Please write some text in the note first!');
-        return;
-    }
-
-    const providerName = resolveProviderName(apiProvider.value);
-    const hasKey = providerRequiresKey(providerName);
-    const apiKey = apiKeyValue.value.trim();
-    const endpoint = apiEndpoint.value.trim();
-    const model = botModelSelect.value;
-
-    console.log('AI Config:', { providerName, model, hasKey });
-
-if (hasKey && !apiKey) {
-        notifyWarning('Please enter your API key first!');
-        openSidebarUniversal();
-        return;
-    }
-    if (!model) {
-        notifyWarning('Please select an AI model in settings first!');
-        openSidebarUniversal();
-        return;
-    }
-
-    const originalText = note.content;
-    // Visual feedback
-    const placeholder = '\n\n(AI is thinking...)';
-    noteContent.value += placeholder;
-    updateNoteContent();
-    try {
-        console.log('Calling AI API for complement...');
-        const systemPrompt = `You are a helpful note-completion assistant. Your task is to expand and complement the current note. Use Markdown formatting. Keep the tone consistent with the original text. Do not repeat the existing text, just add meaningful continuation or detailed expansion. Answer in the same language as the note content.`;
-        const messages = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Please complement and expand this note:\n\n${originalText}` }
-        ];
-
-        const response = await fetchSingleCompletion(endpoint, apiKey, hasKey, {
-            model,
-            messages,
-            temperature: 0.7,
-            max_tokens: 5000
-        }, providerName);
-
-        console.log('AI Response received:', response);
-
-        const resultData = extractAssistantContent(response, providerName);
-        const resultText = resultData.content;
-
-        if (!resultText) {
-            throw new Error('AI returned an empty response');
-        }
-
-        // Remove the "thinking" placeholder and add result
-        const textWithoutPlaceholder = noteContent.value.replace(placeholder, '');
-        noteContent.value = textWithoutPlaceholder + '\n\n' + resultText;
-        updateNoteContent();
-        console.log('Note successfully complemented');
-        } catch (error) {
-        console.error('AI Complement Error:', error);
-        notifyError('AI Complement failed: ' + error.message);
-        noteContent.value = noteContent.value.replace(placeholder, '');
-        updateNoteContent();
-        }
-}
-
-function importNoteFromMD() {
-    noteFileInput.click();
-}
-
-noteFileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const content = await file.text();
-    const title = file.name.replace(/\.md$/i, '');
-    const id = 'note_' + Date.now();
-    const newNote = { id, title, content, tags: [], updatedAt: Date.now() };
-    notes.unshift(newNote);
-    currentNoteId = id;
-    saveNotesToStorage();
-    renderNotesList();
-    openNote(id);
-    noteFileInput.value = '';
-});
-
-function exportNoteToMD() {
-    if (!currentNoteId) return;
-    const note = notes.find(n => n.id === currentNoteId);
-    if (!note) return;
-    const title = note.title || 'untitled-note';
-    const content = `# ${note.title}\n\n${note.content}`;
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    // Defer revocation so slow browsers do not cancel the download.
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
-
-function loadRagKnowledgeBase() {
-    const saved = STORAGE.getItem('gem_rag_kb');
-    if (saved) {
-        try { return JSON.parse(saved); } catch (e) { return []; }
-    }
-    return [];
-}
-
-function saveRagKnowledgeBase(kb) {
-    STORAGE.setItem('gem_rag_kb', JSON.stringify(kb));
-    SYNC_MANAGER.pushToCloud('rag_knowledge');
-}
-
-function exportNoteToRAG() {
-    if (!currentNoteId) return;
-    const note = notes.find(n => n.id === currentNoteId);
-    if (!note) return;
-
-    const content = note.content.trim();
-    if (!content) {
-        notifyWarning('Note is empty, nothing to export!');
-        return;
-    }
-
-    let name = note.title.trim() || 'Untitled Note';
-    if (!/\.(md|txt)$/i.test(name)) name += '.md';
-
-    const kb = loadRagKnowledgeBase();
-    const entry = { name, content, source: 'notes', noteId: note.id, updatedAt: Date.now() };
-    const existingIndex = kb.findIndex(f => f.name === name);
-    if (existingIndex !== -1) {
-        kb[existingIndex] = entry;
-    } else {
-        kb.push(entry);
-    }
-    saveRagKnowledgeBase(kb);
-
-    exportToRagBtn.textContent = 'Added';
-    setTimeout(() => { exportToRagBtn.textContent = 'Export to RAG'; }, 2000);
-}
 
 function renderMessageToDOM(role, content, botName, index) {
     welcomeMessage.classList.add('hidden');
@@ -1946,7 +1653,6 @@ document.addEventListener('keydown', (e) => {
     chatsPanel.classList.add('-translate-x-full');
     chatsOverlay.classList.add('hidden');
     closeSidebarUniversal();
-    closeNotesSidebarDrawer();
     if (collapsedButtons) {
         collapsedButtons.classList.add('hidden');
         collapsedButtons.classList.remove('flex');
@@ -2169,71 +1875,6 @@ openHelpBtn.addEventListener('click', () => { helpModal.classList.remove('hidden
 closeHelpModal.addEventListener('click', () => { helpModal.classList.add('hidden'); });
 closeHelpModalBtn.addEventListener('click', () => { helpModal.classList.add('hidden'); });
 
-openNotesBtn.addEventListener('click', () => {
-    notesPage.classList.remove('hidden');
-    loadNotes();
-    // On phones the notes list starts hidden as a drawer; on desktop it stays visible.
-    if (window.innerWidth < 768) {
-        closeNotesSidebarDrawer();
-    }
-});
-closeNotesPage.addEventListener('click', () => notesPage.classList.add('hidden'));
-const toggleNotesSidebarBtn = document.getElementById('toggleNotesSidebar');
-if (toggleNotesSidebarBtn) toggleNotesSidebarBtn.addEventListener('click', openNotesSidebarDrawer);
-const closeNotesSidebarBtn = document.getElementById('closeNotesSidebar');
-if (closeNotesSidebarBtn) closeNotesSidebarBtn.addEventListener('click', closeNotesSidebarDrawer);
-const notesOverlayEl = document.getElementById('notesOverlay');
-if (notesOverlayEl) notesOverlayEl.addEventListener('click', closeNotesSidebarDrawer);
-newNoteBtn.addEventListener('click', createNewNote);
-noteTitle.addEventListener('input', updateNoteContent);
-noteContent.addEventListener('input', () => {
-    updateNoteContent();
-    const isPreviewVisible = !notePreview.classList.contains('hidden');
-    if (isPreviewVisible) renderNotePreview();
-});
-notesSearch.addEventListener('input', renderNotesList);
-deleteNoteBtn.addEventListener('click', async () => {
-    if (!currentNoteId) return;
-    const confirmed = await showAppConfirm('Delete this note?', {
-        title: 'Delete note',
-        confirmText: 'Delete',
-        danger: true
-    });
-    if (confirmed) {
-        notes = notes.filter(n => n.id !== currentNoteId);
-        saveNotesToStorage();
-        if (notes.length > 0) {
-            openNote(notes[0].id);
-        } else {
-            currentNoteId = null;
-            noteTitle.value = '';
-            noteContent.value = '';
-            updateNoteTags();
-        }
-        renderNotesList();
-    }
-});
-function renderNotePreview() {
-    notePreview.innerHTML = `<div class="md-content">${marked.parse(noteContent.value)}</div>`;
-}
-
-toggleNotePreview.addEventListener('click', () => {
-    const isPreview = !notePreview.classList.contains('hidden');
-    if (isPreview) {
-        notePreview.classList.add('hidden');
-        noteContent.classList.remove('hidden');
-        toggleNotePreview.textContent = 'Preview';
-    } else {
-        notePreview.classList.remove('hidden');
-        noteContent.classList.add('hidden');
-        toggleNotePreview.textContent = 'Close Preview';
-        renderNotePreview();
-    }
-});
-aiComplementBtn.addEventListener('click', complementNote);
-importNoteBtn.addEventListener('click', importNoteFromMD);
-exportToRagBtn.addEventListener('click', exportNoteToRAG);
-exportNoteBtn.addEventListener('click', exportNoteToMD);
 
 exportJsonBtn.addEventListener('click', () => {
     const config = {
@@ -2481,7 +2122,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (appVersionLabel) appVersionLabel.textContent = APP_VERSION;
     loadApiSettings();
     loadSessions();
-    loadNotes();
     MCP_MANAGER.load();
     try { await MCP_MANAGER.connectAll(); } catch (e) { console.error('MCP auto-connect error:', e); }
     updateMcpBadge();
@@ -2491,7 +2131,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (SYNC_MANAGER.isLoggedIn()) {
         SYNC_MANAGER.pullAndMerge().then(() => {
             loadSessions();
-            loadNotes();
             loadApiSettings();
         }).catch(e => console.error('Initial sync error:', e));
     }
