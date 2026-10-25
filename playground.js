@@ -515,6 +515,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadConfig();
     loadKnowledgeBase();
     loadRagSessions();
+    if (typeof CHAT_SEARCH !== 'undefined') {
+        CHAT_SEARCH.mount({
+            storageKey: 'gem_rag_sessions',
+            triggerId: 'chatSearchBtn',
+            accent: '#34d399',
+            onSelect: sessionId => selectRagSession(sessionId),
+            getMessageContainer: () => chatWindow
+        });
+    }
     setupPlaygroundSync();
 
     if (SYNC_MANAGER.isLoggedIn()) {

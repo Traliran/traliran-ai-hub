@@ -4,6 +4,8 @@
 
 A lightweight, serverless, and privacy-first AI web client and sandbox running directly in your browser. Features a built-in code execution environment, a full-fledged AI IDE, and a parallel model benchmarking tool. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) without middlemen.
 
+**Current version:** `3.2.1`
+
 ## ⚠️ Warning! ⚠️
 
 > When you export a custom bot configuration that you've created, **your API keys are also exported**.
@@ -55,6 +57,7 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 *   **⚡ Multi-Model Setup & Compare:** Select multiple models simultaneously — including across different providers (Groq + OpenAI + Claude, local models, etc.), each using its own configured API key. The app triggers parallel requests and renders side-by-side comparative cards with per-model and per-provider labels for instant benchmarking.
 *   **💡 Model Thinking Support:** Native rendering for reasoning models (like DeepSeek-R1). Structural thoughts are captured and organized into a clean, collapsible hidden dropdown block.
 *   **🧠 Conversation Summary:** Summarize the current discussion into your Personal AI context with one click (available once at least two AI responses exist).
+*   **🔎 Full-Screen Chat Search:** Find chats in the Hub, AI IDE and RAG Playground from a single full-screen overlay. Search matches chat titles, user prompts, attached text files and AI responses, then groups the results per chat with highlighted excerpts. Selecting a result opens the chat and jumps to the first matching message. The search reads the current chat list from IndexedDB on every query — no background index or cache is built.
 *   **🧑 Personal AI Context:** Store a persistent profile about yourself (role, expertise, preferences, goals) in settings; it is injected into every AI prompt across the Hub.
 *   **👥 AI Group Debate Mode:** Turn your raw ideas into fully analyzed concepts. Run a multi-agent discussion loop where specialized personas (Optimist, Critic, and Technologist) cross-examine your thesis over multiple rounds.
 *   **⚡ AI IDE - Integrated Development Environment:** A full-fledged in-browser IDE for code generation, editing, and project management, powered by your chosen AI model.
@@ -95,6 +98,22 @@ Folder notes are matched by their front-matter `id` (or by a stable file-name ha
 Firefox and Safari do not expose write access to real folders — a platform limitation, not an app setting. They can import Markdown files into IndexedDB (read-only), but changes are not written back to disk. Use Chrome/Edge for two-way folder sync, or export notes manually when you need `.md` files on disk.
 
 The editor also supports Markdown preview, automatic `#tag` extraction (Unicode-aware, so Cyrillic and CJK tags work), full-text search, single-note import/export, **AI Complement** using the provider/model configured in the Hub, and **Export to RAG**.
+
+---
+
+## 🔎 Chat Search
+
+Every workspace has its own **Search** button in the header. Clicking it opens a full-screen search overlay that searches only the chats of the current workspace:
+
+| Workspace | Searched chats | IndexedDB key |
+| --- | --- | --- |
+| **Hub** | Hub conversations | `gem_sessions` |
+| **AI IDE** | Agent chats | `ide_agent_sessions` |
+| **RAG Playground** | RAG chats | `gem_rag_sessions` |
+
+The query is case-insensitive and every word must be present. Matches are checked in the chat title, user prompts, text attachments (the extracted text is stored inside the user message) and AI responses. Results are grouped per chat: the card title is the chat name, and the body shows up to three highlighted excerpts around the matches. Selecting a result opens the chat and scrolls to the first matching message. Press `Esc` to close the overlay.
+
+The search is intentionally lightweight: `shared/chat-search.js` does not build or persist an index. On every query it reads the session list from IndexedDB (`KV_STORE`), parses it, and compares the text. Image and video bytes are not searched; text attachments and their file names are.
 
 ---
 

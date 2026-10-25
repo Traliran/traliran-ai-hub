@@ -2122,6 +2122,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (appVersionLabel) appVersionLabel.textContent = APP_VERSION;
     loadApiSettings();
     loadSessions();
+    if (typeof CHAT_SEARCH !== 'undefined') {
+        CHAT_SEARCH.mount({
+            storageKey: 'gem_sessions',
+            triggerId: 'chatSearchBtn',
+            accent: '#34d399',
+            onSelect: sessionId => selectSession(sessionId),
+            getMessageContainer: () => chatWindow
+        });
+    }
     MCP_MANAGER.load();
     try { await MCP_MANAGER.connectAll(); } catch (e) { console.error('MCP auto-connect error:', e); }
     updateMcpBadge();

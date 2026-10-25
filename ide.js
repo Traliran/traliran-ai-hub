@@ -2625,6 +2625,22 @@ async function init() {
     if (newAgentChatBtn) newAgentChatBtn.onclick = () => createNewAgentSession();
     loadAgentSessionsFromStorage();
 
+    if (typeof CHAT_SEARCH !== 'undefined') {
+        CHAT_SEARCH.mount({
+            storageKey: 'ide_agent_sessions',
+            triggerId: 'chatSearchBtn',
+            accent: '#a78bfa',
+            onSelect: sessionId => {
+                if (isAgentProcessing) {
+                    notifyWarning('Please wait until the agent finishes responding.');
+                    return false;
+                }
+                selectAgentSession(sessionId);
+            },
+            getMessageContainer: () => agentChatWindow
+        });
+    }
+
     const agentAttachmentInput = document.getElementById('agentAttachmentInput');
     if (agentAttachmentInput) {
         agentAttachmentInput.onchange = (e) => {
