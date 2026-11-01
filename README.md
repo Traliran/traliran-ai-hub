@@ -1,29 +1,24 @@
-# 💎 Traliran AI Hub
+<div align="center">
+  <img src=".github/logo.svg" width="150" alt="Traliran AI Hub Logo" />
+</div>
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+# Traliran AI Hub
+
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-black.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 A lightweight, serverless, and privacy-first AI web client and sandbox running directly in your browser. Features a built-in code execution environment, a full-fledged AI IDE, and a parallel model benchmarking tool. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) without middlemen.
 
-**Current version:** `3.2.1`
+> **Current version:** `3.2.1`
 
-## ⚠️ Warning! ⚠️
+<img width="2388" height="1195" alt="main" src="https://github.com/user-attachments/assets/8e08c40e-cfc7-466d-87cc-f3a4ae2ef99e" />
 
-> When you export a custom bot configuration that you've created, **your API keys are also exported**.
-> 
-> So before sharing your configuration, **REMOVE YOUR API KEYS FROM THE .json FILE**
-> 
-> P.S. This was designed to make it easy to import or restore your session later.
+<img width="1873" height="1030" alt="debate panel" src="https://github.com/user-attachments/assets/7ee56e9d-e4bd-4cac-b466-afe62f79816b" />
 
+<img width="2388" height="1195" alt="notes" src="https://github.com/user-attachments/assets/8ce63eda-ceec-442a-990e-4f9920c3e107" />
 
-<img width="1866" height="1032" alt="image" src="https://github.com/user-attachments/assets/9a5bc0a3-eea5-4027-a76a-03c72e10bbc6" />
+<img width="1876" height="1030" alt="ide" src="https://github.com/user-attachments/assets/26a26954-dbe2-448a-84a9-279bc44f8495" />
 
-<img width="1873" height="1030" alt="image" src="https://github.com/user-attachments/assets/7ee56e9d-e4bd-4cac-b466-afe62f79816b" />
-
-<img width="1873" height="1033" alt="image" src="https://github.com/user-attachments/assets/9b8c7d1e-9ead-4435-913e-3c638d9077c1" />
-
-<img width="1876" height="1030" alt="image" src="https://github.com/user-attachments/assets/26a26954-dbe2-448a-84a9-279bc44f8495" />
-
-<img width="1878" height="1036" alt="image" src="https://github.com/user-attachments/assets/513f0060-f5e7-414b-883a-5e651124a529" />
+<img width="1878" height="1036" alt="mcp panel" src="https://github.com/user-attachments/assets/513f0060-f5e7-414b-883a-5e651124a529" />
 
 ---
 
@@ -77,6 +72,14 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 *   **🏪 Assistant Store:** Access a marketplace of free and premium, highly-optimized AI assistant presets and custom prompts for various tasks (e.g., Polyglot Translator, Code & Text Editor, Ideation Generator).
 *   **⚙️ Advanced Parameters Control:** Fine-tune system behaviors with on-the-fly adjustable sliders for Temperature, Top P, and Max Tokens configuration.
 *   **🧩 MCP (Model Context Protocol):** Connect remote MCP servers over Streamable HTTP and expose their tools to the AI as function-calling tools — just like an IDE agent. The model decides when to call a tool, the hub proxies the call, feeds the result back, and repeats. Works with any Streamable HTTP MCP endpoint; configure servers in the **🧩 MCP Servers** modal.
+
+## ⚠️ Warning! ⚠️
+
+> When you export a custom bot configuration that you've created, **your API keys are also exported**.
+> 
+> So before sharing your configuration, **REMOVE YOUR API KEYS FROM THE .json FILE**
+> 
+> P.S. This was designed to make it easy to import or restore your session later.
 
 ---
 

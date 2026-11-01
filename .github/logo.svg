@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <style>
+      .t-main-star {
+        fill: #22c55e;
+        transform-origin: center;
+        animation: t-floatStar 4s ease-in-out infinite, t-rotateStar 20s linear infinite;
+        filter: drop-shadow(0 0 5px rgba(34, 197, 94, 0.5));
+      }
+      .t-satellite {
+        fill: #4ade80;
+        transform-origin: center;
+      }
+      .t-satellite-1 { animation: t-orbit1 3s ease-in-out infinite; }
+      .t-satellite-2 { animation: t-orbit2 3.5s ease-in-out infinite reverse; }
+
+      @keyframes t-floatStar {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+      }
+      @keyframes t-rotateStar {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes t-orbit1 {
+        0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.9; }
+        50% { transform: translate(12px, -10px) scale(1.5); opacity: 0.4; }
+      }
+      @keyframes t-orbit2 {
+        0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.9; }
+        50% { transform: translate(-10px, 12px) scale(1.5); opacity: 0.4; }
+      }
+    </style>
+  </defs>
+
+  <!-- Main star -->
+  <path class="t-main-star" d="
+    M 50 10
+    C 50 10, 55 35, 65 40
+    C 75 45, 90 50, 90 50
+    C 90 50, 75 55, 65 60
+    C 55 65, 50 90, 50 90
+    C 50 90, 45 65, 35 60
+    C 25 55, 10 50, 10 50
+    C 10 50, 25 45, 35 40
+    C 45 35, 50 10, 50 10 Z" />
+    
+  <!-- Small satellite dots -->
+  <circle class="t-satellite t-satellite-1" cx="25" cy="25" r="3" />
+  <circle class="t-satellite t-satellite-2" cx="75" cy="75" r="2.5" />
+</svg>
