@@ -578,3 +578,202 @@ body.chat-search-open { overflow: hidden; }
     .chat-search-card,
     .chat-search-jump { animation: none; }
 }
+
+/* Chat attachment cards (composer and user messages) */
+.attachment-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: 100%;
+}
+#fileIndicator .attachment-grid {
+    max-width: 40rem;
+    margin: 0 auto;
+}
+.attachment-grid-message {
+    width: 100%;
+    max-width: 46rem;
+}
+.attachment-card {
+    position: relative;
+    aspect-ratio: 10 / 5;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    transition: border-color var(--anim-fast) ease-out, transform var(--anim-fast) var(--anim-ease);
+}
+.attachment-card:hover,
+.attachment-card:focus-visible {
+    border-color: var(--accent-color);
+    outline: none;
+    transform: translateY(-1px);
+}
+.attachment-card-media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.attachment-card-shade {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.25) 60%, transparent);
+}
+.attachment-card-body {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    padding: 0.55rem 0.7rem;
+    min-width: 0;
+}
+.attachment-card-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: var(--accent-color);
+    flex-shrink: 0;
+    margin-bottom: 0.1rem;
+}
+.attachment-card-icon svg {
+    width: 100%;
+    height: 100%;
+}
+.attachment-card-text {
+    min-width: 0;
+}
+.attachment-card-name {
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.attachment-card-meta {
+    color: #d1d5db;
+    font-size: 0.65rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.attachment-card-remove {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fda4af;
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color var(--anim-fast) ease-out, color var(--anim-fast) ease-out;
+}
+.attachment-card-remove:hover {
+    background: rgba(190, 18, 60, 0.85);
+    color: #ffffff;
+}
+
+/* Full-screen attachment preview (same dimming as chat search) */
+.attachment-preview-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.88);
+    backdrop-filter: blur(10px);
+    animation: fade-in var(--anim-fast) ease-out;
+}
+.attachment-preview-overlay.hidden { display: none; }
+.attachment-preview-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-width: min(1100px, 96vw);
+    max-height: 92dvh;
+    min-width: 0;
+}
+.attachment-preview-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-width: 0;
+}
+.attachment-preview-title {
+    color: var(--text-main);
+    font-size: 0.8rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.attachment-preview-close {
+    flex-shrink: 0;
+    padding: 0.35rem 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 9999px;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.attachment-preview-close:hover {
+    color: var(--text-main);
+    border-color: var(--accent-color);
+}
+.attachment-preview-image {
+    max-width: 96vw;
+    max-height: 82dvh;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: #000000;
+    object-fit: contain;
+}
+.attachment-preview-text {
+    margin: 0;
+    max-width: min(1000px, 94vw);
+    max-height: 82dvh;
+    overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+    color: var(--code-text);
+    font-family: monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+@media (max-width: 640px) {
+    .attachment-grid { gap: 0.4rem; }
+    .attachment-card-name { font-size: 0.68rem; }
+    .attachment-card-meta { font-size: 0.6rem; }
+    .attachment-preview-overlay { padding: 0.6rem; }
+}
+
+/* Chat font size: scales message bubbles only, never the rest of the UI */
+#chatWindow { --chat-font-scale: 1; }
+#chatWindow .msg-bubble { font-size: calc(0.875rem * var(--chat-font-scale)); }

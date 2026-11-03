@@ -8,7 +8,7 @@
 
 A lightweight, serverless, and privacy-first AI web client and sandbox running directly in your browser. Features a built-in code execution environment, a full-fledged AI IDE, and a parallel model benchmarking tool. Connect directly to Groq, Gemini, OpenAI, OpenRouter, DeepSeek, Qwen, GLM, Claude, and local backends (Ollama / Llama.cpp) without middlemen.
 
-> **Current version:** `3.2.1`
+> **Current version:** `3.2.2`
 
 <img width="2388" height="1195" alt="main" src="https://github.com/user-attachments/assets/8e08c40e-cfc7-466d-87cc-f3a4ae2ef99e" />
 
@@ -53,6 +53,8 @@ Inside, you can unlock exclusive Premium Bots (advanced system prompts and confi
 *   **💡 Model Thinking Support:** Native rendering for reasoning models (like DeepSeek-R1). Structural thoughts are captured and organized into a clean, collapsible hidden dropdown block.
 *   **🧠 Conversation Summary:** Summarize the current discussion into your Personal AI context with one click (available once at least two AI responses exist).
 *   **🔎 Full-Screen Chat Search:** Find chats in the Hub, AI IDE and RAG Playground from a single full-screen overlay. Search matches chat titles, user prompts, attached text files and AI responses, then groups the results per chat with highlighted excerpts. Selecting a result opens the chat and jumps to the first matching message. The search reads the current chat list from IndexedDB on every query — no background index or cache is built.
+*   **📎 Multi-File Chat Attachments:** Attach several text files, PDFs, images and videos to a single message in the Hub and the RAG Playground. Attachments appear as 2-column cards above both the composer and the sent message; clicking a card opens a full-screen preview (full scrollable text, image, or video) over a dimmed backdrop. Images can also be pasted with `Ctrl+V` or taken with the mobile camera.
+*   **🔠 Chat Font Size:** Adjust chat bubble text with a slider at the bottom of settings in the Hub and the RAG Playground. The scale is stored in local storage and affects chat messages only — the rest of the interface stays unchanged.
 *   **🧑 Personal AI Context:** Store a persistent profile about yourself (role, expertise, preferences, goals) in settings; it is injected into every AI prompt across the Hub.
 *   **👥 AI Group Debate Mode:** Turn your raw ideas into fully analyzed concepts. Run a multi-agent discussion loop where specialized personas (Optimist, Critic, and Technologist) cross-examine your thesis over multiple rounds.
 *   **⚡ AI IDE - Integrated Development Environment:** A full-fledged in-browser IDE for code generation, editing, and project management, powered by your chosen AI model.

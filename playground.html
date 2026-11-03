@@ -7,6 +7,7 @@
     <title>Traliran AI Playground - RAG</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.105/pdf.min.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans h-screen flex flex-col overflow-hidden">
@@ -110,12 +111,19 @@
             </div>
 
             <div class="composer-bar p-3 sm:p-4 bg-gray-900/40 border-t border-gray-900 flex flex-col gap-2">
+                <div id="fileIndicator" class="max-w-6xl w-full mx-auto hidden">
+                    <div id="attachmentCards" class="attachment-grid"></div>
+                </div>
                 <div id="usageIndicator" class="max-w-6xl w-full mx-auto hidden items-center justify-between bg-gray-900/80 border border-gray-800 px-3 py-2 rounded-2xl text-xs text-gray-400">
                     <span id="usageInfo">Tokens: 0</span>
                     <span id="streamingStatus"></span>
                 </div>
 
                 <div class="max-w-6xl w-full mx-auto flex flex-row gap-2 items-end">
+                    <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-2xl transition cursor-pointer flex items-center justify-center shrink-0 w-[42px] h-[42px]" title="Attach text, image, PDF or video">
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                        <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,.pdf,image/*,video/*" multiple>
+                    </label>
                     <textarea id="userInput" rows="1" placeholder="Ask about your knowledge base..." 
                         class="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none max-h-32 chat-scroll min-h-[42px]"></textarea>
                     
@@ -156,6 +164,15 @@
             <button id="refreshConfigBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg text-sm transition">
                 Refresh from Hub
             </button>
+            <div class="border-t border-gray-800 pt-4 space-y-2">
+                <div class="flex justify-between text-xs text-gray-400">
+                    <span class="font-bold uppercase tracking-wider">Chat Font Size</span>
+                    <span id="chatFontSizeValue" class="font-mono text-emerald-400">100%</span>
+                </div>
+                <input type="range" id="chatFontSize" min="1" max="1.75" step="0.05" value="1"
+                    class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                    aria-label="Chat font size">
+            </div>
         </div>
     </div>
 
@@ -164,6 +181,7 @@
     <script src="ui-dialogs.js"></script>
     <script src="shared/providers.js"></script>
     <script src="shared/content-utils.js"></script>
+    <script src="shared/chat-attachments.js"></script>
     <script src="shared/chat-search.js"></script>
     <script src="shared/api-client.js"></script>
     <script src="playground.js"></script>

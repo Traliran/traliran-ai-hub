@@ -68,9 +68,6 @@ const PAID_ASSISTANTS_CONFIG = [
 
 let sessions = [];
 let currentSessionId = null;
-let attachedFileContent = null;
-let attachedFileName = "";
-let attachedFileType = "";
 let selectedMultiModels = [];
 let currentAbortController = null;
 
@@ -138,10 +135,6 @@ const chatsList = document.getElementById('chatsList');
 const newChatBtn = document.getElementById('newChatBtn');
 const attachmentInput = document.getElementById('attachmentInput');
 const cameraInput = document.getElementById('cameraInput');
-const fileIndicator = document.getElementById('fileIndicator');
-const fileNameDisplay = document.getElementById('fileNameDisplay');
-const filePreviewThumb = document.getElementById('filePreviewThumb');
-const removeFileBtn = document.getElementById('removeFileBtn');
 const usageInfo = document.getElementById('usageInfo');
 const streamingStatus = document.getElementById('streamingStatus');
 const sidebar = document.getElementById('sidebar');
@@ -941,11 +934,14 @@ function renderMessageToDOM(role, content, botName, index) {
     const bgClass = role === 'user' ? 'bg-emerald-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-100';
 
     let formattedContent = '';
+    let userAttachmentElement = null;
 
     if (role === 'user') {
-        const textValue = typeof content === 'string' ? content : normalizeContentToText(content);
-        const mediaHtml = Array.isArray(content) ? buildMediaHtmlFromContent(content) : '';
-        formattedContent = `${escapeHtml(textValue).replace(/\n/g, '<br>')}${mediaHtml ? `<div class="mt-2">${mediaHtml}</div>` : ''}`;
+        const parsed = CHAT_ATTACHMENTS.parseUserContent(content);
+        formattedContent = parsed.text ? escapeHtml(parsed.text).replace(/\n/g, '<br>') : '';
+        if (parsed.attachments.length) {
+            userAttachmentElement = CHAT_ATTACHMENTS.createCardsElement(parsed.attachments);
+        }
     } else {
         const textValue = typeof content === 'string' ? content : normalizeContentToText(content);
         let thinkingHtml = '';
@@ -1009,13 +1005,21 @@ function renderMessageToDOM(role, content, botName, index) {
         </div>
     ` : '';
 
-    messageDiv.innerHTML = `
-        <span class="text-xs text-gray-500 mb-1 px-1">${escapeHtml(senderName)}</span>
-        <div class="max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
+    const bubbleHtml = (formattedContent || copyResponseButton) ? `
+        <div class="msg-bubble max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
             ${formattedContent}
             ${copyResponseButton}
         </div>
+    ` : '';
+
+    messageDiv.innerHTML = `
+        <span class="text-xs text-gray-500 mb-1 px-1">${escapeHtml(senderName)}</span>
+        ${bubbleHtml}
     `;
+    if (userAttachmentElement) {
+        const bubble = messageDiv.querySelector('.msg-bubble');
+        messageDiv.insertBefore(userAttachmentElement, bubble || null);
+    }
     chatWindow.appendChild(messageDiv);
 }
 
@@ -1080,7 +1084,7 @@ function createAssistantStreamingPlaceholder(botName) {
     senderName.textContent = botName;
 
     const bubble = document.createElement('div');
-    bubble.className = 'max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words';
+    bubble.className = 'msg-bubble max-w-[95%] sm:max-w-[90%] rounded-3xl px-5 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words';
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'whitespace-pre-wrap break-words text-sm';
@@ -1425,7 +1429,7 @@ async function triggerAiResponse(session) {
 
 async function sendMessage() {
     let text = userInput.value.trim();
-    if (!text && !attachedFileContent) return;
+    if (!text && !CHAT_ATTACHMENTS.hasFiles()) return;
 
     let session = sessions.find(s => s.id === currentSessionId);
     if (!session) {
@@ -1433,29 +1437,17 @@ async function sendMessage() {
         session = sessions[0];
     }
 
-    let fullUserContent = text;
-    if (attachedFileContent) {
-        if (attachedFileType.startsWith('image/')) {
-            // Standard OpenAI chat format; also accepted by the Gemini OpenAI-compatible endpoint.
-            fullUserContent = [
-                { type: 'text', text: text || `Attached image: ${attachedFileName}` },
-                { type: 'image_url', image_url: { url: attachedFileContent } }
-            ];
-        } else if (attachedFileType.startsWith('video/')) {
-            // No chat/completions endpoint in this hub supports video parts — send a text note instead of video_url to avoid HTTP 400.
-            fullUserContent = (text ? text + '\n\n' : '') + `[Video attachment: ${attachedFileName} — video bytes are not sent to the model.]`;
-        } else {
-            fullUserContent += `\n\n[Attached File: ${attachedFileName}]\n\`\`\`\n${attachedFileContent}\n\`\`\``;
-        }
-    }
+    const pendingAttachments = CHAT_ATTACHMENTS.getPending();
+    const fullUserContent = CHAT_ATTACHMENTS.buildUserContent(text);
 
     userInput.value = '';
     userInput.style.height = 'auto';
     renderMessageToDOM('user', fullUserContent, 'You', session.messages.length);
     session.messages.push({ role: 'user', content: fullUserContent });
+    chatWindow.scrollTop = chatWindow.scrollHeight;
 
     if (session.name.startsWith('Chat #')) {
-        const baseName = text || `Image ${attachedFileName}`;
+        const baseName = text || (pendingAttachments[0]?.name || 'Attachment');
         session.name = baseName.slice(0, 24) + (baseName.length > 24 ? '...' : '');
     }
 
@@ -1476,7 +1468,7 @@ async function sendMessage() {
 
     saveSessionsToStorage();
     renderSessionsList();
-    removeAttachedFile();
+    CHAT_ATTACHMENTS.clear();
     await triggerAiResponse(session);
 }
 
@@ -1659,145 +1651,18 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Shared attachment reader: supports text, PDF, image and video files.
-// Used by the file picker, mobile camera input and clipboard paste (Ctrl+V).
-function readFileAsDataURL(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => resolve(event.target.result);
-        reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
-        reader.readAsDataURL(file);
-    });
-}
-
-// Downscale large pasted/screenshot images so base64 stays small enough
-// for localStorage and chat/completions vision payloads.
-async function compressImageFile(file, maxDim = 1600, quality = 0.85) {
-    const dataUrl = await readFileAsDataURL(file);
-    try {
-        const bitmap = await createImageBitmap(file);
-        const { width, height } = bitmap;
-        bitmap.close();
-        const scale = Math.min(1, maxDim / Math.max(width, height));
-        if (scale >= 1 && (file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp') && file.size < 1024 * 1024) {
-            return dataUrl;
-        }
-        const targetW = Math.max(1, Math.round(width * scale));
-        const targetH = Math.max(1, Math.round(height * scale));
-        const img = await new Promise((resolve, reject) => {
-            const el = new Image();
-            el.onload = () => resolve(el);
-            el.onerror = reject;
-            el.src = dataUrl;
-        });
-        const canvas = document.createElement('canvas');
-        canvas.width = targetW;
-        canvas.height = targetH;
-        canvas.getContext('2d').drawImage(img, 0, 0, targetW, targetH);
-        const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-        return canvas.toDataURL(outType, quality);
-    } catch (e) {
-        return dataUrl;
-    }
-}
-
-function resolveAttachmentName(file, fallbackPrefix = 'image') {
-    if (file && file.name) return file.name;
-    const ext = (file && file.type === 'image/png') ? 'png'
-        : (file && file.type === 'image/jpeg') ? 'jpg'
-        : (file && file.type === 'image/webp') ? 'webp'
-        : (file && file.type === 'image/gif') ? 'gif'
-        : 'png';
-    return `${fallbackPrefix}-${Date.now()}.${ext}`;
-}
-
-async function handleAttachedFile(file, options = {}) {
-    if (!file) return;
-    const fallbackPrefix = options.fallbackPrefix || 'pasted-image';
-    attachedFileName = resolveAttachmentName(file, file.type && file.type.startsWith('image/') ? fallbackPrefix : 'camera-photo');
-    if (!attachedFileName.includes('.') && file.type) {
-        if (file.type === 'image/png') attachedFileName += '.png';
-        else if (file.type === 'image/jpeg') attachedFileName += '.jpg';
-    }
-    attachedFileType = file.type || '';
-    if (!attachedFileType && /\.png$/i.test(attachedFileName)) attachedFileType = 'image/png';
-    if (!attachedFileType && /\.jpe?g$/i.test(attachedFileName)) attachedFileType = 'image/jpeg';
-
-    fileNameDisplay.textContent = attachedFileName;
-    fileIndicator.classList.remove('hidden');
-    fileIndicator.classList.add('flex');
-
-    const showPreview = (dataUrl) => {
-        if (!filePreviewThumb) return;
-        if (attachedFileType.startsWith('image/')) {
-            filePreviewThumb.src = dataUrl;
-            filePreviewThumb.classList.remove('hidden');
-        } else {
-            filePreviewThumb.classList.add('hidden');
-            filePreviewThumb.removeAttribute('src');
-        }
-    };
-
-    const fileType = file.type || attachedFileType || '';
-
-    if (fileType === 'application/pdf' || attachedFileName.toLowerCase().endsWith('.pdf')) {
-        if (filePreviewThumb) filePreviewThumb.classList.add('hidden');
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let extractedText = '';
-            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
-                const page = await pdf.getPage(i);
-                const pageText = await page.getTextContent();
-                extractedText += pageText.items.map(item => item.str).join(' ') + '\n\n';
-            }
-            attachedFileContent = extractedText.trim();
-        } catch (error) {
-            attachedFileContent = `Unable to parse PDF file content. File name: ${attachedFileName}`;
-        }
-        return;
-    }
-
-    if (fileType.startsWith('image/') || attachedFileType.startsWith('image/')) {
-        if (fileType === 'image/gif') {
-            attachedFileContent = await readFileAsDataURL(file);
-        } else {
-            try {
-                attachedFileContent = await compressImageFile(file);
-            } catch (e) {
-                attachedFileContent = await readFileAsDataURL(file);
-            }
-        }
-        showPreview(attachedFileContent);
-        return;
-    }
-
-    if (fileType.startsWith('video/')) {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            attachedFileContent = event.target.result;
-            showPreview(attachedFileContent);
-        };
-        reader.readAsDataURL(file);
-        return;
-    }
-
-    if (filePreviewThumb) filePreviewThumb.classList.add('hidden');
-    const reader = new FileReader();
-    reader.onload = function(event) {
-        attachedFileContent = event.target.result;
-    };
-    reader.readAsText(file);
-}
+// Shared attachment mechanics: multi-file reading, composer cards and previews.
+CHAT_ATTACHMENTS.mount({ indicatorId: 'fileIndicator', cardsId: 'attachmentCards' });
 
 attachmentInput.addEventListener('change', async (e) => {
-    await handleAttachedFile(e.target.files[0]);
+    await CHAT_ATTACHMENTS.addFiles(e.target.files);
+    e.target.value = '';
 });
 
 if (cameraInput) {
     cameraInput.addEventListener('change', async (e) => {
-        await handleAttachedFile(e.target.files[0]);
-        cameraInput.value = '';
+        await CHAT_ATTACHMENTS.addFiles(e.target.files, { replace: true, fallbackPrefix: 'camera-photo' });
+        e.target.value = '';
     });
 }
 
@@ -1826,30 +1691,10 @@ userInput.addEventListener('paste', async (e) => {
     const imageFile = extractImageFileFromClipboard(e);
     if (!imageFile) return;
     e.preventDefault();
-    try {
-        await handleAttachedFile(imageFile, { fallbackPrefix: 'pasted-image' });
-        notifySuccess('Image pasted from clipboard!');
-        userInput.focus();
-    } catch (err) {
-        console.error(err);
-        notifyError('Failed to paste image: ' + err.message);
-    }
+    const added = await CHAT_ATTACHMENTS.addFiles([imageFile], { fallbackPrefix: 'pasted-image' });
+    if (added) notifySuccess('Image pasted from clipboard!');
+    userInput.focus();
 });
-
-function removeAttachedFile() {
-    attachedFileContent = null;
-    attachedFileName = '';
-    attachedFileType = '';
-    attachmentInput.value = '';
-    if (cameraInput) cameraInput.value = '';
-    if (filePreviewThumb) {
-        filePreviewThumb.classList.add('hidden');
-        filePreviewThumb.removeAttribute('src');
-    }
-    fileIndicator.classList.add('hidden');
-    fileIndicator.classList.remove('flex');
-}
-removeFileBtn.addEventListener('click', removeAttachedFile);
 
 userInput.addEventListener('input', function() {
     this.style.height = 'auto';
@@ -2120,6 +1965,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Show the hub version in the new-chat welcome panel.
     const appVersionLabel = document.getElementById('appVersionLabel');
     if (appVersionLabel) appVersionLabel.textContent = APP_VERSION;
+    CHAT_ATTACHMENTS.initFontScale(chatWindow, { sliderId: 'chatFontSize', valueId: 'chatFontSizeValue' });
     loadApiSettings();
     loadSessions();
     if (typeof CHAT_SEARCH !== 'undefined') {

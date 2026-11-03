@@ -268,6 +268,16 @@ async function addFilesToKnowledgeBase(fileList) {
     if (files.length) saveKnowledgeBase();
 }
 
+// Chat attachments use the same shared mechanics as the Hub.
+const attachmentInput = document.getElementById('attachmentInput');
+CHAT_ATTACHMENTS.mount({ indicatorId: 'fileIndicator', cardsId: 'attachmentCards' });
+if (attachmentInput) {
+    attachmentInput.addEventListener('change', async (e) => {
+        await CHAT_ATTACHMENTS.addFiles(e.target.files);
+        e.target.value = '';
+    });
+}
+
 kbUpload.addEventListener('change', async (e) => {
     await addFilesToKnowledgeBase(e.target.files);
     e.target.value = '';
@@ -310,23 +320,40 @@ function renderMessage(role, content) {
 
     const bgClass = role === 'user' ? 'bg-emerald-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-100';
     const isUser = role === 'user';
-    const bodyHtml = isUser
-        ? escapeHtml(content).replace(/\n/g, '<br>')
-        : renderMarkdown(typeof content === 'string' ? content : normalizeContentToText(content));
+
+    let bodyHtml = '';
+    let attachmentEl = null;
+    if (isUser) {
+        const parsed = CHAT_ATTACHMENTS.parseUserContent(content);
+        bodyHtml = escapeHtml(parsed.text).replace(/\n/g, '<br>');
+        if (parsed.attachments.length) {
+            attachmentEl = CHAT_ATTACHMENTS.createCardsElement(parsed.attachments);
+        }
+    } else {
+        bodyHtml = renderMarkdown(typeof content === 'string' ? content : normalizeContentToText(content));
+    }
+
+    const bubbleHtml = (bodyHtml || !isUser) ? `
+        <div class="msg-bubble max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
+            <div class="md-content">${bodyHtml}</div>
+        </div>
+    ` : '';
 
     msgDiv.innerHTML = `
         <span class="text-xs text-gray-500 mb-1 px-1">${isUser ? 'You' : 'AI'}</span>
-        <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md ${bgClass} overflow-hidden break-words">
-            <div class="md-content">${bodyHtml}</div>
-        </div>
+        ${bubbleHtml}
     `;
+    if (attachmentEl) {
+        const bubble = msgDiv.querySelector('.msg-bubble');
+        msgDiv.insertBefore(attachmentEl, bubble || null);
+    }
     chatWindow.appendChild(msgDiv);
     chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
 async function sendMessage() {
     const text = userInput.value.trim();
-    if (!text) return;
+    if (!text && !CHAT_ATTACHMENTS.hasFiles()) return;
 
     let session = getActiveRagSession();
     if (!session) {
@@ -341,18 +368,23 @@ async function sendMessage() {
         return;
     }
 
+    const pendingAttachments = CHAT_ATTACHMENTS.getPending();
+    const fullUserContent = CHAT_ATTACHMENTS.buildUserContent(text);
+
     userInput.value = '';
     userInput.style.height = 'auto';
-    renderMessage('user', text);
-    session.messages.push({ role: 'user', content: text });
+    renderMessage('user', fullUserContent);
+    session.messages.push({ role: 'user', content: fullUserContent });
 
     // Auto-rename untitled chats from the first user message.
-    if (session.name.startsWith('Chat #') && text) {
-        session.name = text.slice(0, 28) + (text.length > 28 ? '...' : '');
+    if (session.name.startsWith('Chat #') && (text || pendingAttachments.length)) {
+        const baseName = text || pendingAttachments[0]?.name || 'Attachment';
+        session.name = baseName.slice(0, 28) + (baseName.length > 28 ? '...' : '');
     }
     saveRagSessionsToStorage();
     renderRagSessionsList();
     if (ragActiveChatName) ragActiveChatName.textContent = session.name;
+    CHAT_ATTACHMENTS.clear();
 
     // Build RAG System Prompt
     const personalContext = config.personalInfo ? `[About the user]:\n${config.personalInfo}\n\n` : '';
@@ -370,7 +402,7 @@ ${kbContext || 'No files uploaded yet.'}
 
     const messages = [
         { role: 'system', content: ragSystemPrompt },
-        ...session.messages
+        ...session.messages.map(msg => ({ role: msg.role, content: normalizeContentForApi(msg.content) }))
     ];
 
     userInput.disabled = true;
@@ -385,7 +417,7 @@ ${kbContext || 'No files uploaded yet.'}
     placeholderDiv.className = 'flex flex-col items-start w-full';
     placeholderDiv.innerHTML = `
         <span class="text-xs text-gray-500 mb-1 px-1">AI</span>
-        <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words">
+        <div class="msg-bubble max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md bg-gray-900 border border-gray-800 text-gray-100 overflow-hidden break-words">
             <div class="streaming-content whitespace-pre-wrap"></div>
         </div>
     `;
@@ -515,6 +547,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadConfig();
     loadKnowledgeBase();
     loadRagSessions();
+    CHAT_ATTACHMENTS.initFontScale(chatWindow, { sliderId: 'chatFontSize', valueId: 'chatFontSizeValue' });
     if (typeof CHAT_SEARCH !== 'undefined') {
         CHAT_SEARCH.mount({
             storageKey: 'gem_rag_sessions',
