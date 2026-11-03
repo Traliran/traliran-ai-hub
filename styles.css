@@ -754,6 +754,8 @@ body.chat-search-open { overflow: hidden; }
     max-width: min(1000px, 94vw);
     max-height: 82dvh;
     overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 1rem;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);

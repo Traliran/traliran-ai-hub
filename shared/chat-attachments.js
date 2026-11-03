@@ -5,7 +5,6 @@
     'use strict';
 
     const FONT_SCALE_KEY = 'gem_chat_font_size';
-    const FILE_BLOCK_PATTERN = /\[Attached File: ([^\]\n]+)\]\n```\n([\s\S]*?)\n```/g;
 
     let indicatorEl = null;
     let cardsEl = null;
@@ -294,7 +293,14 @@
         const files = pending.filter(item => !item.isImage && !item.isVideo);
         const videos = pending.filter(item => item.isVideo);
 
-        const fileBlocks = files.map(item => `[Attached File: ${item.name}]\n\`\`\`\n${item.content}\n\`\`\``);
+        const fileBlocks = files.map(item => {
+            // Pick a fence longer than any backtick run inside the file so
+            // embedded ``` code blocks cannot terminate the attachment early.
+            const runs = String(item.content || '').match(/`{3,}/g) || [];
+            const longest = runs.reduce((max, run) => Math.max(max, run.length), 2);
+            const fence = '`'.repeat(Math.max(3, longest + 1));
+            return `[Attached File: ${item.name}]\n${fence}\n${item.content}\n${fence}`;
+        });
         const videoNotes = videos.map(item => `[Video attachment: ${item.name} — video bytes are not sent to the model.]`);
         const textBlocks = fileBlocks.concat(videoNotes);
 
@@ -312,19 +318,44 @@
     }
 
     function extractFileBlocks(text) {
-        const attachments = [];
-        const cleaned = String(text || '').replace(FILE_BLOCK_PATTERN, (match, name, body) => {
-            attachments.push({
-                name: name.trim(),
+        const source = String(text || '');
+        const headerPattern = /\[Attached File: ([^\]\n]+)\]\n/g;
+        const headers = [];
+        let match;
+        while ((match = headerPattern.exec(source)) !== null) {
+            headers.push({ name: match[1].trim(), headerStart: match.index, contentStart: headerPattern.lastIndex });
+        }
+        if (!headers.length) return { text: source.trim(), attachments: [] };
+
+        const attachments = headers.map((header, index) => {
+            const nextStart = index + 1 < headers.length ? headers[index + 1].headerStart : source.length;
+            const raw = source.slice(header.contentStart, nextStart);
+            const opening = raw.match(/^(`{3,})\n/);
+            const fenceLength = opening ? opening[1].length : 3;
+            let body = opening ? raw.slice(opening[0].length) : raw;
+            // Close only on a fence that ends the block (or is followed by a
+            // trailing video note), never on the first backticks inside the
+            // file content, so embedded code blocks cannot truncate the
+            // preview or leak into the chat prompt.
+            const closing = new RegExp('\\n`{' + fenceLength + ',}(?=\\n*$|\\n\\n\\[Video attachment: )');
+            const closeMatch = body.match(closing);
+            if (closeMatch) {
+                body = body.slice(0, closeMatch.index);
+            } else {
+                body = body.replace(/\s+$/, '');
+            }
+            return {
+                name: header.name,
                 type: '',
                 size: typeof Blob !== 'undefined' ? new Blob([body]).size : body.length,
                 content: body,
                 isImage: false,
                 isVideo: false
-            });
-            return '';
+            };
         });
-        return { text: cleaned.replace(/\n{3,}/g, '\n\n').trim(), attachments };
+
+        const cleaned = source.slice(0, headers[0].headerStart).replace(/\n{3,}/g, '\n\n').trim();
+        return { text: cleaned, attachments };
     }
 
     // Turn stored user content into prompt text plus attachment cards.
