@@ -250,6 +250,16 @@
                 <span class="font-medium text-gray-300 block mb-1">Active Profile:</span>
                 <span id="activeStatusText">Default AI</span>
             </div>
+
+            <div class="border-t border-gray-800 pt-3 space-y-2">
+                <div class="flex justify-between text-xs text-gray-400">
+                    <span class="font-bold uppercase tracking-wider">Chat Font Size</span>
+                    <span id="chatFontSizeValue" class="font-mono text-emerald-400">100%</span>
+                </div>
+                <input type="range" id="chatFontSize" min="1" max="1.75" step="0.05" value="1"
+                    class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                    aria-label="Chat font size">
+            </div>
         </section>
 
         <div id="sidebarOverlay" class="hidden absolute inset-0 bg-black/60 z-25 lg:hidden"></div>
@@ -301,13 +311,8 @@
                         <span id="mcpBadgeText">MCP tools ready</span>
                     </div>
 
-                    <div id="fileIndicator" class="max-w-6xl w-full mx-auto hidden items-center justify-between gap-2 bg-gray-800/80 border border-gray-700 px-3 py-1.5 rounded-lg text-xs">
-                        <div class="flex items-center gap-2 text-emerald-400 truncate min-w-0">
-                            <svg class="svg-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-                            <img id="filePreviewThumb" class="hidden w-10 h-10 rounded-lg object-cover border border-gray-700 shrink-0" alt="Attachment preview">
-                            <span id="fileNameDisplay" class="truncate font-mono">file.txt</span>
-                        </div>
-                        <button id="removeFileBtn" class="text-rose-400 hover:text-rose-300 cursor-pointer px-1 font-bold shrink-0" aria-label="Remove file"><svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                    <div id="fileIndicator" class="max-w-6xl w-full mx-auto hidden">
+                        <div id="attachmentCards" class="attachment-grid"></div>
                     </div>
                     <div id="usageIndicator" class="max-w-6xl w-full mx-auto hidden items-center justify-between bg-gray-900/80 border border-gray-800 px-3 py-2 rounded-lg text-xs text-gray-400">
                         <span id="usageInfo">Tokens: 0</span>
@@ -317,7 +322,7 @@
                     <div class="max-w-6xl w-full mx-auto flex flex-row gap-2 items-end">
                         <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[44px] h-[44px]" title="Attach text, image, video or PDF">
                             <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,.pdf,image/*,video/*">
+                            <input type="file" id="attachmentInput" class="hidden" accept=".txt,.js,.html,.css,.json,.md,.py,.ts,.cpp,.java,.c,.pdf,image/*,video/*" multiple>
                         </label>
                         <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2.5 rounded-lg transition cursor-pointer flex items-center justify-center shrink-0 w-[44px] h-[44px]" title="Take a photo (mobile camera)">
                             <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -605,6 +610,7 @@
     <script src="ui-dialogs.js"></script>
     <script src="shared/providers.js"></script>
     <script src="shared/content-utils.js"></script>
+    <script src="shared/chat-attachments.js"></script>
     <script src="shared/chat-search.js"></script>
     <script src="shared/api-client.js"></script>
     <script src="app.js"></script>
