@@ -206,9 +206,12 @@ const KV_STORE = {
         const db = await this._getDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction('kv', 'readwrite');
-            const req = tx.objectStore('kv').put({ key, value });
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
+            tx.objectStore('kv').put({ key, value });
+            // Resolve only after the transaction commits, so callers never
+            // treat data as durable while it is still pending on disk.
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
         });
     },
 
@@ -216,9 +219,10 @@ const KV_STORE = {
         const db = await this._getDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction('kv', 'readwrite');
-            const req = tx.objectStore('kv').delete(key);
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
+            tx.objectStore('kv').delete(key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
         });
     }
 };
@@ -239,6 +243,9 @@ const KV_STORE = {
  *   'storage' events so existing listeners keep working.
  */
 const MIGRATION_MARKER = '_storage_migrated';
+// Reserved prefix for the synchronous write-ahead log. It keeps unsaved
+// settings alive if the tab closes before IndexedDB finishes a transaction.
+const WAL_PREFIX = '_storage_wal__';
 
 const STORAGE = {
     _cache: {},
@@ -246,11 +253,13 @@ const STORAGE = {
     _channel: null,
     _readyPromise: null,
     _initialized: false,
+    _idbAvailable: true,
+    _writeSeq: 0,
 
     async init() {
         // Best-effort seed from legacy localStorage (only this app's keys are
         // managed). It feeds the synchronous startup reads and is the source
-        // for the one-time migration.
+        // for the one-time migration and the IndexedDB-unavailable fallback.
         const legacy = {};
         try {
             for (let i = 0; i < localStorage.length; i++) {
@@ -260,6 +269,7 @@ const STORAGE = {
         } catch (e) {
             console.error('[STORAGE] Legacy seed error:', e);
         }
+        const wal = this._readWal();
         this._cache = { ...legacy };
 
         try {
@@ -276,9 +286,12 @@ const STORAGE = {
                 if (rec && rec.key !== undefined) idb[rec.key] = rec.value;
             }
 
-            if (idb[MIGRATION_MARKER] === 'true') {
-                // IndexedDB already holds the data and is authoritative.
-                // Ignore legacy seeds so deleted keys are not resurrected.
+            const migrated = idb[MIGRATION_MARKER] === 'true';
+
+            if (migrated) {
+                // IndexedDB is authoritative. Any managed keys still present in
+                // localStorage are fallback writes from an interrupted save, so
+                // they are newer than the IndexedDB values.
                 const pendingSnap = { ...this._cache };
                 this._cache = { ...idb };
                 delete this._cache[MIGRATION_MARKER];
@@ -286,27 +299,61 @@ const STORAGE = {
                     if (pendingSnap[k] === undefined) delete this._cache[k];
                     else this._cache[k] = pendingSnap[k];
                 }
+                for (const [k, v] of Object.entries(legacy)) {
+                    if (!this._pendingWrites[k]) this._cache[k] = v;
+                }
             } else {
                 // First migration: overlay any existing IndexedDB values over the
                 // legacy seed, persist the merged cache, and mark migration done.
                 for (const [k, v] of Object.entries(idb)) {
                     if (!this._pendingWrites[k]) this._cache[k] = v;
                 }
+            }
+
+            this._applyWal(wal);
+            this._idbAvailable = true;
+
+            if (migrated) {
+                // Persist recovered fallback/WAL values back into IndexedDB.
+                for (const k of Object.keys(legacy)) {
+                    if (this._pendingWrites[k]) continue;
+                    if (!Object.prototype.hasOwnProperty.call(this._cache, k)) continue;
+                    await KV_STORE.set(k, this._cache[k]);
+                }
+                for (const [k, rec] of Object.entries(wal)) {
+                    if (this._pendingWrites[k]) continue;
+                    if (rec.deleted) await KV_STORE.remove(k);
+                    else await KV_STORE.set(k, rec.value);
+                }
+            } else {
                 for (const k of Object.keys(this._cache)) {
                     if (this._pendingWrites[k]) continue;
                     await KV_STORE.set(k, this._cache[k]);
                 }
-                await KV_STORE.set(MIGRATION_MARKER, 'true');
-                // Remove this app's legacy localStorage data only, leaving any
-                // unrelated data on shared origins untouched.
-                for (const k of Object.keys(this._cache)) {
-                    if (STORAGE._isManagedKey(k)) {
-                        try { localStorage.removeItem(k); } catch (e) {}
-                    }
+                for (const [k, rec] of Object.entries(wal)) {
+                    if (this._pendingWrites[k]) continue;
+                    if (rec.deleted) await KV_STORE.remove(k);
                 }
+                await KV_STORE.set(MIGRATION_MARKER, 'true');
+            }
+
+            // IndexedDB now holds the data; drop the synchronous copies.
+            for (const [k, rec] of Object.entries(wal)) {
+                if (this._pendingWrites[k]) continue;
+                if (rec.seq === undefined) this._clearWal(k);
+                else this._clearWalIfSeq(k, rec.seq);
+            }
+            // IndexedDB is authoritative now. Remove every legacy copy,
+            // including keys written during init, because their latest value
+            // is either already committed or held in the WAL.
+            for (const k of Object.keys(legacy)) {
+                try { localStorage.removeItem(k); } catch (e) {}
             }
         } catch (e) {
             console.error('[STORAGE] IndexedDB unavailable, using legacy fallback:', e);
+            this._idbAvailable = false;
+            this._applyWal(wal);
+            this._flushWalToFallback(wal);
         }
 
         this._setupChannel();
@@ -316,6 +363,83 @@ const STORAGE = {
 
     _isManagedKey(key) {
         return typeof key === 'string' && (key.startsWith('gem_') || key.startsWith('ide_'));
+    },
+
+    _readWal() {
+        const wal = {};
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const storageKey = localStorage.key(i);
+                if (!storageKey || !storageKey.startsWith(WAL_PREFIX)) continue;
+                const key = storageKey.slice(WAL_PREFIX.length);
+                const raw = localStorage.getItem(storageKey);
+                if (!raw) continue;
+                try {
+                    const rec = JSON.parse(raw);
+                    if (rec && (rec.deleted || typeof rec.value === 'string')) wal[key] = rec;
+                } catch (e) {
+                    // Ignore corrupt pending-write records.
+                }
+            }
+        } catch (e) {
+            console.error('[STORAGE] Pending write read error:', e);
+        }
+        return wal;
+    },
+
+    _applyWal(wal) {
+        for (const [key, rec] of Object.entries(wal || {})) {
+            if (rec.deleted) delete this._cache[key];
+            else this._cache[key] = rec.value;
+        }
+    },
+
+    _writeWal(key, rec) {
+        try {
+            localStorage.setItem(WAL_PREFIX + key, JSON.stringify(rec));
+        } catch (e) {
+            console.error('[STORAGE] Pending write error:', e);
+        }
+    },
+
+    _clearWal(key) {
+        try { localStorage.removeItem(WAL_PREFIX + key); } catch (e) {}
+    },
+
+    _clearWalIfSeq(key, seq) {
+        try {
+            const raw = localStorage.getItem(WAL_PREFIX + key);
+            if (!raw) return;
+            const rec = JSON.parse(raw);
+            if (rec && rec.seq === seq) localStorage.removeItem(WAL_PREFIX + key);
+        } catch (e) {}
+    },
+
+    _writeFallback(key, value) {
+        try {
+            localStorage.setItem(key, String(value));
+        } catch (e) {
+            console.error('[STORAGE] Fallback write error:', e);
+        }
+    },
+
+    _removeFallback(key) {
+        try { localStorage.removeItem(key); } catch (e) {}
+    },
+
+    _flushWalToFallback(wal) {
+        for (const [key, rec] of Object.entries(wal || {})) {
+            if (rec.deleted) this._removeFallback(key);
+            else this._writeFallback(key, rec.value);
+            if (rec.seq === undefined) this._clearWal(key);
+            else this._clearWalIfSeq(key, rec.seq);
+        }
+    },
+
+    _disableIdb() {
+        if (!this._idbAvailable) return;
+        this._idbAvailable = false;
+        this._flushWalToFallback(this._readWal());
     },
 
     ready() {
@@ -334,7 +458,21 @@ const STORAGE = {
         if (this._channel) {
             this._channel.postMessage({ type: 'storage', key, newValue: val, oldValue });
         }
-        KV_STORE.set(key, val).catch(e => console.error('[STORAGE] set error:', e));
+
+        if (!this._idbAvailable) {
+            this._writeFallback(key, val);
+            return;
+        }
+
+        const seq = ++this._writeSeq;
+        this._writeWal(key, { value: val, seq });
+        KV_STORE.set(key, val)
+            .then(() => this._clearWalIfSeq(key, seq))
+            .catch(e => {
+                console.error('[STORAGE] set error:', e);
+                this._disableIdb();
+                this._writeFallback(key, val);
+            });
     },
 
     removeItem(key) {
@@ -344,7 +482,21 @@ const STORAGE = {
         if (this._channel) {
             this._channel.postMessage({ type: 'storage', key, newValue: null, oldValue });
         }
-        KV_STORE.remove(key).catch(e => console.error('[STORAGE] remove error:', e));
+
+        if (!this._idbAvailable) {
+            this._removeFallback(key);
+            return;
+        }
+
+        const seq = ++this._writeSeq;
+        this._writeWal(key, { deleted: true, seq });
+        KV_STORE.remove(key)
+            .then(() => this._clearWalIfSeq(key, seq))
+            .catch(e => {
+                console.error('[STORAGE] remove error:', e);
+                this._disableIdb();
+                this._removeFallback(key);
+            });
     },
 
     keys() {
