@@ -10,13 +10,45 @@ const CLAUDE_FALLBACK_MODELS = [
     'claude-3-5-haiku-latest'
 ];
 
+function createHttpError(errorJson, status) {
+    const error = new Error(errorJson?.error?.message || `HTTP ${status}`);
+    error.status = status;
+    return error;
+}
+
+// Some providers reject consecutive messages with the same role (for example
+// multi-agent transcripts). Merge adjacent plain-text user/assistant messages
+// while keeping tool calls and system messages untouched.
+function normalizeMessageRoles(messages) {
+    if (!Array.isArray(messages)) return messages;
+
+    const normalized = [];
+    for (const message of messages) {
+        const previous = normalized[normalized.length - 1];
+        const canMerge = previous
+            && previous.role === message.role
+            && (message.role === 'user' || message.role === 'assistant')
+            && typeof previous.content === 'string'
+            && typeof message.content === 'string'
+            && !previous.tool_calls
+            && !message.tool_calls;
+
+        if (canMerge) {
+            previous.content = `${previous.content}\n\n${message.content}`;
+        } else {
+            normalized.push({ ...message });
+        }
+    }
+    return normalized;
+}
+
 // Convert a chat-completions payload to the Anthropic messages shape.
 function toAnthropicPayload(bodyPayload, streaming) {
     const systemMessage = bodyPayload.messages.find(msg => msg.role === 'system');
     const payload = {
         model: bodyPayload.model,
         max_tokens: bodyPayload.max_tokens || 1024,
-        messages: bodyPayload.messages.filter(msg => msg.role !== 'system').map(msg => ({
+        messages: normalizeMessageRoles(bodyPayload.messages.filter(msg => msg.role !== 'system')).map(msg => ({
             role: msg.role === 'assistant' ? 'assistant' : 'user',
             content: convertContentForAnthropic(msg.content)
         }))
@@ -55,7 +87,7 @@ async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, prov
         });
         if (!response.ok) {
             const errJson = await response.json().catch(() => ({}));
-            throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+            throw createHttpError(errJson, response.status);
         }
         return response.json();
     }
@@ -63,15 +95,16 @@ async function fetchSingleCompletion(endpoint, apiKey, hasKey, bodyPayload, prov
     const headers = { 'Content-Type': 'application/json' };
     if (hasKey && apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
+    const payload = { ...bodyPayload, messages: normalizeMessageRoles(bodyPayload.messages) };
     const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(bodyPayload),
+        body: JSON.stringify(payload),
         signal
     });
     if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+        throw createHttpError(errJson, response.status);
     }
     return response.json();
 }
@@ -90,7 +123,7 @@ async function fetchAnthropicStreamingCompletion(endpoint, apiKey, bodyPayload, 
     });
     if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+        throw createHttpError(errJson, response.status);
     }
 
     const reader = response.body?.getReader();
@@ -143,16 +176,17 @@ async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, p
 
     bodyPayload.stream = true;
 
+    const payload = { ...bodyPayload, messages: normalizeMessageRoles(bodyPayload.messages) };
     const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(bodyPayload),
+        body: JSON.stringify(payload),
         signal
     });
 
     if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+        throw createHttpError(errJson, response.status);
     }
 
     const reader = response.body?.getReader();

@@ -1482,6 +1482,26 @@ async function regenerateMessage(index) {
 }
 window.regenerateMessage = regenerateMessage;
 
+function isRetryableApiError(error) {
+    const status = Number(error?.status);
+    if (status === 429 || (status >= 500 && status <= 599)) return true;
+    return /rate limit|too many requests|overloaded|temporarily unavailable/i.test(error?.message || '');
+}
+
+async function fetchDebateCompletion(endpoint, apiKey, hasKey, payload, providerName) {
+    const retryDelays = [1500, 4000];
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await fetchSingleCompletion(endpoint, apiKey, hasKey, payload, providerName);
+        } catch (error) {
+            if (error.name === 'AbortError' || attempt >= retryDelays.length || !isRetryableApiError(error)) {
+                throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+        }
+    }
+}
+
 openGroupChatBtn.addEventListener('click', () => groupChatModal.classList.remove('hidden'));
 closeGroupChatModal.addEventListener('click', () => groupChatModal.classList.add('hidden'));
 
@@ -1549,7 +1569,7 @@ startGroupDebateBtn.addEventListener('click', async () => {
                     top_p: 0.95,
                     max_tokens: maxTokens
                 };
-                const res = await fetchSingleCompletion(endpoint, apiKey, providerRequiresKey(providerName), payload, providerName);
+                const res = await fetchDebateCompletion(endpoint, apiKey, providerRequiresKey(providerName), payload, providerName);
                 if (loadingDiv) loadingDiv.remove();
 
                 const parsed = extractAssistantContent(res, providerName);
@@ -1564,6 +1584,11 @@ startGroupDebateBtn.addEventListener('click', async () => {
             } catch (e) {
                 if (loadingDiv) loadingDiv.remove();
                 console.error(e);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'bg-rose-950/40 border border-rose-900 text-rose-300 p-3 rounded-2xl text-xs max-w-2xl';
+                errorDiv.textContent = `${agent.name} failed: ${e.message || 'Unknown API error'}. Continuing with the next agent.`;
+                chatWindow.appendChild(errorDiv);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
             }
         }
     }
