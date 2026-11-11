@@ -27,7 +27,7 @@ A lightweight, serverless, and privacy-first AI web client and sandbox running d
 Need a branded, zero-server AI workspace tailored for your team or agency?
 I build custom deployments with pre-configured prompt libraries, custom UI, and lightweight local storage/sync options.
 
-👉 **[Read B2B / Custom Build Docs](https://github.com/traliran/traliran-ai-hub/wiki/Custom-Builds-and-B2B)** or **[Order via Google Form](https://forms.gle/XpTQRCrpGdsbPiR48)**
+**[Read B2B / Custom Build Docs](https://github.com/traliran/traliran-ai-hub/wiki/Custom-Builds-and-B2B)** or **[Order via Google Form](https://forms.gle/XpTQRCrpGdsbPiR48)**
 ---
 
 ## ✨ Live Web App & Preset Store
@@ -168,4 +168,4 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 2.  **Attribution:** You must retain original copyright notices, links to this repository, and state any changes made.
 3.  **No Hidden Commercialization:** You cannot close the source code or hide integrated core features (including the store and author credits) in public deployments.
 
-*For custom commercial licensing or private white-label partnerships without AGPLv3 restrictions, please contact the repository maintainer via email: cwcom@proton.me.*
+*For custom commercial licensing or private white-label partnerships without AGPLv3 restrictions, please contact the repository maintainer via email: `cwcom@proton.me`.*
