@@ -111,10 +111,15 @@
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             let text = '';
-            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
+            // Cap extraction so large PDFs do not block the chat.
+            const maxPages = 50;
+            for (let i = 1; i <= Math.min(pdf.numPages, maxPages); i++) {
                 const page = await pdf.getPage(i);
                 const pageText = await page.getTextContent();
                 text += pageText.items.map(item => item.str).join(' ') + '\n\n';
+            }
+            if (pdf.numPages > maxPages) {
+                text += `[PDF text truncated: first ${maxPages} of ${pdf.numPages} pages]\n`;
             }
             return text.trim();
         } catch (error) {

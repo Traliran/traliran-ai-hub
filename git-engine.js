@@ -33,7 +33,9 @@ const GIT_ENGINE = (() => {
 
   // Git objects are stored zlib-wrapped. CompressionStream('deflate') emits zlib.
   async function deflate(data) {
-    if (typeof CompressionStream === 'undefined') return data;
+    if (typeof CompressionStream === 'undefined') {
+      throw new Error('Git export requires CompressionStream support in this browser.');
+    }
     const stream = new Blob([data]).stream().pipeThrough(new CompressionStream('deflate'));
     const buf = await new Response(stream).arrayBuffer();
     return new Uint8Array(buf);

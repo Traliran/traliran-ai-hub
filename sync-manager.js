@@ -2,7 +2,7 @@
  * Sync Manager - Handles cloud synchronization for VFS and other data
  *
  * Features:
- * - Auto-sync VFS to cloud when logged in (whole-collection snapshots)
+ * - Auto-sync collections to cloud when logged in (whole-collection snapshots)
  * - Queue-based sync for offline support
  * - Local Markdown VFS for the Notes page (user-selected folder)
  *
@@ -18,6 +18,7 @@ const SYNC_MANAGER = {
   _debounceTimers: {},
   _isOnline: navigator.onLine,
   _isSyncing: false,
+  _retryDelay: 0,
   _statusCallback: null,
 
   COLLECTION_MAP: {
@@ -27,8 +28,6 @@ const SYNC_MANAGER = {
     rag_knowledge: { key: 'gem_rag_kb' },
     rag_sessions: { key: 'gem_rag_sessions' },
     hub_personal: { key: 'gem_personal_info' },
-    ide_vfs: { key: 'ide_vfs_files', isVFS: true },
-    ide_commits: { key: 'ide_vfs_commits', isCommits: true },
     ide_agent_chats: { key: 'ide_agent_sessions' },
   },
 
@@ -71,22 +70,6 @@ const SYNC_MANAGER = {
       return settings;
     }
 
-    if (map.isVFS) {
-      const stored = STORAGE.getItem('ide_vfs_files');
-      if (stored) {
-        try { return JSON.parse(stored); } catch { return {}; }
-      }
-      return {};
-    }
-
-    if (map.isCommits) {
-      const stored = STORAGE.getItem('ide_vfs_commits');
-      if (stored) {
-        try { return JSON.parse(stored); } catch { return []; }
-      }
-      return [];
-    }
-
     if (map.key) {
       const val = STORAGE.getItem(map.key);
       if (val !== null) {
@@ -110,14 +93,6 @@ const SYNC_MANAGER = {
             STORAGE.setItem(key, val);
           }
         });
-      }
-      return;
-    }
-
-    if (map.isVFS || map.isCommits) {
-      const storageKey = collection === 'ide_vfs' ? 'ide_vfs_files' : 'ide_vfs_commits';
-      if (data !== null && data !== undefined) {
-        STORAGE.setItem(storageKey, JSON.stringify(data));
       }
       return;
     }
@@ -215,6 +190,7 @@ const SYNC_MANAGER = {
 
     const queue = [...this._syncQueue];
     this._syncQueue = [];
+    let failed = false;
 
     for (const item of queue) {
       if (item.type === 'push') {
@@ -225,6 +201,7 @@ const SYNC_MANAGER = {
           }
         } catch (e) {
           console.error('Queue processing error:', e);
+          failed = true;
           this._syncQueue.push(item);
         }
       }
@@ -232,7 +209,10 @@ const SYNC_MANAGER = {
     this._isSyncing = false;
 
     if (this._syncQueue.length > 0) {
-      setTimeout(() => this._processQueue(), 2000);
+      this._retryDelay = failed ? Math.min((this._retryDelay || 1000) * 2, 60000) : 2000;
+      setTimeout(() => this._processQueue(), this._retryDelay);
+    } else {
+      this._retryDelay = 0;
     }
   },
 

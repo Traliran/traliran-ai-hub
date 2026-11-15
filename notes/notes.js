@@ -481,8 +481,8 @@ function renderNotesList() {
         div.onclick = () => openNote(note.id);
 
         div.innerHTML = `
-            <span class="text-xs font-bold truncate">${note.title || 'Untitled Note'}</span>
-            <span class="text-[10px] text-gray-500 truncate">${note.content.slice(0, 30).replace(/\n/g, ' ')}...</span>
+            <span class="text-xs font-bold truncate">${escapeHtml(note.title || 'Untitled Note')}</span>
+            <span class="text-[10px] text-gray-500 truncate">${escapeHtml(String(note.content || '').slice(0, 30).replace(/\n/g, ' '))}...</span>
         `;
         notesList.appendChild(div);
     });
@@ -493,7 +493,7 @@ function renderNotePreview() {
         notePreview.textContent = noteContent.value;
         return;
     }
-    notePreview.innerHTML = `<div class="md-content">${marked.parse(noteContent.value)}</div>`;
+    notePreview.innerHTML = `<div class="md-content">${renderMarkdown(noteContent.value)}</div>`;
 }
 
 // ---------------------------------------------------------------------------

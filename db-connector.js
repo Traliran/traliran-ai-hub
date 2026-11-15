@@ -712,7 +712,47 @@ const DB_CONNECTOR = {
     this._saveConfig();
   },
 
-  async _firestoreRequest(method, collection, docId, body) {
+  // Refresh an expired session once. Returns true when a new token was stored.
+  async _refreshAuthToken() {
+    const cfg = this._loadConfig();
+    if (!cfg.refreshToken) return false;
+
+    try {
+      if (cfg.type === 'firebase') {
+        const resp = await fetch(`https://securetoken.googleapis.com/v1/token?key=${cfg.key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(cfg.refreshToken)}`
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.id_token) return false;
+        cfg.token = data.id_token;
+        cfg.refreshToken = data.refresh_token || cfg.refreshToken;
+        this._saveConfig();
+        return true;
+      }
+
+      if (cfg.type === 'supabase') {
+        const resp = await fetch(`${cfg.url}/auth/v1/token?grant_type=refresh_token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: cfg.key },
+          body: JSON.stringify({ refresh_token: cfg.refreshToken })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.access_token) return false;
+        cfg.token = data.access_token;
+        cfg.refreshToken = data.refresh_token || cfg.refreshToken;
+        this._saveConfig();
+        return true;
+      }
+    } catch (e) {
+      console.warn('Token refresh failed:', e);
+    }
+
+    return false;
+  },
+
+  async _firestoreRequest(method, collection, docId, body, retried = false) {
     const cfg = this._loadConfig();
     const baseUrl = `https://firestore.googleapis.com/v1/projects/${cfg.url}/databases/(default)/documents/${collection}`;
     const url = docId ? `${baseUrl}/${docId}` : baseUrl;
@@ -720,13 +760,16 @@ const DB_CONNECTOR = {
     if (cfg.token) headers['Authorization'] = `Bearer ${cfg.token}`;
     const resp = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     if (!resp.ok) {
+      if (resp.status === 401 && !retried && await this._refreshAuthToken()) {
+        return this._firestoreRequest(method, collection, docId, body, true);
+      }
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error?.message || `Firestore HTTP ${resp.status}`);
     }
     return resp.json();
   },
 
-  async _supabaseRequest(method, collection, docId, body) {
+  async _supabaseRequest(method, collection, docId, body, retried = false) {
     const cfg = this._loadConfig();
     // INSERT (POST) must upsert on the primary key to avoid duplicate rows.
     const prefer = method === 'POST'
@@ -739,6 +782,9 @@ const DB_CONNECTOR = {
     else if (method === 'POST') url += '?on_conflict=id';
     const resp = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     if (!resp.ok) {
+      if (resp.status === 401 && !retried && await this._refreshAuthToken()) {
+        return this._supabaseRequest(method, collection, docId, body, true);
+      }
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.message || `Supabase HTTP ${resp.status}`);
     }
@@ -789,22 +835,20 @@ const DB_CONNECTOR = {
 
     try {
       if (cfg.type === 'firebase') {
-        const resp = await this._request('GET', collection, 'all');
+        const resp = await this._request('GET', collection, 'current');
         const obj = this._firestoreDocToObject(resp);
         return obj ? (obj.data || obj) : null;
       }
 
       if (cfg.type === 'supabase') {
-        const result = await this._request('GET', collection, null);
+        const result = await this._request('GET', collection, 'current');
         if (!Array.isArray(result) || result.length === 0) return null;
         return result[0]?.data || result[0] || null;
       }
 
       if (cfg.type === 'pocketbase') {
-        const result = await this._request('GET', collection, null);
-        const items = result.items || result;
-        if (Array.isArray(items) && items.length === 0) return null;
-        return items[0]?.data || items[0] || null;
+        const result = await this._request('GET', collection, this._pocketbaseIdFor('current'));
+        return result?.data || result || null;
       }
 
       // Generic REST backend: read the same document id that saveData writes.
