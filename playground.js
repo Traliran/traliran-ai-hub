@@ -351,6 +351,280 @@ function renderMessage(role, content) {
     chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
+// ---------- RAG knowledge base tools (grep-style retrieval) ----------
+const RAG_SEARCH_ROUNDS = 5;
+const RAG_EXTRA_SEARCH_ROUNDS = 2;
+const RAG_MAX_MATCHES = 30;
+const RAG_MAX_LINE_LENGTH = 240;
+const RAG_MAX_PATTERN_LENGTH = 500;
+
+const RAG_TOOLS = [
+    {
+        name: 'grep',
+        description: 'Searches all uploaded knowledge base files for a case-insensitive literal phrase and returns matching file names, line numbers, and lines.',
+        parameters: {
+            type: 'object',
+            properties: {
+                pattern: { type: 'string', description: 'Literal text to search for' },
+                file: { type: 'string', description: 'Optional file name filter' }
+            },
+            required: ['pattern'],
+            additionalProperties: false
+        },
+        execute: async (args) => grepKnowledgeBase(args)
+    }
+];
+
+function grepKnowledgeBase(args) {
+    const pattern = String(args?.pattern || '');
+    if (!pattern.trim()) {
+        return JSON.stringify({ success: false, error: 'Search pattern is required.' }, null, 2);
+    }
+    if (pattern.length > RAG_MAX_PATTERN_LENGTH) {
+        return JSON.stringify({ success: false, error: 'Search pattern is too long.' }, null, 2);
+    }
+
+    const needle = pattern.toLowerCase();
+    const fileFilter = String(args?.file || '').trim().toLowerCase();
+    const files = fileFilter
+        ? knowledgeBase.filter((file) => String(file.name || '').toLowerCase().includes(fileFilter))
+        : knowledgeBase;
+    const matches = [];
+    let totalMatches = 0;
+
+    for (const file of files) {
+        const lines = String(file.content || '').split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+            if (!lines[i].toLowerCase().includes(needle)) continue;
+            totalMatches++;
+            if (matches.length >= RAG_MAX_MATCHES) continue;
+            matches.push({
+                file: file.name,
+                line: i + 1,
+                text: lines[i].slice(0, RAG_MAX_LINE_LENGTH)
+            });
+        }
+    }
+
+    return JSON.stringify({
+        success: true,
+        matches,
+        total_matches: totalMatches,
+        truncated: totalMatches > matches.length
+    }, null, 2);
+}
+
+function buildRagToolDescriptions() {
+    return RAG_TOOLS.map((tool) => {
+        const params = tool.parameters.properties || {};
+        const paramList = Object.entries(params).map(([name, schema]) => {
+            const type = schema.type || 'string';
+            const desc = schema.description || '';
+            const required = tool.parameters.required?.includes(name) ? '(required)' : '(optional)';
+            return `  - ${name} (${type}, ${required}): ${desc}`;
+        }).join('\n');
+
+        return `### ${tool.name}\nDescription: ${tool.description}\nParameters:\n${paramList}`;
+    }).join('\n\n');
+}
+
+function buildRagSystemPrompt(config, hasKnowledge) {
+    const personalContext = config.personalInfo ? `[About the user]:\n${config.personalInfo}\n\n` : '';
+    if (!hasKnowledge) {
+        return `${personalContext}${config.systemPrompt}
+
+You are operating in RAG (Retrieval Augmented Generation) mode, but no knowledge base files are uploaded. Answer normally and do not claim to have searched files.`;
+    }
+
+    return `${personalContext}${config.systemPrompt}
+
+You are operating in RAG (Retrieval Augmented Generation) mode.
+The knowledge base is NOT preloaded into this context. You must search it with the grep tool below.
+Use short, distinctive literal phrases; the pattern is matched as a literal substring, not a regular expression. Search results include file names, line numbers, and matching lines.
+You have up to ${RAG_SEARCH_ROUNDS} search rounds. If those are not enough, you may make up to ${RAG_EXTRA_SEARCH_ROUNDS} extra rounds, but you will be warned to answer with the information you already have.
+Base your answer on the search results. If the answer is not in the knowledge base, say that you don't know based on the provided files, but you may provide general knowledge if helpful.
+
+### TOOLS
+${buildRagToolDescriptions()}
+
+To call a tool, respond with a JSON object in this exact format:
+{"tool": "grep", "arguments": {"pattern": "text to find"}}
+
+Only output the JSON object when you want to call a tool. Do not include any other text.
+If you need multiple searches, wait for the result before making the next call.
+When you have enough information, answer normally without a tool call.`;
+}
+
+function parseRagToolCalls(content) {
+    if (!content) return [];
+
+    try {
+        // Extract the outermost JSON object without regex backtracking.
+        const start = content.indexOf('{');
+        const end = content.lastIndexOf('}');
+        const candidate = start !== -1 && end > start ? content.slice(start, end + 1) : '';
+        if (candidate.includes('"tool"')) {
+            const parsed = JSON.parse(candidate);
+            if (parsed.tool && parsed.arguments) {
+                return [{
+                    id: 'tool_' + Date.now(),
+                    type: 'function',
+                    function: {
+                        name: parsed.tool,
+                        arguments: JSON.stringify(parsed.arguments)
+                    }
+                }];
+            }
+        }
+    } catch (e) {
+        // Not a valid JSON tool call.
+    }
+
+    return [];
+}
+
+function renderRagToolNotification(toolName, args) {
+    const div = document.createElement('div');
+    div.className = 'bg-gray-900/60 border border-gray-800 rounded-lg p-2 text-[10px] text-gray-500';
+    let argStr = Object.entries(args || {}).map(([key, value]) => `${key}: ${value}`).join(', ');
+    if (argStr.length > 80) argStr = argStr.substring(0, 77) + '...';
+    div.innerHTML = `🔧 <span class="text-emerald-400">${escapeHtml(toolName)}</span>(${escapeHtml(argStr)})`;
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+function renderRagLimitNotice(extraNumber) {
+    const div = document.createElement('div');
+    div.className = 'bg-amber-950/40 border border-amber-900/50 rounded-lg p-2 text-[10px] text-amber-400';
+    div.textContent = `⚠️ Search limit exceeded (${RAG_SEARCH_ROUNDS} rounds). Extra search ${extraNumber}/${RAG_EXTRA_SEARCH_ROUNDS} — answer with the information already found.`;
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+async function requestRagCompletion(config, messages, onDelta, statusText) {
+    streamingStatus.textContent = statusText;
+    let accumulated = '';
+
+    const result = await fetchStreamingCompletion(
+        config.endpoint,
+        config.apiKey,
+        providerRequiresKey(config.provider),
+        {
+            model: config.model,
+            messages,
+            temperature: 0.7,
+            max_tokens: 4096,
+            stream_options: { include_usage: true }
+        },
+        config.provider,
+        currentAbortController.signal,
+        (delta) => {
+            accumulated += delta;
+            if (onDelta) onDelta(delta, accumulated);
+        },
+        (usage) => {
+            const total = usage.total_tokens ?? usage.output_tokens ?? 0;
+            const prompt = usage.input_tokens ?? usage.prompt_tokens ?? 0;
+            const completion = usage.output_tokens ?? usage.completion_tokens ?? 0;
+            usageInfo.textContent = `Tokens: ${total} (P: ${prompt}, C: ${completion})`;
+        }
+    );
+
+    return result.content || accumulated;
+}
+
+async function runRagToolLoop(config, messages, placeholderDiv, contentDiv) {
+    const maxRounds = RAG_SEARCH_ROUNDS + RAG_EXTRA_SEARCH_ROUNDS;
+    let rounds = 0;
+    let finalContent = '';
+
+    while (rounds < maxRounds) {
+        rounds++;
+        const isExtra = rounds > RAG_SEARCH_ROUNDS;
+        const status = isExtra
+            ? `Search limit exceeded: extra search ${rounds - RAG_SEARCH_ROUNDS}/${RAG_EXTRA_SEARCH_ROUNDS}...`
+            : `Searching knowledge base... (${rounds}/${RAG_SEARCH_ROUNDS})`;
+
+        let holdingToolJson = false;
+        placeholderDiv.classList.remove('hidden');
+        contentDiv.textContent = '';
+
+        const responseContent = await requestRagCompletion(
+            config,
+            messages,
+            (delta, accumulated) => {
+                // Hide a streamed tool call so only the final answer is visible.
+                const looksLikeToolCall = accumulated.includes('"tool"') && accumulated.includes('"arguments"');
+                if (!holdingToolJson && (accumulated.trimStart().startsWith('{') || looksLikeToolCall)) {
+                    holdingToolJson = true;
+                    placeholderDiv.classList.add('hidden');
+                }
+                if (!holdingToolJson) {
+                    contentDiv.textContent = accumulated;
+                    chatWindow.scrollTop = chatWindow.scrollHeight;
+                }
+            },
+            status
+        );
+
+        const toolCalls = parseRagToolCalls(responseContent);
+        if (!toolCalls.length) {
+            finalContent = responseContent;
+            placeholderDiv.classList.remove('hidden');
+            contentDiv.textContent = finalContent;
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            break;
+        }
+
+        placeholderDiv.classList.add('hidden');
+        contentDiv.textContent = '';
+
+        for (const toolCall of toolCalls) {
+            const toolName = toolCall.function?.name || '';
+            const tool = RAG_TOOLS.find((entry) => entry.name === toolName);
+            let args = {};
+            try {
+                args = JSON.parse(toolCall.function?.arguments || '{}');
+            } catch (e) {
+                args = {};
+            }
+
+            renderRagToolNotification(toolName, args);
+            const result = tool
+                ? await tool.execute(args)
+                : JSON.stringify({ success: false, error: `Unknown tool: ${toolName}` }, null, 2);
+            const limitNote = isExtra
+                ? `\n\n[System note]: Search limit exceeded (${RAG_SEARCH_ROUNDS} rounds). This is extra search ${rounds - RAG_SEARCH_ROUNDS} of ${RAG_EXTRA_SEARCH_ROUNDS}. Prefer answering with the information you already have.`
+                : '';
+            messages.push({
+                role: 'user',
+                content: `[Tool result from ${toolName}]: ${result}${limitNote}`
+            });
+        }
+
+        if (isExtra) renderRagLimitNotice(rounds - RAG_SEARCH_ROUNDS);
+    }
+
+    if (finalContent) return finalContent;
+
+    // The model kept requesting tools after all allowed rounds; force a final answer.
+    messages.push({
+        role: 'user',
+        content: '[System note]: Tool use is now disabled. Do not output JSON or request any more tools. Answer the user in natural language using the information already gathered.'
+    });
+    placeholderDiv.classList.remove('hidden');
+    contentDiv.textContent = '';
+    return await requestRagCompletion(
+        config,
+        messages,
+        (delta, accumulated) => {
+            contentDiv.textContent = accumulated;
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        },
+        'Preparing final answer...'
+    );
+}
+
 async function sendMessage() {
     const text = userInput.value.trim();
     if (!text && !CHAT_ATTACHMENTS.hasFiles()) return;
@@ -386,19 +660,9 @@ async function sendMessage() {
     if (ragActiveChatName) ragActiveChatName.textContent = session.name;
     CHAT_ATTACHMENTS.clear();
 
-    // Build RAG System Prompt
-    const personalContext = config.personalInfo ? `[About the user]:\n${config.personalInfo}\n\n` : '';
-    const kbContext = knowledgeBase.map(f => `File: ${f.name}\nContent:\n${f.content}`).join('\n\n---\n\n');
-    const ragSystemPrompt = `
-${personalContext}${config.systemPrompt}
-
-You are now operating in RAG (Retrieval Augmented Generation) mode. 
-Below is the provided knowledge base. Use it as your primary source of truth. 
-If the answer is not in the knowledge base, state that you don't know based on the provided files, but you can provide general knowledge if helpful.
-
-### KNOWLEDGE BASE:
-${kbContext || 'No files uploaded yet.'}
-`;
+    // The first request contains prompts only; knowledge base content is retrieved through tools.
+    const hasKnowledge = knowledgeBase.length > 0;
+    const ragSystemPrompt = buildRagSystemPrompt(config, hasKnowledge);
 
     const messages = [
         { role: 'system', content: ragSystemPrompt },
@@ -428,35 +692,18 @@ ${kbContext || 'No files uploaded yet.'}
     try {
         document.getElementById('usageIndicator').classList.remove('hidden');
         document.getElementById('usageIndicator').classList.add('flex');
-        streamingStatus.textContent = 'Streaming...';
 
-        const bodyPayload = {
-            model: config.model,
-            messages,
-            temperature: 0.7,
-            max_tokens: 4096,
-            stream_options: { include_usage: true }
-        };
-
-        const streamResult = await fetchStreamingCompletion(
-            config.endpoint,
-            config.apiKey,
-            providerRequiresKey(config.provider),
-            bodyPayload,
-            config.provider,
-            currentAbortController.signal,
-            (delta) => {
-                contentDiv.textContent += delta;
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-            },
-            (usage) => {
-                const total = usage.total_tokens ?? usage.output_tokens ?? 0;
-                const prompt = usage.input_tokens ?? usage.prompt_tokens ?? 0;
-                const completion = usage.output_tokens ?? usage.completion_tokens ?? 0;
-                usageInfo.textContent = `Tokens: ${total} (P: ${prompt}, C: ${completion})`;
-            }
-        );
-        const finalContent = streamResult.content || '';
+        const finalContent = hasKnowledge
+            ? await runRagToolLoop(config, messages, placeholderDiv, contentDiv)
+            : await requestRagCompletion(
+                config,
+                messages,
+                (delta, accumulated) => {
+                    contentDiv.textContent = accumulated;
+                    chatWindow.scrollTop = chatWindow.scrollHeight;
+                },
+                'Streaming...'
+            );
 
         session.messages.push({ role: 'assistant', content: finalContent });
         saveRagSessionsToStorage();
@@ -470,6 +717,7 @@ ${kbContext || 'No files uploaded yet.'}
             placeholderDiv.remove();
         } else {
             console.error(e);
+            placeholderDiv.classList.remove('hidden');
             placeholderDiv.querySelector('.streaming-content').textContent = 'Error: ' + e.message;
         }
     } finally {
