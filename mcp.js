@@ -11,7 +11,7 @@
 const MCP_STORAGE_KEY = 'gem_mcp_servers';
 
 // Single source of truth for the displayed hub version.
-const APP_VERSION = '3.2.3';
+const APP_VERSION = '4.0.0';
 
 function sanitizeMcpName(name) {
     return (name || 'server')
@@ -110,11 +110,20 @@ class McpClient {
         const payload = { jsonrpc: '2.0', method, params: params || {} };
         if (!notification) payload.id = String(++this._idCounter);
 
-        const response = await fetch(this.url, {
-            method: 'POST',
-            headers: this._headers(),
-            body: JSON.stringify(payload)
-        });
+        let response;
+        try {
+            response = await fetch(this.url, {
+                method: 'POST',
+                headers: this._headers(),
+                body: JSON.stringify(payload),
+                signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(30000) : undefined
+            });
+        } catch (e) {
+            if (e.name === 'TimeoutError' || e.name === 'AbortError') {
+                throw new Error(`MCP ${method} timed out after 30s`);
+            }
+            throw e;
+        }
 
         const sessionId = response.headers.get('mcp-session-id');
         if (sessionId) this.sessionId = sessionId;

@@ -2,7 +2,7 @@
 // Each repository keeps its own files, snapshot commits, branch and git SHAs.
 // The pre-existing single-workspace keys (ide_vfs_files / ide_vfs_commits)
 // are preserved as a mirror of the active repo for backward compatibility
-// with cloud sync and older code paths.
+// with older code paths and ZIP export.
 // All comments and identifiers are in English.
 
 const REPO_STORE = (() => {
@@ -101,7 +101,7 @@ const REPO_STORE = (() => {
       return [...this.repos];
     },
 
-    // Persist active files + mirror to legacy keys for cloud sync compat.
+    // Persist active files + mirror to legacy keys for older readers.
     saveFiles(filesObj) {
       const json = JSON.stringify(filesObj);
       STORAGE.setItem(filesKey(this.activeId), json);

@@ -134,6 +134,7 @@ async function fetchAnthropicStreamingCompletion(endpoint, apiKey, bodyPayload, 
 
     const decoder = new TextDecoder();
     let accumulated = '';
+    let reasoning = '';
     let buffer = '';
     while (true) {
         const { done, value } = await reader.read();
@@ -152,6 +153,8 @@ async function fetchAnthropicStreamingCompletion(endpoint, apiKey, bodyPayload, 
                     const delta = event.delta.text || '';
                     accumulated += delta;
                     if (delta) onDelta(delta);
+                } else if (event.type === 'content_block_delta' && event.delta?.type === 'thinking_delta') {
+                    reasoning += event.delta.thinking || '';
                 } else if (event.type === 'message_start' && event.message?.usage && onUsage) {
                     onUsage(event.message.usage);
                 } else if (event.type === 'message_delta' && event.usage && onUsage) {
@@ -162,7 +165,7 @@ async function fetchAnthropicStreamingCompletion(endpoint, apiKey, bodyPayload, 
             }
         }
     }
-    return { content: accumulated, toolCalls: [] };
+    return { content: accumulated, toolCalls: [], reasoning_content: reasoning };
 }
 
 async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, providerName, signal, onDelta, onUsage) {
@@ -192,11 +195,16 @@ async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, p
     const reader = response.body?.getReader();
     if (!reader) {
         const result = await response.json();
-        return { content: result.choices?.[0]?.message?.content || '', toolCalls: [] };
+        return {
+            content: result.choices?.[0]?.message?.content || '',
+            toolCalls: [],
+            reasoning_content: result.choices?.[0]?.message?.reasoning_content || ''
+        };
     }
 
     const decoder = new TextDecoder();
     let accumulated = '';
+    let reasoning = '';
     let buffer = '';
     const toolCallsMap = {};
 
@@ -222,6 +230,8 @@ async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, p
                 accumulated += delta;
                 if (delta) onDelta(delta);
 
+                reasoning += choice?.delta?.reasoning_content || choice?.delta?.reasoning || '';
+
                 const tcDeltas = choice?.delta?.tool_calls;
                 if (Array.isArray(tcDeltas)) {
                     for (const tc of tcDeltas) {
@@ -240,7 +250,7 @@ async function fetchStreamingCompletion(endpoint, apiKey, hasKey, bodyPayload, p
     }
 
     const toolCalls = Object.keys(toolCallsMap).map(k => toolCallsMap[k]);
-    return { content: accumulated, toolCalls };
+    return { content: accumulated, toolCalls, reasoning_content: reasoning };
 }
 
 // Fetch the model list for a provider. Returns an array of model ids.

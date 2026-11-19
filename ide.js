@@ -143,7 +143,7 @@ const VFS = {
 
     async saveToStorage() {
         try {
-            // Persist to active repo (+ legacy mirror for cloud sync compat).
+            // Persist to active repo (+ legacy mirror for older readers).
             REPO_STORE.saveFiles(vfsFiles);
             window.dispatchEvent(new CustomEvent('vfs:saved'));
         } catch (e) {
@@ -171,11 +171,6 @@ const VFS = {
         window.dispatchEvent(new CustomEvent('vfs:file-updated', {
             detail: { path: cleanPath, content: text, language }
         }));
-
-        // Sync to cloud if logged in (whole-collection snapshot).
-        if (isLoggedIn && DB_CONNECTOR.isLoggedIn()) {
-            this.syncToCloud();
-        }
 
         return vfsFiles[cleanPath];
     },
@@ -302,30 +297,6 @@ const VFS = {
         });
     },
 
-    async syncToCloud() {
-        try {
-            // Push the whole ide_vfs collection as a single 'current' snapshot so
-            // cloud pull can never mix per-file and whole-collection formats.
-            await SYNC_MANAGER.pushToCloud('ide_vfs');
-            console.log('[VFS] Synced to cloud');
-        } catch (e) {
-            console.error('[VFS] Cloud sync error:', e);
-        }
-    },
-
-    async syncFromCloud() {
-        if (!DB_CONNECTOR.isLoggedIn()) return;
-        try {
-            const data = await SYNC_MANAGER.pullFromCloud('ide_vfs');
-            if (data && typeof data === 'object') {
-                vfsFiles = { ...vfsFiles, ...data };
-                await this.saveToStorage();
-                console.log('[VFS] Synced from cloud');
-            }
-        } catch (e) {
-            console.error('[VFS] Cloud pull error:', e);
-        }
-    }
 };
 
 // ==================== VERSION CONTROL ====================
@@ -344,7 +315,7 @@ const VERSION_CONTROL = {
         };
         
         commitHistory.unshift(commit);
-        // Persist to active repo (+ legacy mirror for cloud sync compat).
+        // Persist to active repo (+ legacy mirror for older readers).
         REPO_STORE.saveCommits(commitHistory);
         
         // Also save to IndexedDB for persistence
@@ -582,7 +553,7 @@ const MONACO = {
             }`;
             tab.innerHTML = `
                 <span>${this.getFileIcon(path)} ${escapeHtml(fileName)}</span>
-                <button class="hover:text-white ml-1" data-path="${path}">×</button>
+                <button class="hover:text-white ml-1" data-path="${escapeHtml(path)}">×</button>
             `;
             
             tab.onclick = (e) => {
@@ -984,6 +955,9 @@ Be helpful, precise, and professional. All communication must be in English.`;
             const apiKey = apiConfig.apiKey || STORAGE.getItem('gem_key_' + provider) || '';
             const model = apiConfig.model || STORAGE.getItem('gem_selected_model_' + provider) || STORAGE.getItem('gem_model') || '';
             const baseEndpoint = apiConfig.endpoint || STORAGE.getItem('gem_endpoint_' + provider) || STORAGE.getItem('gem_endpoint') || getProviderDescriptor(provider).url;
+            const botTemp = Number(activeBot?.temp);
+            const temperature = Number.isFinite(botTemp) ? botTemp : 0.7;
+            const resolvedModel = (activeBot && activeBot.model) ? activeBot.model : model;
 
             if (hasKey && !apiKey) {
                 this.addMessageToChat('assistant', 'Warning: Please configure your API key in Settings first.');
@@ -995,7 +969,7 @@ Be helpful, precise, and professional. All communication must be in English.`;
             }
 
             // Execute tool loop
-            await this.executeToolLoop(messages, provider, apiKey, model, baseEndpoint);
+            await this.executeToolLoop(messages, provider, apiKey, resolvedModel, baseEndpoint, temperature);
 
         } catch (e) {
             console.error('[AI AGENT] Error:', e);
@@ -1015,7 +989,7 @@ Be helpful, precise, and professional. All communication must be in English.`;
         }
     },
 
-    async executeToolLoop(messages, provider, apiKey, model, endpoint, maxIterations = 10) {
+    async executeToolLoop(messages, provider, apiKey, model, endpoint, temperature = 0.7, maxIterations = 10) {
         let iterations = 0;
         
         // Build tool definitions for system prompt
@@ -1058,7 +1032,7 @@ If no tool is needed, just respond normally with your answer.`;
             iterations++;
             console.log(`[AI TOOL CALL] Iteration ${iterations}`);
 
-            const response = await this.callLLM(messages, provider, apiKey, model, endpoint);
+            const response = await this.callLLM(messages, provider, apiKey, model, endpoint, temperature);
             
             if (!response) break;
 
@@ -1121,7 +1095,7 @@ If no tool is needed, just respond normally with your answer.`;
         }
     },
 
-    async callLLM(messages, provider, apiKey, model, endpoint) {
+    async callLLM(messages, provider, apiKey, model, endpoint, temperature = 0.7) {
         console.log('[AI TOOL CALL] Calling LLM:', provider, model);
         
         const providerConfig = getProviderDescriptor(provider);
@@ -1140,16 +1114,28 @@ If no tool is needed, just respond normally with your answer.`;
                 };
 
                 const systemMessage = messages.find(msg => msg.role === 'system');
-                const userMessages = messages.filter(msg => msg.role !== 'system').map(msg => ({
-                    role: msg.role === 'assistant' ? 'assistant' : 'user',
-                    content: convertContentForAnthropic(msg.content)
-                }));
+                // Anthropic requires alternating roles, so merge consecutive
+                // messages from the same role before sending.
+                const userMessages = [];
+                for (const msg of messages) {
+                    if (msg.role === 'system') continue;
+                    const role = msg.role === 'assistant' ? 'assistant' : 'user';
+                    const content = convertContentForAnthropic(msg.content);
+                    const previous = userMessages[userMessages.length - 1];
+                    if (previous && previous.role === role) {
+                        const prevParts = Array.isArray(previous.content) ? previous.content : [{ type: 'text', text: previous.content }];
+                        const nextParts = Array.isArray(content) ? content : [{ type: 'text', text: content }];
+                        previous.content = [...prevParts, ...nextParts];
+                    } else {
+                        userMessages.push({ role, content });
+                    }
+                }
 
                 const anthropicPayload = {
                     model: model,
                     max_tokens: 4096,
                     messages: userMessages,
-                    temperature: 0.7
+                    temperature
                     // No tools sent - they're in system prompt
                 };
 
@@ -1206,7 +1192,7 @@ If no tool is needed, just respond normally with your answer.`;
             const payload = {
                 model: model,
                 messages: cleanMessages,
-                temperature: 0.7
+                temperature
                 // No tools sent - they're in system prompt
             };
 
@@ -1255,10 +1241,12 @@ If no tool is needed, just respond normally with your answer.`;
         if (!content) return [];
         
         try {
-            // Try to find JSON object in the content
-            const jsonMatch = content.match(/\{[\s\S]*"tool"[\s\S]*\}/);
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
+            // Extract the outermost JSON object without regex backtracking.
+            const start = content.indexOf('{');
+            const end = content.lastIndexOf('}');
+            const candidate = start !== -1 && end > start ? content.slice(start, end + 1) : '';
+            if (candidate.includes('"tool"')) {
+                const parsed = JSON.parse(candidate);
                 if (parsed.tool && parsed.arguments) {
                     return [{
                         id: 'tool_' + Date.now(),
@@ -1461,14 +1449,16 @@ function renderBotStore() {
                 </div>
                 <p class="text-xs text-gray-400 line-clamp-2 h-8 overflow-hidden">${escapeHtml(bot.prompt)}</p>
                 <div class="flex gap-2 pt-2">
-                    <button onclick="useBot('${bot.id}')" class="flex-1 ${isActive ? 'bg-gray-700 text-gray-400 cursor-default' : 'bg-amber-600 hover:bg-amber-700 text-white'} text-xs py-1.5 rounded transition">
+                    <button data-bot-use class="flex-1 ${isActive ? 'bg-gray-700 text-gray-400 cursor-default' : 'bg-amber-600 hover:bg-amber-700 text-white'} text-xs py-1.5 rounded transition">
                         ${isActive ? 'Using' : 'Use'}
                     </button>
-                    <button onclick="openBotEditor('${bot.id}')" class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs py-1.5 rounded transition">
+                    <button data-bot-edit class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs py-1.5 rounded transition">
                         ✏️ Edit
                     </button>
                 </div>
             `;
+            card.querySelector('[data-bot-use]').onclick = () => useBot(bot.id);
+            card.querySelector('[data-bot-edit]').onclick = () => openBotEditor(bot.id);
             customGrid.appendChild(card);
         });
         
@@ -1845,9 +1835,6 @@ async function handleLogin(email, password) {
         updateAuthUI();
         loginStatus.textContent = '✓ Logged in!';
         setTimeout(() => loginModal.classList.add('hidden'), 1000);
-        
-        // Sync VFS from cloud
-        await VFS.syncFromCloud();
     } catch (e) {
         loginStatus.textContent = '✗ ' + e.message;
     }
@@ -1939,8 +1926,12 @@ const PREVIEW = {
             return;
         }
 
-        const blob = new Blob([htmlContent], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
+        const contentUrl = URL.createObjectURL(new Blob([htmlContent], { type: 'text/html' }));
+        const sandbox = 'allow-scripts allow-forms allow-modals allow-popups allow-downloads';
+        const wrapper = '<!doctype html><html><body style="margin:0">'
+            + '<iframe sandbox="' + sandbox + '" src="' + contentUrl + '" '
+            + 'style="border:0;width:100vw;height:100vh"></iframe></body></html>';
+        const url = URL.createObjectURL(new Blob([wrapper], { type: 'text/html' }));
 
         // Reuse the preview tab when possible, otherwise open a new one.
         if (this.previewTab && !this.previewTab.closed) {
@@ -1952,11 +1943,16 @@ const PREVIEW = {
 
         if (!this.previewTab) {
             notifyWarning('Popup blocked. Please allow popups to open preview.');
+            URL.revokeObjectURL(url);
+            URL.revokeObjectURL(contentUrl);
             return;
         }
 
-        // Release the blob URL after the new tab has loaded it.
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        // Release the blob URLs after the wrapper page has loaded.
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+            URL.revokeObjectURL(contentUrl);
+        }, 60000);
     },
 
     render() {
@@ -1967,9 +1963,8 @@ const PREVIEW = {
             return;
         }
 
-        // Render in iframe
-        const blob = new Blob([htmlContent], { type: 'text/html' });
-        previewFrame.src = URL.createObjectURL(blob);
+        // Render in the sandboxed iframe declared in ide.html.
+        previewFrame.srcdoc = htmlContent;
     }
 };
 
@@ -2101,7 +2096,7 @@ async function switchToRepo(repoId) {
     REPO_STORE.switch(repoId);
     vfsFiles = REPO_STORE.loadFiles();
     commitHistory = REPO_STORE.loadCommits();
-    // Persist mirror for legacy readers and cloud sync.
+    // Persist mirror for legacy readers (ZIP export fallback).
     STORAGE.setItem('ide_vfs_files', JSON.stringify(vfsFiles));
     STORAGE.setItem('ide_vfs_commits', JSON.stringify(commitHistory));
     // Reset editor state.

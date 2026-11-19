@@ -458,6 +458,12 @@ function saveApiSettings() {
     SYNC_MANAGER.pushToCloud('hub_personal');
 }
 
+let apiSettingsSaveTimer = null;
+function scheduleApiSettingsSave() {
+    clearTimeout(apiSettingsSaveTimer);
+    apiSettingsSaveTimer = setTimeout(saveApiSettings, 400);
+}
+
 // Single fixed pure-black theme. No theme switching.
 // Shows the currently selected provider and model in the empty chat state.
 function updateWelcomeModelInfo() {
@@ -1344,9 +1350,8 @@ async function triggerAiResponse(session) {
 
             if (loadingDiv) loadingDiv.remove();
 
-            const parsed = extractAssistantContent({ choices: [{ message: { content: streamResult.content } }] }, providerName);
-            let content = parsed.content || '';
-            const thinking = parsed.reasoning_content || '';
+            let content = streamResult.content || '';
+            const thinking = streamResult.reasoning_content || '';
             if (thinking) content = `<think>${thinking}</think>\n${content}`;
 
             updateUsageIndicator({ tokens: estimateTokenCount(promptText) + estimateTokenCount(content), streaming: false });
@@ -1602,21 +1607,21 @@ apiProvider.addEventListener('change', (e) => {
     saveApiSettings();
     fetchActiveModels();
 });
-apiKeyValue.addEventListener('input', () => { saveApiSettings(); });
-apiKeyValue.addEventListener('change', () => { fetchActiveModels(); });
-apiEndpoint.addEventListener('input', () => { saveApiSettings(); });
-apiEndpoint.addEventListener('change', () => { fetchActiveModels(); });
-botNameInput.addEventListener('input', saveApiSettings);
-botPromptInput.addEventListener('input', saveApiSettings);
-personalInfoInput.addEventListener('input', saveApiSettings);
+apiKeyValue.addEventListener('input', scheduleApiSettingsSave);
+apiKeyValue.addEventListener('change', () => { saveApiSettings(); fetchActiveModels(); });
+apiEndpoint.addEventListener('input', scheduleApiSettingsSave);
+apiEndpoint.addEventListener('change', () => { saveApiSettings(); fetchActiveModels(); });
+botNameInput.addEventListener('input', scheduleApiSettingsSave);
+botPromptInput.addEventListener('input', scheduleApiSettingsSave);
+personalInfoInput.addEventListener('input', scheduleApiSettingsSave);
 botModelSelect.addEventListener('change', () => {
     STORAGE.setItem(`gem_selected_model_${resolveProviderName(apiProvider.value)}`, botModelSelect.value);
     updateStatusCard();
 });
 
-tempInput.addEventListener('input', (e) => { tempValue.textContent = e.target.value; saveApiSettings(); });
-topPInput.addEventListener('input', (e) => { topPValue.textContent = e.target.value; saveApiSettings(); });
-tokensInput.addEventListener('input', saveApiSettings);
+tempInput.addEventListener('input', (e) => { tempValue.textContent = e.target.value; scheduleApiSettingsSave(); });
+topPInput.addEventListener('input', (e) => { topPValue.textContent = e.target.value; scheduleApiSettingsSave(); });
+tokensInput.addEventListener('input', scheduleApiSettingsSave);
 tokensInput.addEventListener('change', saveApiSettings);
 
 refreshModelsBtn.addEventListener('click', fetchActiveModels);
