@@ -91,7 +91,7 @@ Contributions are welcome. This repository does not include harness-specific fol
 
 ### AI-Assisted Contributions
 
-AI assistance is accepted only when you use the `TSkRun` skill from `<REPO_URL>`. Changes made with AI without following `TSkRun` will not be accepted.
+AI assistance is accepted only when you use the `TSkRun` skill from [https://github.com/Traliran/tskrun](https://github.com/Traliran/tskrun). Changes made with AI without following `TSkRun` will not be accepted.
 
 In the pull request description, the **very first line** (right after the title/heading) must state that the patch was made with AI, followed by the `TSkRun` task report(s) (each strictly under 1000 tokens). If there were multiple AI tasks or runs, include **all** of them.
 
